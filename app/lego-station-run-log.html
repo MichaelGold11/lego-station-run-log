@@ -1875,7 +1875,10 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     const bad = d.elements.find(e => !fin(e.start) || !fin(e.end) || e.end < e.start);
     if (bad) { say('“' + (bad.label || 'An element') + '” needs an end time at or after its start.', true); return; }
     if (!d.elements.length) { say('Add at least one element.', true); return; }
-    if (d.templateSig && elSig(d.elements) === d.templateSig) { say('None of the step times were set from the video, so this would save a blank placeholder that always “matches”. Play the video and use the Set buttons for each step, or go back and analyze it with Claude.', true); return; }
+    if (d.templateSig && elSig(d.elements) === d.templateSig && !d.saveUntimed) {
+      if (msg) { msg.classList.add('err'); msg.innerHTML = 'None of the step times were set from the video yet. Set each step with the Set buttons, or save the video now and have it analyzed later. <button class="btn sm" type="button" data-act="save-untimed">Save as not analyzed</button>'; }
+      return;
+    }
     const unnamed = d.elements.find(e => !String(e.label || '').trim());
     if (unnamed) { say('Give every “Other” element a short description.', true); return; }
     if (btn) btn.disabled = true;
@@ -1934,7 +1937,7 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
       createdAt: d.createdAt || new Date().toISOString(),
       video: videoInfo,
       cycle: { start: r2(d.cycle.start), end: r2(d.cycle.end) },
-      status: d.status, statusNote: String(d.statusNote || '').trim(),
+      status: d.saveUntimed ? 'INSUFFICIENT_INFORMATION' : d.status, statusNote: d.saveUntimed ? 'Not analyzed yet: the video is saved, but no step was timed or checked against the standard.' : String(d.statusNote || '').trim(),
       elements: d.elements.map(e => {
         const o = { key: e.key || 'other', label: String(e.label || '').trim(), kind: e.kind || 'other', start: r2(e.start), end: r2(e.end), observed: String(e.observed || '').trim(), flagType: e.flagType || 'none', flag: String(e.flag || '').trim() };
         if (e.frameAssetId) o.frameAssetId = e.frameAssetId;
@@ -1946,7 +1949,7 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
         d.finalState.closeupAssetId ? { closeupAssetId: d.finalState.closeupAssetId } : {}),
       processData: String(d.processData || '').split('\n').map(s => s.trim()).filter(Boolean),
       limitations: String(d.limitations || '').split('\n').map(s => s.trim()).filter(Boolean),
-      source: Object.assign({}, d.source || {}, isNew ? {} : { editedAt: new Date().toISOString() }, d.templateSig ? { untimed: false } : {})
+      source: Object.assign({}, d.source || {}, isNew ? {} : { editedAt: new Date().toISOString() }, d.templateSig ? { untimed: !!d.saveUntimed } : {})
     };
     const cmpTo = d.compareTo || (isNew ? (baseline() || {}).id : '');
     if (cmpTo) doc.compareToRunId = cmpTo;
@@ -2167,6 +2170,7 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
       }
       case 'rm-el': if (d) { d.elements = d.elements.filter(x => x.uid !== el.dataset.uid); d.dirty = true; renderEls(); refreshDerived(); } break;
       case 'save': if (d && !d.saving) saveDraft(); break;
+      case 'save-untimed': if (d && !d.saving) { d.saveUntimed = true; saveDraft(); } break;
       case 'cancel-edit': if (d && d.mode === 'edit') go('run', d.runId); else go('runs'); break;
       case 'leave-yes': { const to = S.leaveTo; S.leaveTo = null; if (d) d.dirty = false; go(to ? to.view : 'runs', to && to.id, true); break; }
       case 'leave-no': { S.leaveTo = null; const b = $('#leave'); if (b) b.remove(); break; }
