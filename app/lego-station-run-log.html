@@ -127,6 +127,23 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .chip { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 4px; border: 1px solid var(--line-2); color: var(--ink-2); white-space: nowrap; }
 .chip.f-unclear { color: var(--warn-ink); border-color: color-mix(in srgb, var(--warn) 70%, transparent); background: color-mix(in srgb, var(--warn) 10%, transparent); }
 .chip.f-deviation { color: var(--crit-ink); border-color: color-mix(in srgb, var(--crit) 50%, transparent); background: color-mix(in srgb, var(--crit) 8%, transparent); }
+/* Procedure check */
+.proc-banner { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 8px; border: 1px solid var(--line); }
+.proc-banner svg { width: 20px; height: 20px; flex: none; margin-top: 2px; }
+.proc-banner b { display: block; font-size: 17px; }
+.proc-banner p { color: var(--ink-2); font-size: 14px; }
+.proc-banner.bad { color: var(--crit-ink); border-color: color-mix(in srgb, var(--crit) 50%, transparent); background: color-mix(in srgb, var(--crit) 7%, transparent); }
+.proc-banner.ok { color: var(--good-ink); border-color: color-mix(in srgb, var(--good) 45%, transparent); background: color-mix(in srgb, var(--good) 7%, transparent); }
+.proc-banner.unsure { color: var(--warn-ink); border-color: color-mix(in srgb, var(--warn) 70%, transparent); background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.proc-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.proc-list li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 4px 10px; align-items: baseline; padding: 10px 4px; border-bottom: 1px solid var(--line); }
+.proc-list li:last-child { border-bottom: 0; }
+.proc-list .pn { font-family: var(--f-mono); font-size: 12px; color: var(--muted); text-align: right; }
+.proc-list .pd { grid-column: 2 / -1; font-size: 13.5px; color: var(--ink-2); }
+.proc-list li.bad .pt { color: var(--crit-ink); font-weight: 600; }
+.chip.p-ok { color: var(--good-ink); border-color: color-mix(in srgb, var(--good) 45%, transparent); }
+.chip.p-bad { color: var(--crit-ink); border-color: color-mix(in srgb, var(--crit) 50%, transparent); background: color-mix(in srgb, var(--crit) 8%, transparent); }
+.chip.p-unclear { color: var(--warn-ink); border-color: color-mix(in srgb, var(--warn) 70%, transparent); background: color-mix(in srgb, var(--warn) 10%, transparent); }
 
 /* Kind swatches */
 .k-reach { --c: var(--k-reach); } .k-position { --c: var(--k-position); } .k-press { --c: var(--k-press); }
@@ -782,7 +799,7 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
 
     // runs table
     h += '<section class="sec"><div class="sec-h"><h2>All runs</h2><span class="note">Click a run to open its event log and step frames</span></div>';
-    h += '<div class="panel tbl-wrap"><table class="tbl"><thead><tr><th>Run</th><th>Recorded</th><th>What changed</th><th class="num">Cycle</th><th class="num">vs baseline</th><th class="num">Elements</th><th>Sequence</th><th class="num">Flags</th><th>Status</th><th>Logged by</th></tr></thead><tbody>';
+    h += '<div class="panel tbl-wrap"><table class="tbl"><thead><tr><th>Run</th><th>Recorded</th><th>What changed</th><th class="num">Cycle</th><th class="num">vs baseline</th><th class="num">Elements</th><th>Procedure</th><th class="num">Flags</th><th>Status</th><th>Logged by</th></tr></thead><tbody>';
     for (const r of ordered) {
       const isB = r.id === base.id;
       const ct = cycleTime(r);
@@ -794,7 +811,7 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
       h += '<td class="num">' + esc(fmtS(ct)) + '</td>';
       h += '<td class="num">' + (isB ? '<span class="muted">—</span>' : esc(fmtD(ct - baseCt)) + ' <span class="muted">' + esc(fmtPct(baseCt ? (ct - baseCt) / baseCt : null)) + '</span>') + '</td>';
       h += '<td class="num">' + workEls(r).length + '</td>';
-      h += '<td>' + (isB ? '<span class="muted">Reference</span>' : (sc.same ? 'Same as baseline' : '<span data-tip="' + esc(seqSummary(sc)) + '" style="border-bottom:1px dotted var(--muted)">Differs</span>')) + '</td>';
+      h += '<td>' + (isB ? '<span class="muted">Standard</span>' : (pcs => pcs.issues.length ? '<span class="chip p-bad" data-tip="' + esc(pcs.issues.join('\n')) + '">' + pcs.issues.length + ' issue' + (pcs.issues.length === 1 ? '' : 's') + '</span>' : '<span class="chip p-ok">Matches</span>')(procedureCheck(r, base))) + '</td>';
       h += '<td class="num">' + flagCount(r) + '</td>';
       h += '<td>' + statusPill(r.status) + '</td>';
       h += '<td class="ink2" style="white-space:nowrap">' + esc(sourceLabel(r)) + '</td>';
@@ -994,6 +1011,79 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     h += '<div class="sec"><span class="eyebrow">Finished assembly · ' + esc(MATCH[tfs.matchesBaseline] || 'Not assessed') + '</span><div class="fs-pair"><figure><figcaption>' + esc(runName(ref)) + ' (reference)</figcaption>' + shotHtml(rfs) + '</figure><figure><figcaption>This run</figcaption>' + shotHtml(tfs) + '</figure></div>' + (tfs.note ? '<p class="ink2">' + esc(tfs.note) + '</p>' : '') + '</div>';
     return h + '</div></section>';
   }
+  // ---------- procedure check ----------
+  // Step-by-step check of a run's procedure against its reference (the standard run).
+  // Uses the same sequence data as seqCheck plus the analysis flags; speed alone is never an issue.
+  function lcsKeys(a, b) {
+    const m = a.length, n = b.length, t = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = m - 1; i >= 0; i--) for (let j = n - 1; j >= 0; j--) t[i][j] = a[i] === b[j] ? t[i + 1][j + 1] + 1 : Math.max(t[i + 1][j], t[i][j + 1]);
+    const keep = new Set();
+    for (let i = 0, j = 0; i < m && j < n;) { if (a[i] === b[j]) { keep.add(a[i]); i++; j++; } else if (t[i + 1][j] >= t[i][j + 1]) i++; else j++; }
+    return keep;
+  }
+  function procedureCheck(run, ref) {
+    const bEls = workEls(ref), rEls = workEls(run);
+    const steps = [];
+    for (const e of bEls) if (e.key && e.key !== 'other' && !steps.some(s => s.key === e.key)) steps.push({ key: e.key, label: e.label, kind: e.kind });
+    const firstOrder = els => [...new Set(els.filter(e => e.kind !== 'hold' && e.key && e.key !== 'other').map(e => e.key))];
+    const bOrder = firstOrder(bEls).filter(k => rEls.some(e => e.key === k));
+    const rOrder = firstOrder(rEls).filter(k => bOrder.includes(k));
+    const inOrder = lcsKeys(bOrder, rOrder);
+    const issues = [];
+    let unclear = 0;
+    const out = steps.map((st, i) => {
+      const hits = rEls.filter(e => e.key === st.key);
+      const row = { n: i + 1, label: st.label, state: 'ok', chip: 'Done', detail: '' };
+      if (!hits.length) {
+        row.state = 'bad'; row.chip = 'Missing';
+        row.detail = 'This step was not seen in the run.';
+      } else {
+        const at = 'at ' + fmtT(hits[0].start) + ' s';
+        const dev = hits.find(e => e.flagType === 'deviation');
+        const unc = hits.find(e => e.flagType === 'unclear');
+        if (st.kind !== 'hold' && bOrder.includes(st.key) && !inOrder.has(st.key)) {
+          const pos = rOrder.indexOf(st.key);
+          row.state = 'bad'; row.chip = 'Out of order';
+          row.detail = 'Done ' + at + (pos > 0 ? ', after “' + ((steps.find(x => x.key === rOrder[pos - 1]) || {}).label || rOrder[pos - 1]) + '”' : ', first') + '. The standard does it as step ' + (i + 1) + '.';
+        } else if (hits.length > 1) {
+          row.state = 'bad'; row.chip = 'Repeated ×' + hits.length;
+          row.detail = 'Done ' + hits.length + ' times, at ' + hits.map(e => fmtT(e.start) + ' s').join(', ') + '.';
+        }
+        if (dev) {
+          if (row.state === 'ok') { row.state = 'bad'; row.chip = 'Done differently'; }
+          row.detail = (row.detail ? row.detail + ' ' : '') + (dev.flag || dev.observed || 'Done a different way than the standard.');
+        }
+        if (row.state === 'ok') {
+          if (unc) { row.state = 'unclear'; row.chip = 'Unclear'; row.detail = (unc.flag || 'Hands hide part of this step.') + ' Not counted as an issue.'; unclear++; }
+          else row.detail = 'Done ' + at + ' · took ' + fmtS(hits.reduce((a, e) => a + dur(e), 0)) + '.';
+        }
+      }
+      if (row.state === 'bad') issues.push(row.chip + ': ' + st.label);
+      return row;
+    });
+    const extras = rEls.filter(e => !e.key || e.key === 'other' || !steps.some(s => s.key === e.key)).map(e => ({ label: e.label || 'Unlabeled step', start: e.start, detail: e.flag || e.observed || '' }));
+    for (const x of extras) issues.push('Extra step: ' + x.label);
+    const fs = run.finalState || {};
+    if (fs.matchesBaseline === 'no') issues.push('Finished build differs from the standard');
+    return { steps: out, extras, issues, unclear, finalDiffers: fs.matchesBaseline === 'no', finalNote: fs.note || '' };
+  }
+  function procedureHtml(run, ref) {
+    const pc = procedureCheck(run, ref);
+    const n = pc.issues.length;
+    let h = '<section class="sec" id="proc"><div class="sec-h"><h2>Procedure check</h2><span class="note">Each step of ' + esc(runName(ref)) + ' (the standard), in order · speed alone is not an issue</span></div><div class="panel pad sec">';
+    if (n) h += '<div class="proc-banner bad" role="alert">' + ICON.warn + '<div><b>Procedure differs from the standard · ' + n + ' issue' + (n === 1 ? '' : 's') + '</b><p>' + esc(pc.issues.join(' · ')) + '. Check the assembly before it moves on; this is a possible deviation for a person to confirm.</p></div></div>';
+    else if (pc.unclear) h += '<div class="proc-banner unsure">' + ICON.na + '<div><b>Procedure matches the standard · ' + pc.unclear + ' step' + (pc.unclear === 1 ? '' : 's') + ' unclear</b><p>Every step was seen once and in order. Some steps were partly hidden from the camera.</p></div></div>';
+    else h += '<div class="proc-banner ok">' + ICON.ok + '<div><b>Procedure matches the standard</b><p>Every step was seen once, in the standard order, done the same way.</p></div></div>';
+    h += '<ol class="proc-list">';
+    for (const r of pc.steps) {
+      const cls = r.state === 'bad' ? 'p-bad' : r.state === 'unclear' ? 'p-unclear' : 'p-ok';
+      h += '<li class="' + r.state + '"><span class="pn">' + r.n + '</span><span class="pt">' + esc(r.label) + '</span><span class="chip ' + cls + '">' + esc(r.chip) + '</span><span class="pd">' + esc(r.detail) + '</span></li>';
+    }
+    for (const x of pc.extras) h += '<li class="bad"><span class="pn">+</span><span class="pt">' + esc(x.label) + '</span><span class="chip p-bad">Extra step</span><span class="pd">' + esc('Not in the standard. At ' + fmtT(x.start) + ' s.' + (x.detail ? ' ' + x.detail : '')) + '</span></li>';
+    h += '<li class="' + (pc.finalDiffers ? 'bad' : 'ok') + '"><span class="pn">✓</span><span class="pt">Finished build</span><span class="chip ' + (pc.finalDiffers ? 'p-bad">Differs' : (run.finalState || {}).matchesBaseline === 'yes' ? 'p-ok">Matches' : 'p-unclear">Not confirmed') + '</span><span class="pd">' + esc(pc.finalNote) + '</span></li>';
+    return h + '</ol></div></section>';
+  }
+
   async function ccAnalyze(btn) {
     const d = S.draft;
     if (!d || d.busy) return;
@@ -1116,6 +1206,7 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     h += '<div class="panel stat"><span class="eyebrow">Flags</span><span class="v">' + flagCount(run) + '</span><span class="s">Notes, unclear spans, possible deviations</span></div>';
     h += '</div>';
 
+    if (ref) h += procedureHtml(run, ref);
     h += comparisonHtml(run, ref);
 
     // player + log
