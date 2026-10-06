@@ -1,0 +1,2046 @@
+<title>LEGO Station Run Log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Saira:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: time-study ledger. Sticky bar, then one view at a time: runs ledger -> run sheet -> new-run bench (video left, element sheet right). */
+:root {
+  --bg: #eef0ee; --surface: #fcfcfb; --surface-2: #f3f4f2; --sunk: #e4e7e4;
+  --ink: #15181b; --ink-2: #4a4f56; --muted: #767b83; --line: #dcdfdc; --line-2: #c5c9c5; --grid: #e6e8e5;
+  --accent: #a3522a; --accent-2: #8a4321; --on-accent: #ffffff; --accent-wash: rgba(163, 82, 42, .08);
+  --k-reach: #2a78d6; --k-position: #eb6834; --k-press: #1baf7a; --k-release: #eda100; --k-hold: #e87ba4; --k-idle: #c9ccc9; --k-other: #8d9197;
+  --good: #0ca30c; --good-ink: #006300; --warn: #fab219; --warn-ink: #7a5200; --crit: #d03b3b; --crit-ink: #b02e2e;
+  --tip-bg: #15181b; --tip-fg: #f3f4f2;
+  --shadow: 0 1px 2px rgba(21, 24, 27, .06);
+  --f-ui: "Saira", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101214; --surface: #181a1d; --surface-2: #1f2225; --sunk: #0c0d0f;
+    --ink: #eff1ef; --ink-2: #bfc3c8; --muted: #8a8f96; --line: #2a2e33; --line-2: #3a3f45; --grid: #23272b;
+    --accent: #dc8b55; --accent-2: #e9a273; --on-accent: #15181b; --accent-wash: rgba(220, 139, 85, .12);
+    --k-reach: #3987e5; --k-position: #d95926; --k-press: #199e70; --k-release: #c98500; --k-hold: #d55181; --k-idle: #3a3f45; --k-other: #80858c;
+    --good-ink: #3fbf3f; --warn-ink: #fab219; --crit-ink: #e66767;
+    --tip-bg: #eff1ef; --tip-fg: #15181b;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101214; --surface: #181a1d; --surface-2: #1f2225; --sunk: #0c0d0f;
+  --ink: #eff1ef; --ink-2: #bfc3c8; --muted: #8a8f96; --line: #2a2e33; --line-2: #3a3f45; --grid: #23272b;
+  --accent: #dc8b55; --accent-2: #e9a273; --on-accent: #15181b; --accent-wash: rgba(220, 139, 85, .12);
+  --k-reach: #3987e5; --k-position: #d95926; --k-press: #199e70; --k-release: #c98500; --k-hold: #d55181; --k-idle: #3a3f45; --k-other: #80858c;
+  --good-ink: #3fbf3f; --warn-ink: #fab219; --crit-ink: #e66767;
+  --tip-bg: #eff1ef; --tip-fg: #15181b;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .35);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-ui); font-size: 15px; line-height: 1.5; }
+h1, h2, h3 { margin: 0; text-wrap: balance; font-weight: 600; }
+p { margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mono, .num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.ink2 { color: var(--ink-2); }
+.eyebrow { font-size: 11.5px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+
+/* Bar */
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.bar-in { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 10px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; cursor: pointer; background: none; border: 0; padding: 0; text-align: left; }
+.brand svg { width: 34px; height: 22px; flex: none; }
+.brand-name { font-weight: 700; font-size: 17px; letter-spacing: .01em; line-height: 1.15; }
+.brand-sub { font-size: 12px; color: var(--muted); line-height: 1.2; }
+.bar-nav { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ro { font-size: 12px; color: var(--muted); border: 1px solid var(--line-2); border-radius: 999px; padding: 2px 10px; }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--line-2); background: var(--surface); color: var(--ink); font-size: 14px; font-weight: 500; cursor: pointer; white-space: nowrap; line-height: 1.3; }
+.btn:hover { border-color: var(--ink-2); }
+.btn[disabled] { opacity: .5; cursor: not-allowed; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--surface-2); }
+.btn.danger { color: var(--crit-ink); border-color: color-mix(in srgb, var(--crit) 45%, transparent); }
+.btn.sm { padding: 4px 9px; font-size: 13px; }
+.btn svg { width: 14px; height: 14px; }
+
+/* Page */
+.wrap { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 24px 56px; display: grid; gap: 28px; }
+.head { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; justify-content: space-between; }
+.head h1 { font-size: 28px; line-height: 1.15; }
+.head .sub { color: var(--ink-2); max-width: 68ch; margin-top: 4px; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); }
+.pad { padding: 18px 20px; }
+.sec { display: grid; gap: 12px; min-width: 0; }
+.sec-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.sec-h h2 { font-size: 18px; }
+.sec-h .note { font-size: 13px; color: var(--muted); }
+.back { font-size: 14px; color: var(--ink-2); background: none; border: 0; padding: 0; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.back:hover { color: var(--ink); }
+
+/* Stat tiles */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.stat { padding: 14px 16px; display: grid; gap: 2px; align-content: start; }
+.stat .v { font-family: var(--f-mono); font-size: 26px; font-weight: 500; line-height: 1.2; letter-spacing: -.01em; }
+.stat .v small { font-size: 14px; color: var(--ink-2); font-weight: 400; }
+.stat .s { font-size: 13px; color: var(--ink-2); }
+
+/* Pills and chips */
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; border: 1px solid var(--line-2); white-space: nowrap; color: var(--ink-2); }
+.pill svg { width: 12px; height: 12px; flex: none; }
+.pill.ok { color: var(--good-ink); border-color: color-mix(in srgb, var(--good) 45%, transparent); background: color-mix(in srgb, var(--good) 8%, transparent); }
+.pill.warn { color: var(--warn-ink); border-color: color-mix(in srgb, var(--warn) 70%, transparent); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.pill.na { color: var(--ink-2); }
+.pill.busy { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent); background: var(--accent-wash); }
+.pill.busy i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: pulse 1.2s ease-in-out infinite; }
+.pill.bad { color: var(--crit-ink); border-color: color-mix(in srgb, var(--crit) 50%, transparent); background: color-mix(in srgb, var(--crit) 7%, transparent); }
+@media (prefers-reduced-motion: reduce) { .pill.busy i { animation: none; } }
+.ccmsg { font-family: var(--f-mono); font-size: 12.5px; padding: 10px 12px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--line); overflow-wrap: anywhere; user-select: all; }
+.state h2 { font-size: 20px; }
+.cmp-pick { display: inline-flex; gap: 8px; align-items: center; font-size: 13px; color: var(--ink-2); }
+.cmp-pick select { width: auto; min-width: 190px; }
+.verdict { display: flex; gap: 12px; align-items: flex-start; }
+.verdict .pill { flex: none; margin-top: 3px; }
+.verdict p { margin-top: 2px; max-width: 72ch; }
+.diffs { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; color: var(--ink); }
+.cmp-line { font-size: 14px; color: var(--ink-2); }
+.cmp-line b { color: var(--ink); font-weight: 600; }
+.tl-row.static { cursor: default; }
+.tl-row.static:hover { background: transparent; }
+.cmp-tl { border: 1px solid var(--line); border-radius: 6px; }
+.fs-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 220px)); gap: 16px; }
+.fs-pair figure { margin: 0; display: grid; gap: 6px; align-content: start; }
+.fs-pair figcaption { font-size: 12.5px; color: var(--muted); }
+.fs-pair img { display: block; width: 100%; border-radius: 6px; background: var(--sunk); }
+.fs-pair .no { aspect-ratio: 1; display: grid; place-items: center; border-radius: 6px; background: var(--sunk); color: var(--muted); font-size: 12px; }
+.big { font-weight: 600; color: var(--ink); }
+.state p { color: var(--ink-2); max-width: 62ch; }
+.state a { color: var(--accent); }
+.tag { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); border-radius: 4px; padding: 0 6px; vertical-align: 2px; }
+.chip { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 4px; border: 1px solid var(--line-2); color: var(--ink-2); white-space: nowrap; }
+.chip.f-unclear { color: var(--warn-ink); border-color: color-mix(in srgb, var(--warn) 70%, transparent); background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.chip.f-deviation { color: var(--crit-ink); border-color: color-mix(in srgb, var(--crit) 50%, transparent); background: color-mix(in srgb, var(--crit) 8%, transparent); }
+
+/* Kind swatches */
+.k-reach { --c: var(--k-reach); } .k-position { --c: var(--k-position); } .k-press { --c: var(--k-press); }
+.k-release { --c: var(--k-release); } .k-hold { --c: var(--k-hold); } .k-idle { --c: var(--k-idle); } .k-other { --c: var(--k-other); }
+.sw { display: inline-block; width: 11px; height: 11px; border-radius: 3px; background: var(--c); flex: none; }
+.sw.idle, .seg.idle { background: repeating-linear-gradient(135deg, var(--k-idle) 0 3px, transparent 3px 6px); box-shadow: inset 0 0 0 1px var(--line-2); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Timelines */
+.tl { display: grid; }
+.tl-row { display: grid; grid-template-columns: 170px minmax(0, 1fr) 92px; gap: 14px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.tl-row:last-child { border-bottom: 0; }
+.tl-row:hover { background: var(--accent-wash); }
+.tl-row.is-base { background: var(--surface-2); }
+.tl-row.is-base:hover { background: var(--accent-wash); }
+.tl-row .lab { min-width: 0; line-height: 1.25; }
+.tl-row .lab b { font-weight: 600; }
+.tl-row .lab div { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tl-row .val { text-align: right; line-height: 1.25; }
+.tl-row .val div:first-child { font-family: var(--f-mono); font-size: 15px; font-weight: 500; }
+.tl-row .val div + div { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.tl-axis-row { display: grid; grid-template-columns: 170px minmax(0, 1fr) 92px; gap: 14px; padding: 8px 12px 0; }
+.track { position: relative; height: 20px; }
+.track.lanes-2 { height: 30px; }
+.track.tall { height: 30px; }
+.track.tall.lanes-2 { height: 42px; }
+.tick { position: absolute; top: -3px; bottom: -3px; width: 1px; background: var(--grid); }
+.seg { position: absolute; top: 0; height: 20px; border-radius: 3px; background: var(--c); min-width: 2px; }
+.track.tall .seg { height: 28px; }
+.seg.l1 { top: 23px; height: 7px; border-radius: 2px; }
+.track.tall .seg.l1 { top: 32px; height: 10px; }
+.seg:hover { outline: 2px solid var(--ink); outline-offset: 1px; z-index: 2; }
+.track.seekable { cursor: pointer; }
+.mark { position: absolute; top: -8px; bottom: -8px; width: 2px; margin-left: -1px; background: var(--accent); z-index: 3; pointer-events: none; }
+.mark::before { content: attr(data-label); position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font: 600 10px/1 var(--f-mono); color: var(--accent); white-space: nowrap; letter-spacing: .04em; }
+.playhead { position: absolute; top: -10px; bottom: -10px; width: 2px; margin-left: -1px; background: var(--ink); z-index: 4; pointer-events: none; left: 0; }
+.axis { position: relative; height: 16px; font-family: var(--f-mono); font-size: 11px; color: var(--muted); }
+.axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.axis span:first-child { transform: none; }
+.strip-box { padding: 26px 4px 4px; display: grid; gap: 6px; }
+
+/* Tables */
+.tbl-wrap { overflow-x: auto; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tbl th { font-size: 11.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line-2); white-space: nowrap; }
+.tbl td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.tbl tr:last-child td { border-bottom: 0; }
+.tbl .num { text-align: right; white-space: nowrap; }
+.tbl th.num { text-align: right; }
+.tbl tbody tr.click { cursor: pointer; }
+.tbl tbody tr.click:hover { background: var(--accent-wash); }
+.tbl tr.now td { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.tbl .el-name { display: flex; gap: 8px; align-items: baseline; min-width: 150px; }
+.tbl .el-name .sw { transform: translateY(1px); }
+.tbl .obs { color: var(--ink-2); min-width: 200px; }
+.tbl .flagtxt { display: block; font-size: 13px; color: var(--ink-2); margin-top: 4px; min-width: 140px; }
+.code { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.rbar { position: relative; height: 14px; min-width: 140px; }
+.rbar .rail { position: absolute; left: 0; right: 0; top: 6px; height: 2px; background: var(--grid); }
+.rbar .rng { position: absolute; top: 5px; height: 4px; border-radius: 2px; background: var(--ink-2); }
+.rbar .mean { position: absolute; top: 3px; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 2px var(--surface); }
+.rbar .base { position: absolute; top: 0; width: 2px; height: 14px; margin-left: -1px; background: var(--accent); }
+
+/* Run sheet */
+.detail { display: grid; grid-template-columns: minmax(250px, 340px) minmax(0, 1fr); gap: 20px; align-items: start; }
+.player { display: grid; gap: 10px; }
+.player video { width: 100%; max-height: 66vh; background: var(--sunk); border-radius: 8px; display: block; }
+.vid-missing { aspect-ratio: 9 / 16; max-height: 66vh; background: var(--sunk); border-radius: 8px; display: grid; place-items: center; text-align: center; padding: 20px; color: var(--muted); font-size: 13px; }
+.tnow { font-family: var(--f-mono); font-size: 13px; color: var(--ink-2); }
+.meta-list { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; font-size: 13px; }
+.meta-list dt { color: var(--muted); }
+.meta-list dd { margin: 0; color: var(--ink-2); overflow-wrap: anywhere; }
+.compare { display: grid; gap: 8px; font-size: 14px; }
+.compare li { color: var(--ink-2); }
+.compare ul, .lists ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.lists li { color: var(--ink-2); font-size: 14px; }
+.board { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 14px; }
+.frame { display: grid; gap: 6px; align-content: start; cursor: pointer; background: none; border: 0; padding: 0; text-align: left; }
+.frame .img { position: relative; aspect-ratio: var(--ar, 9 / 16); width: 100%; border-radius: 6px; overflow: hidden; background: var(--sunk); box-shadow: inset 0 0 0 1px var(--line); }
+.frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.frame .img .no { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px; color: var(--muted); padding: 10px; text-align: center; }
+.frame .cap { font-size: 13px; line-height: 1.3; }
+.frame .cap b { font-weight: 600; }
+.frame .cap .t { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.frame:hover .img { box-shadow: inset 0 0 0 2px var(--accent); }
+.final { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.final .shot { flex: 0 1 200px; min-width: 150px; border-radius: 6px; overflow: hidden; background: var(--sunk); }
+.final .compare { flex: 1 1 280px; min-width: 0; }
+.final .shot img { display: block; width: 100%; }
+.confirm { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--crit) 45%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--crit) 6%, transparent); font-size: 14px; }
+
+/* Bench */
+.drop { display: grid; place-items: center; gap: 10px; text-align: center; border: 1.5px dashed var(--line-2); border-radius: 10px; padding: 44px 20px; background: var(--surface); cursor: pointer; }
+.drop.over { border-color: var(--accent); background: var(--accent-wash); }
+.drop b { font-size: 17px; }
+.drop svg { width: 40px; height: 40px; color: var(--accent); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.how { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; counter-reset: how; }
+.how div { padding: 14px 16px; font-size: 14px; color: var(--ink-2); }
+.how div b { display: block; color: var(--ink); font-size: 14px; margin-bottom: 2px; }
+.how div::before { counter-increment: how; content: counter(how); font-family: var(--f-mono); font-size: 12px; color: var(--accent); display: block; margin-bottom: 4px; }
+.loaded { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 22px; align-items: start; }
+.field { display: grid; gap: 5px; min-width: 0; }
+.field > span { font-size: 13px; font-weight: 500; color: var(--ink-2); }
+.in { font-size: 14px; padding: 7px 9px; border: 1px solid var(--line-2); border-radius: 5px; background: var(--surface); color: var(--ink); min-width: 0; width: 100%; }
+.in:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-wash); }
+textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
+.in.t { font-family: var(--f-mono); font-variant-numeric: tabular-nums; width: 76px; text-align: right; padding-inline: 6px; }
+.fields { display: grid; gap: 14px; }
+.row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+.choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.choice { padding: 16px; display: grid; gap: 8px; align-content: start; }
+.choice h3 { font-size: 16px; }
+.choice p { font-size: 14px; color: var(--ink-2); }
+.choice .btn { justify-self: start; margin-top: 4px; }
+.notice { font-size: 13.5px; color: var(--ink-2); padding: 10px 12px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--line); }
+.notice.err { color: var(--crit-ink); border-color: color-mix(in srgb, var(--crit) 40%, transparent); background: color-mix(in srgb, var(--crit) 6%, transparent); }
+.prog { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 14px; }
+.prog li { display: flex; gap: 10px; align-items: center; color: var(--muted); }
+.prog li i { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--line-2); flex: none; }
+.prog li.active { color: var(--ink); }
+.prog li.active i { border-color: var(--accent); background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+.prog li.done { color: var(--ink-2); }
+.prog li.done i { border-color: var(--good); background: var(--good); }
+.prog li .d { font-family: var(--f-mono); font-size: 12.5px; color: var(--muted); margin-left: auto; }
+@keyframes pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .prog li.active i { animation: none; } }
+.sheets { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.sheets img { height: 150px; width: auto; max-width: none; border-radius: 4px; border: 1px solid var(--line); }
+
+/* Editor */
+.editor { display: grid; grid-template-columns: minmax(250px, 340px) minmax(0, 1fr); gap: 24px; align-items: start; }
+.ed-left { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 76px); display: grid; gap: 10px; }
+.ctrls { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.ed-right { display: grid; gap: 22px; min-width: 0; }
+.els { display: grid; }
+.el { display: grid; grid-template-columns: 26px minmax(0, 1fr) 160px 30px; gap: 8px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.el:last-child { border-bottom: 0; }
+.el .times { grid-column: 2 / -1; display: flex; gap: 8px 16px; align-items: center; flex-wrap: wrap; }
+.el:first-child { padding-top: 0; }
+.el .n { font-family: var(--f-mono); font-size: 12px; color: var(--muted); text-align: right; }
+.el .dur { font-family: var(--f-mono); font-size: 13px; color: var(--ink-2); }
+.el .sub { grid-column: 2 / -1; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 8px; }
+.el .custom { grid-column: 2 / -1; display: grid; grid-template-columns: minmax(0, 1fr) 180px; gap: 8px; }
+.tin { display: flex; gap: 4px; align-items: center; }
+.tin .lbl { font-size: 11px; color: var(--muted); }
+.set { width: 28px; height: 30px; display: grid; place-items: center; border-radius: 5px; border: 1px solid var(--line-2); background: var(--surface-2); cursor: pointer; color: var(--accent); padding: 0; flex: none; }
+.set:hover { border-color: var(--accent); }
+.set svg { width: 14px; height: 14px; }
+.x { width: 28px; height: 28px; border-radius: 5px; border: 1px solid transparent; background: none; cursor: pointer; color: var(--muted); padding: 0; display: grid; place-items: center; }
+.x:hover { color: var(--crit-ink); border-color: var(--line-2); }
+.cyc { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+.cyc .ct { font-family: var(--f-mono); font-size: 14px; }
+.savebar { position: sticky; bottom: env(safe-area-inset-bottom, 0px); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 12px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 -2px 10px rgba(0, 0, 0, .06); z-index: 5; }
+.savebar .msg { font-size: 13.5px; color: var(--ink-2); }
+.savebar .msg.err { color: var(--crit-ink); }
+.spacer { flex: 1; }
+
+/* Misc */
+.empty { padding: 40px 24px; text-align: center; display: grid; gap: 10px; justify-items: center; }
+.empty h2 { font-size: 20px; }
+.empty p { color: var(--ink-2); max-width: 56ch; }
+.skel { height: 14px; border-radius: 4px; background: var(--sunk); }
+.foot { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 0 32px; font-size: 12.5px; color: var(--muted); display: grid; gap: 4px; }
+.tip { position: fixed; z-index: 50; pointer-events: none; background: var(--tip-bg); color: var(--tip-fg); font-size: 12.5px; line-height: 1.45; padding: 8px 10px; border-radius: 6px; max-width: 280px; white-space: pre-line; box-shadow: 0 4px 14px rgba(0, 0, 0, .18); }
+.toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); transform: translateX(-50%); z-index: 60; background: var(--tip-bg); color: var(--tip-fg); padding: 9px 16px; border-radius: 6px; font-size: 14px; box-shadow: 0 4px 14px rgba(0, 0, 0, .2); max-width: calc(100% - 32px); }
+.csv-box { width: 100%; min-height: 160px; font-family: var(--f-mono); font-size: 12px; }
+.diag { font-size: 13.5px; color: var(--ink-2); }
+.diag summary { cursor: pointer; font-weight: 500; color: var(--ink); padding: 10px 14px; }
+.diag dl { display: grid; grid-template-columns: minmax(150px, auto) minmax(0, 1fr); gap: 6px 16px; margin: 0; padding: 0 14px 14px; }
+.diag dt { color: var(--muted); }
+.diag dd { margin: 0; overflow-wrap: anywhere; }
+.diag .bad { color: var(--crit-ink); }
+.diag .okk { color: var(--good-ink); }
+
+@media (max-width: 900px) {
+  .detail, .editor, .loaded { grid-template-columns: minmax(0, 1fr); }
+  .ed-left { position: static; }
+  .player video, .vid-missing { max-height: 52vh; margin-inline: auto; }
+  .vid-missing { width: min(100%, 300px); }
+}
+@media (max-width: 640px) {
+  .wrap { padding-inline: 16px; }
+  .bar-in, .foot { padding-inline: 16px; }
+  .brand-sub { display: none; }
+  .head h1 { font-size: 23px; }
+  .tl-row, .tl-axis-row { grid-template-columns: minmax(0, 1fr) 70px; gap: 6px 10px; padding-inline: 8px; }
+  .tl-row .lab { grid-column: 1; grid-row: 1; }
+  .tl-row .val { grid-column: 2; grid-row: 1; }
+  .tl-row .track { grid-column: 1 / -1; grid-row: 2; }
+  .tl-axis-row > div:first-child, .tl-axis-row > div:last-child { display: none; }
+  .tl-axis-row .axis { grid-column: 1 / -1; }
+  .el { grid-template-columns: 22px minmax(0, 1fr) 30px; }
+  .el > .sel { grid-column: 2; grid-row: 1; }
+  .el > .x { grid-column: 3; grid-row: 1; }
+  .el > .flagsel { grid-column: 2 / -1; grid-row: 2; }
+  .el .sub, .el .custom { grid-template-columns: minmax(0, 1fr); }
+  .verdict { flex-direction: column; gap: 6px; }
+  .cmp-pick select { min-width: 0; }
+}
+</style>
+
+<header class="bar">
+  <div class="bar-in">
+    <button class="brand" type="button" data-go="runs" aria-label="All runs">
+      <svg viewBox="0 0 34 22" aria-hidden="true"><rect x="0.5" y="0.5" width="33" height="21" rx="3" fill="var(--accent)"/><g fill="none" stroke="var(--on-accent)" stroke-width="1.4"><circle cx="6.5" cy="6.5" r="3"/><circle cx="13.5" cy="6.5" r="3"/><circle cx="20.5" cy="6.5" r="3"/><circle cx="27.5" cy="6.5" r="3"/><circle cx="6.5" cy="15.5" r="3"/><circle cx="13.5" cy="15.5" r="3"/><circle cx="20.5" cy="15.5" r="3"/><circle cx="27.5" cy="15.5" r="3"/></g></svg>
+      <span><span class="brand-name">LEGO Station Run Log</span><br><span class="brand-sub">One station · cycle time study from video</span></span>
+    </button>
+    <nav class="bar-nav" id="bar-nav"></nav>
+  </div>
+</header>
+<main id="view" class="wrap" aria-live="polite">
+  <div class="panel empty"><div class="skel" style="width:220px"></div><div class="skel" style="width:320px"></div></div>
+</main>
+<footer class="foot">
+  <p>Station-level process data only. A run describes the work at the station, not the person doing it: no names, faces or operator scores are stored.</p>
+  <p>Times are read from video frames and are approximate to about ±0.1 s.</p>
+</footer>
+<div id="tip" class="tip" hidden></div>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+(() => {
+  'use strict';
+  // Set by app/local-runtime.js when server.mjs serves the page; absent on claude.ai.
+  const LOCAL = !!window.RUNLOG_LOCAL;
+
+  // ---------- helpers ----------
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const r2 = n => Math.round(n * 100) / 100;
+  const fin = n => typeof n === 'number' && Number.isFinite(n);
+  const fmtS = (n, d = 2) => fin(n) ? n.toFixed(d) + ' s' : '—';
+  const fmtT = n => fin(n) ? n.toFixed(2) : '—';
+  const fmtD = n => {
+    if (!fin(n)) return '—';
+    if (Math.abs(n) < 0.005) return '±0.00 s';
+    return (n > 0 ? '+' : '−') + Math.abs(n).toFixed(2) + ' s';
+  };
+  const fmtPct = n => {
+    if (!fin(n)) return '';
+    if (Math.abs(n) < 0.005) return '0%';
+    return (n > 0 ? '+' : '−') + Math.abs(n * 100).toFixed(0) + '%';
+  };
+  const uid = () => Math.random().toString(36).slice(2, 9);
+  const blob = id => id ? '/_blob/' + id : '';
+  const fmtDate = iso => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (isNaN(d)) return '—';
+    return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+  const clone = o => JSON.parse(JSON.stringify(o == null ? null : o));
+  const MAX_ASSET = (LOCAL ? 500 : 20) * 1024 * 1024;
+
+  const KINDS = {
+    reach: 'Reach & grasp', position: 'Move & position', press: 'Press & seat',
+    release: 'Release & set down', hold: 'Hold (parallel)', idle: 'Idle / pause', other: 'Other'
+  };
+  const LEGEND_KINDS = ['reach', 'position', 'press', 'release', 'hold', 'idle'];
+  const FLAGS = { none: 'No flag', note: 'Note', unclear: 'Unclear', deviation: 'Possible deviation' };
+  const STATUS = {
+    NORMAL: { label: 'Normal', cls: 'ok' },
+    POSSIBLE_DEVIATION: { label: 'Possible deviation', cls: 'warn' },
+    INSUFFICIENT_INFORMATION: { label: 'Insufficient info', cls: 'na' }
+  };
+  const MATCH = { yes: 'Matches baseline', no: 'Differs from baseline', unclear: 'Unclear' };
+  const ICON = {
+    ok: '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="5.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.6 6.2l1.7 1.7 3.2-3.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    warn: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.3l5 9.1H1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6 4.8v2.4M6 8.8v.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
+    na: '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="5.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M4.7 4.7a1.4 1.4 0 1 1 1.9 1.3c-.4.2-.6.5-.6.9M6 8.8v.1" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>',
+    set: '<svg viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1v3M7 10v3M1 7h3M10 7h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="7" cy="7" r="2" fill="currentColor"/></svg>',
+    x: '<svg viewBox="0 0 14 14" aria-hidden="true" width="14" height="14"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+    plus: '<svg viewBox="0 0 14 14" aria-hidden="true"><path d="M7 2.5v9M2.5 7h9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+    film: '<svg viewBox="0 0 40 40" aria-hidden="true"><rect x="5" y="9" width="30" height="22" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M17 15v10l8-5z" fill="currentColor"/></svg>'
+  };
+  const DEFAULT_CATALOG = [
+    { key: 'idle_pre', label: 'Idle before cycle', kind: 'idle' },
+    { key: 'pick_pink', label: 'Reach and grasp pink 1×6 brick', kind: 'reach' },
+    { key: 'hold_plate', label: 'Hold the base plate', kind: 'hold' },
+    { key: 'place_pink', label: 'Place pink brick on plate', kind: 'position' },
+    { key: 'seat_pink', label: 'Press pink brick down', kind: 'press' },
+    { key: 'pick_blue', label: 'Reach and grasp blue 2×2 slope', kind: 'reach' },
+    { key: 'carry_blue', label: 'Carry blue slope', kind: 'position' },
+    { key: 'orient_blue', label: 'Position and orient blue slope', kind: 'position' },
+    { key: 'seat_blue', label: 'Press blue slope down', kind: 'press' },
+    { key: 'release', label: 'Release and set down', kind: 'release' },
+    { key: 'idle_post', label: 'Idle after cycle', kind: 'idle' }
+  ];
+  const IDLE_EDGE = ['idle_pre', 'idle_post'];
+
+  // ---------- state ----------
+  const S = {
+    db: null, assets: null, sample: undefined, sampleLimits: null, sampleOff: false, downloads: null, user: null,
+    diag: { csp: [], lastError: '', limitsErr: '' },
+    mcp: undefined, ccErr: {}, ccErrMsg: {}, ccSession: {}, localRef: {},
+    canWrite: null, readOnly: false, dbUnavailable: false, dbError: null,
+    runs: [], runsLoaded: false, settings: {}, settingsRaw: null,
+    route: parseHash(), draft: null, confirmDelete: false, renderedKey: null, playerCleanup: null, leaveTo: null
+  };
+
+  // ---------- derived ----------
+  const dur = e => Math.max(0, (e.end || 0) - (e.start || 0));
+  const cycleTime = run => run && run.cycle && fin(run.cycle.end) && fin(run.cycle.start) ? r2(run.cycle.end - run.cycle.start) : null;
+  const byStart = (a, b) => (a.start - b.start) || (a.end - b.end);
+  const elementsOf = run => (run && Array.isArray(run.elements) ? run.elements : []).slice().sort(byStart);
+  const workEls = run => elementsOf(run).filter(e => e.kind !== 'idle');
+  const flagCount = run => elementsOf(run).filter(e => e.flagType && e.flagType !== 'none').length;
+  const hasEls = r => !!(r && Array.isArray(r.elements) && r.elements.length);
+  const isPending = r => !!(r && r.analysis && r.analysis.state && r.analysis.state !== 'done' && !hasEls(r));
+  const isRechecking = r => !!(r && r.analysis && (r.analysis.state === 'queued' || r.analysis.state === 'running') && hasEls(r));
+  const doneRuns = () => S.runs.filter(r => !isPending(r));
+  const findDone = id => id ? doneRuns().find(r => r.id === id) || null : null;
+  function baseline() {
+    const runs = doneRuns();
+    if (!runs.length) return null;
+    return runs.find(r => r.id === S.settings.baselineRunId) || runs[0];
+  }
+  // The run this one is compared with: a viewer's local pick, the run's saved pick, else the baseline.
+  function refFor(run) {
+    const pick = findDone(S.localRef[run.id]) || findDone(run.compareToRunId);
+    if (pick && pick.id !== run.id) return pick;
+    const b = baseline();
+    return b && b.id !== run.id ? b : null;
+  }
+  function refOptions(run, selId) {
+    const base = baseline();
+    return doneRuns().filter(r => !run || r.id !== run.id).map(r => '<option value="' + esc(r.id) + '"' + (r.id === selId ? ' selected' : '') + '>' + esc(runName(r) + (base && r.id === base.id ? ' · Baseline' : (r.label ? ' · ' + r.label : ''))) + '</option>').join('');
+  }
+  async function saveSettings(patch) {
+    const ref = S.db.doc('meta/settings');
+    if (S.settingsRaw) await ref.update(patch);
+    else await ref.set(Object.assign({}, S.settings, patch));
+  }
+  const fmtClock = iso => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }); };
+  const minutesSince = iso => { const t = Date.parse(iso); return isNaN(t) ? null : (Date.now() - t) / 60000; };
+  const CC_SERVER = 'Claude Code Remote';
+  const ARTIFACT_URL = 'https://claude.ai/artifact/DesRvsYhrX3J6W5b1b1vwD';
+  function catalog() {
+    const base = baseline();
+    const out = [];
+    const seen = new Set();
+    for (const e of elementsOf(base)) {
+      if (!e.key || e.key === 'other' || seen.has(e.key)) continue;
+      seen.add(e.key);
+      out.push({ key: e.key, label: e.label, kind: e.kind });
+    }
+    for (const c of DEFAULT_CATALOG) if (!seen.has(c.key)) { seen.add(c.key); out.push(c); }
+    return out;
+  }
+  function durByKey(run) {
+    const m = {};
+    for (const e of elementsOf(run)) {
+      if (!e.key || e.key === 'other') continue;
+      m[e.key] = r2((m[e.key] || 0) + dur(e));
+    }
+    return m;
+  }
+  function pressShare(run) {
+    const ct = cycleTime(run);
+    if (!ct) return null;
+    const p = workEls(run).filter(e => e.kind === 'press').reduce((s, e) => s + dur(e), 0);
+    return p / ct;
+  }
+  function seqCheck(run, base) {
+    const res = { same: true, missing: [], extra: [], repeats: [], swap: null };
+    if (!run || !base) return res;
+    const bEls = workEls(base);
+    const rEls = workEls(run);
+    const bk = bEls.map(e => e.key).filter(k => k && k !== 'other');
+    const rk = rEls.map(e => e.key).filter(k => k && k !== 'other');
+    const label = k => (bEls.find(e => e.key === k) || rEls.find(e => e.key === k) || {}).label || k;
+    res.missing = [...new Set(bk.filter(k => !rk.includes(k)))].map(label);
+    res.extra = rEls.filter(e => !e.key || e.key === 'other' || !bk.includes(e.key)).map(e => e.label || 'Unlabeled element');
+    res.repeats = [...new Set(rk.filter((k, i) => rk.indexOf(k) !== i))].map(label);
+    const ordered = els => [...new Set(els.filter(e => e.kind !== 'hold').map(e => e.key))];
+    const rFirst = ordered(rEls).filter(k => bk.includes(k));
+    const bFirst = ordered(bEls).filter(k => rk.includes(k));
+    for (let i = 0; i < Math.min(rFirst.length, bFirst.length); i++) {
+      if (rFirst[i] !== bFirst[i]) { res.swap = [label(rFirst[i]), label(bFirst[i])]; break; }
+    }
+    res.same = !res.missing.length && !res.extra.length && !res.repeats.length && !res.swap;
+    return res;
+  }
+  function seqSummary(sc) {
+    if (sc.same) return 'Same elements, same order as the baseline.';
+    const parts = [];
+    if (sc.missing.length) parts.push('Not seen: ' + sc.missing.join(', ') + '.');
+    if (sc.extra.length) parts.push('Not in baseline: ' + sc.extra.join(', ') + '.');
+    if (sc.repeats.length) parts.push('Repeated: ' + sc.repeats.join(', ') + '.');
+    if (sc.swap) parts.push('Order differs: “' + sc.swap[0] + '” came where the baseline has “' + sc.swap[1] + '”.');
+    return parts.join(' ');
+  }
+
+  // ---------- routing ----------
+  function parseHash() {
+    let h = '';
+    try { h = (location.hash || '').slice(1); } catch (e) { h = ''; }
+    if (!h || h === 'runs') return { view: 'runs' };
+    if (h === 'new') return { view: 'new' };
+    if (h.indexOf('edit-') === 0) return { view: 'edit', id: h.slice(5) };
+    return { view: 'run', id: h };
+  }
+  function hashFor(r) {
+    if (r.view === 'runs') return '#runs';
+    if (r.view === 'new') return '#new';
+    if (r.view === 'edit') return '#edit-' + r.id;
+    return '#' + r.id;
+  }
+  function go(view, id, force) {
+    const next = { view, id };
+    if (!force && S.draft && S.draft.dirty && (S.route.view === 'new' || S.route.view === 'edit')) {
+      S.leaveTo = next;
+      renderLeaveConfirm();
+      return;
+    }
+    if (S.route.view === 'new' || S.route.view === 'edit') dropDraft();
+    S.route = next;
+    S.confirmDelete = false;
+    S.renderedKey = null;
+    try { if (location.hash !== hashFor(next)) location.hash = hashFor(next); } catch (e) { /* no hash in this frame */ }
+    render();
+    try { window.scrollTo(0, 0); } catch (e) { /* ignore */ }
+  }
+  window.addEventListener('hashchange', () => {
+    const r = parseHash();
+    if (r.view === S.route.view && r.id === S.route.id) return;
+    go(r.view, r.id);
+  });
+  function dropDraft() {
+    const d = S.draft;
+    if (d) {
+      if (d.ctl) try { d.ctl.abort(); } catch (e) { /* ignore */ }
+      d.cancelled = true;
+      if (d.objectUrl) try { URL.revokeObjectURL(d.objectUrl); } catch (e) { /* ignore */ }
+      if (d.videoAssetId && !d.saved && S.assets) S.assets.delete(d.videoAssetId).catch(() => {});
+    }
+    S.draft = null;
+  }
+
+  // ---------- capabilities ----------
+  async function init() {
+    const c = window.claude;
+    if (!c || typeof c.use !== 'function') { S.dbUnavailable = true; render(); return; }
+    c.use('db').then(db => {
+      S.db = db;
+      if (!db) { S.dbUnavailable = true; render(); return; }
+      subscribe();
+    }, () => { S.dbUnavailable = true; render(); });
+    c.use('assets').then(a => { S.assets = a; if (S.route.view === 'new') render(); }, () => {});
+    c.use('sample').then(async s => {
+      S.sample = s;
+      if (s) { try { S.sampleLimits = await s.limits(); } catch (e) { S.sampleLimits = null; S.diag.limitsErr = (e && e.code) || 'error'; } }
+      if (S.route.view === 'new' && S.draft && S.draft.stage === 'loaded') render();
+    }, () => { S.sample = null; });
+    c.use('downloads').then(d => { S.downloads = d; }, () => {});
+    c.use('mcp').then(m => {
+      S.mcp = m;
+      if (S.route.view === 'new' && S.draft && S.draft.stage === 'loaded') render();
+      else if (S.route.view === 'run') { S.renderedKey = null; render(); }
+    }, () => { S.mcp = null; });
+    c.use('user').then(async u => {
+      S.user = u;
+      if (u) { try { S.canWrite = await u.can('data.write'); } catch (e) { S.canWrite = null; } }
+      render();
+    }, () => {});
+  }
+  function subscribe() {
+    S.db.collection('runs').onSnapshot(snap => {
+      S.runs = snap.docs.filter(d => d.exists).map(d => {
+        const data = d.data();
+        return Object.assign({}, data, { id: d.id, _raw: data });
+      }).sort((a, b) => (a.number || 0) - (b.number || 0) || String(a.createdAt).localeCompare(String(b.createdAt)));
+      S.runsLoaded = true;
+      onData();
+    }, err => { S.dbError = err && err.code; S.runsLoaded = true; render(); });
+    S.db.doc('meta/settings').onSnapshot(snap => {
+      S.settingsRaw = snap.exists ? snap.data() : null;
+      S.settings = S.settingsRaw || {};
+      onData();
+    }, () => {});
+  }
+  const writable = () => !S.dbUnavailable && !!S.db && S.canWrite !== false && !S.readOnly;
+  function onData() {
+    const v = S.route.view;
+    if (v === 'runs' || v === 'run') render();
+    else if (v === 'edit' && !S.draft) render();
+    else renderBar();
+  }
+  function handleWriteError(e) {
+    const code = e && e.code;
+    if (code === 'invalid_argument') { S.readOnly = true; return 'Your access to this page is view-only, so runs can’t be saved here. Ask the owner for Contributor or Editor access.'; }
+    if (code === 'quota_exceeded') return 'The run store is full. Delete runs you no longer need, then save again.';
+    if (code === 'resource_exhausted') return 'Too many saves at once. Wait a few seconds and try again.';
+    if (code === 'revoked') { S.readOnly = true; return 'Access to this page changed while it was open. Reload to continue.'; }
+    return 'The run couldn’t be saved (' + (code || 'connection problem') + '). Try again.';
+  }
+
+  // ---------- rendering ----------
+  function render() {
+    renderBar();
+    hideTip();
+    if (S.playerCleanup && S.route.view !== 'run') { S.playerCleanup(); S.playerCleanup = null; }
+    const v = S.route.view;
+    if (v === 'runs') renderRuns();
+    else if (v === 'run') renderRun(S.route.id);
+    else if (v === 'new') renderNew();
+    else if (v === 'edit') renderEditRoute(S.route.id);
+  }
+  function renderBar() {
+    const nav = $('#bar-nav');
+    const v = S.route.view;
+    let h = '';
+    if (v !== 'runs') h += '<button class="btn ghost" type="button" data-go="runs">All runs</button>';
+    if (writable() && v !== 'new' && v !== 'edit') h += '<button class="btn primary" type="button" data-go="new">' + ICON.plus + 'New run</button>';
+    if (S.canWrite === false || S.readOnly) h += '<span class="ro">View only</span>';
+    nav.innerHTML = h;
+  }
+  function statusPill(st) {
+    const m = STATUS[st] || STATUS.INSUFFICIENT_INFORMATION;
+    return '<span class="pill ' + m.cls + '">' + ICON[m.cls] + esc(m.label) + '</span>';
+  }
+  function flagChip(t) {
+    if (!t || t === 'none') return '<span class="muted">—</span>';
+    return '<span class="chip f-' + esc(t) + '">' + esc(FLAGS[t] || t) + '</span>';
+  }
+  function runName(run) { return 'Run ' + (run.number || '?'); }
+  function sourceLabel(run) {
+    const s = run.source || {};
+    const m = s.method === 'claude-code' ? 'Claude Code' : s.method === 'agent' ? (s.agent || 'Agent') : s.method === 'claude-page' ? 'Claude in page' : s.method === 'manual' ? 'By hand' : '—';
+    return m + (s.editedAt ? ' · edited' : '');
+  }
+  function legendHtml() {
+    return '<div class="legend">' + LEGEND_KINDS.map(k => '<span><i class="sw k-' + k + (k === 'idle' ? ' idle' : '') + '"></i>' + esc(KINDS[k]) + '</span>').join('') + '</div>';
+  }
+  function emptyState(title, body, btn) {
+    return '<div class="panel empty"><h2>' + esc(title) + '</h2><p>' + esc(body) + '</p>' + (btn || '') + '</div>';
+  }
+  function loadingState() {
+    return '<div class="panel empty" aria-busy="true"><p class="muted">Loading runs…</p><div class="skel" style="width:260px"></div><div class="skel" style="width:340px"></div></div>';
+  }
+
+  // timeline strip
+  function assignLanes(els) {
+    const ends = [];
+    return els.map(e => {
+      let l = 0;
+      while (l < ends.length && e.start < ends[l] - 0.02) l++;
+      ends[l] = e.end;
+      return Object.assign({}, e, { lane: l });
+    });
+  }
+  function tickStep(span) { return span <= 3 ? 0.5 : span <= 12 ? 1 : span <= 30 ? 2 : span <= 75 ? 5 : 10; }
+  function segTip(e, baseMap, t0, refLabel) {
+    const lines = [e.label || KINDS[e.kind] || 'Element'];
+    lines.push(fmtT(e.start - t0) + '–' + fmtT(e.end - t0) + ' s · ' + fmtS(dur(e)));
+    if (baseMap && e.key && fin(baseMap[e.key])) lines.push((refLabel || 'Baseline') + ' ' + fmtS(baseMap[e.key]) + ' · ' + fmtD(dur(e) - baseMap[e.key]));
+    if (e.flagType && e.flagType !== 'none') lines.push((FLAGS[e.flagType] || 'Flag') + (e.flag ? ': ' + e.flag : ''));
+    return lines.join('\n');
+  }
+  function stripHtml(els, o) {
+    const t0 = o.t0 || 0, span = Math.max(0.5, o.span);
+    const placed = assignLanes(els);
+    const lanes = placed.some(e => e.lane > 0) ? 2 : 1;
+    const step = tickStep(span);
+    let ticks = '';
+    for (let t = 0; t <= span + 1e-6; t += step) ticks += '<i class="tick" style="left:' + (t / span * 100).toFixed(3) + '%"></i>';
+    const segs = placed.map(e => {
+      const x = Math.max(0, (e.start - t0) / span * 100);
+      const w = Math.max(0.35, dur(e) / span * 100);
+      const lane = Math.min(e.lane, 1);
+      return '<span class="seg k-' + esc(e.kind || 'other') + ' l' + lane + (e.kind === 'idle' ? ' idle' : '') + '" style="left:' + x.toFixed(3) + '%;width:calc(' + w.toFixed(3) + '% - 2px)" data-tip="' + esc(segTip(e, o.baseMap, t0, o.refLabel)) + '"' + (o.seekable ? ' data-seek="' + e.start + '"' : '') + '></span>';
+    }).join('');
+    const marks = (o.markers || []).map(m => '<i class="mark" style="left:' + ((m.t - t0) / span * 100).toFixed(3) + '%" data-label="' + esc(m.label) + '"></i>').join('');
+    return '<div class="track lanes-' + lanes + (o.tall ? ' tall' : '') + (o.seekable ? ' seekable' : '') + '"' + (o.id ? ' id="' + o.id + '"' : '') + ' data-span="' + span + '" data-t0="' + t0 + '">' + ticks + segs + marks + (o.playhead ? '<i class="playhead" id="ph"></i>' : '') + '</div>';
+  }
+  function axisHtml(span) {
+    const step = tickStep(span);
+    let out = '';
+    for (let t = 0; t <= span + 1e-6; t += step) out += '<span style="left:' + (t / span * 100).toFixed(3) + '%">' + (step < 1 ? t.toFixed(1) : t.toFixed(0)) + (t === 0 ? ' s' : '') + '</span>';
+    return '<div class="axis">' + out + '</div>';
+  }
+  function cycleEls(run) {
+    const c = run.cycle || {};
+    if (!fin(c.start) || !fin(c.end)) return [];
+    return elementsOf(run).filter(e => !IDLE_EDGE.includes(e.key)).map(e => Object.assign({}, e, { start: Math.max(e.start, c.start), end: Math.min(e.end, c.end) })).filter(e => e.end > e.start);
+  }
+
+  // ---------- runs view ----------
+  function renderRuns() {
+    const V = $('#view');
+    if (S.dbUnavailable) {
+      V.innerHTML = emptyState('Runs can’t load in this view', 'This log keeps runs in a shared store that works when the page is opened in claude.ai while signed in. Open the artifact link there to see the baseline and add runs.');
+      return;
+    }
+    if (!S.runsLoaded) { V.innerHTML = loadingState(); return; }
+    if (S.dbError) { V.innerHTML = LOCAL ? emptyState('The local server isn’t answering', 'Run npm start in the repo folder, then reload this page.') : emptyState('Runs didn’t load', 'The run store answered with “' + S.dbError + '”. Reload the page to try again.'); return; }
+    const runs = doneRuns();
+    const pending = S.runs.filter(isPending);
+    if (!runs.length && pending.length) { V.innerHTML = '<div class="head"><div><h1>Runs</h1></div></div>' + pendingSection(pending); return; }
+    if (!runs.length) {
+      V.innerHTML = emptyState('No runs logged yet', 'Upload a top-down video of one assembly cycle. The first run becomes the baseline that later runs are compared with.', writable() ? '<button class="btn primary" type="button" data-go="new">' + ICON.plus + 'Log the first run</button>' : '');
+      return;
+    }
+    const base = baseline();
+    const baseCt = cycleTime(base);
+    const others = runs.filter(r => r.id !== base.id);
+    const otherCts = others.map(cycleTime).filter(fin);
+    const mean = otherCts.length ? otherCts.reduce((a, b) => a + b, 0) / otherCts.length : null;
+    const latest = others.length ? others[others.length - 1] : null;
+    const latestCt = latest ? cycleTime(latest) : null;
+    const baseMap = durByKey(base);
+
+    let h = '<div class="head"><div><div class="eyebrow">Time study · manual assembly station</div><h1>Runs</h1><p class="sub">Each run is one assembly cycle read from video. ' + esc(runName(base)) + ' is the baseline: new runs are compared with it unless you pick another run, and this overview measures every run against it.</p></div>';
+    if (writable() && runs.length > 1) h += '<div class="actions"><label class="cmp-pick"><span>Baseline</span><select class="in" id="base-select">' + refOptions(null, base.id) + '</select></label></div>';
+    h += '</div>';
+
+    h += '<div class="stats">';
+    h += '<div class="panel stat"><span class="eyebrow">Baseline cycle</span><span class="v">' + esc(fmtT(baseCt)) + '<small> s</small></span><span class="s">' + esc(runName(base)) + ' · ' + esc(base.label || 'Baseline') + '</span></div>';
+    h += '<div class="panel stat"><span class="eyebrow">Runs logged</span><span class="v">' + runs.length + '</span><span class="s">1 baseline' + (others.length ? ' + ' + others.length + ' run-through' + (others.length === 1 ? '' : 's') : ', no run-throughs yet') + '</span></div>';
+    h += '<div class="panel stat"><span class="eyebrow">Mean run-through cycle</span><span class="v">' + (mean == null ? '—' : esc(mean.toFixed(2)) + '<small> s</small>') + '</span><span class="s">' + (mean == null ? 'Shows after the first run-through' : 'Range ' + esc(Math.min(...otherCts).toFixed(2)) + '–' + esc(Math.max(...otherCts).toFixed(2)) + ' s · ' + esc(fmtD(mean - baseCt)) + ' vs baseline') + '</span></div>';
+    h += '<div class="panel stat"><span class="eyebrow">Latest run</span><span class="v">' + (latestCt == null ? '—' : esc(latestCt.toFixed(2)) + '<small> s</small>') + '</span><span class="s">' + (latest ? esc(runName(latest)) + ' · ' + esc(fmtD(latestCt - baseCt)) + ' (' + esc(fmtPct(baseCt ? (latestCt - baseCt) / baseCt : null)) + ') vs baseline' : 'No run-throughs yet') + '</span></div>';
+    h += '</div>';
+
+    if (pending.length) h += pendingSection(pending);
+
+    // cycle timelines
+    const ordered = [base].concat(others);
+    const span = Math.max(1, Math.ceil(Math.max(...ordered.map(r => cycleTime(r) || 0)) + 0.25));
+    h += '<section class="sec"><div class="sec-h"><h2>Cycle timelines</h2><span class="note">Aligned at cycle start · hover an element for its time</span></div>' + legendHtml();
+    h += '<div class="panel tl"><div class="tl-axis-row"><div></div>' + axisHtml(span) + '<div></div></div>';
+    for (const r of ordered) {
+      const ct = cycleTime(r);
+      const isB = r.id === base.id;
+      h += '<div class="tl-row' + (isB ? ' is-base' : '') + '" data-open="' + esc(r.id) + '" role="link" tabindex="0" aria-label="Open ' + esc(runName(r)) + '">';
+      h += '<div class="lab"><b>' + esc(runName(r)) + '</b> ' + (isB ? '<span class="tag">Baseline</span>' : '') + '<div>' + esc(r.label || r.condition || fmtDate(r.createdAt)) + '</div></div>';
+      h += stripHtml(cycleEls(r), { t0: r.cycle ? r.cycle.start : 0, span, baseMap: isB ? null : baseMap });
+      h += '<div class="val"><div>' + esc(fmtS(ct)) + '</div><div>' + (isB ? 'baseline' : esc(fmtD(ct - baseCt))) + '</div></div>';
+      h += '</div>';
+    }
+    h += '</div></section>';
+
+    // runs table
+    h += '<section class="sec"><div class="sec-h"><h2>All runs</h2><span class="note">Click a run to open its event log and step frames</span></div>';
+    h += '<div class="panel tbl-wrap"><table class="tbl"><thead><tr><th>Run</th><th>Recorded</th><th>What changed</th><th class="num">Cycle</th><th class="num">vs baseline</th><th class="num">Elements</th><th>Sequence</th><th class="num">Flags</th><th>Status</th><th>Logged by</th></tr></thead><tbody>';
+    for (const r of ordered) {
+      const isB = r.id === base.id;
+      const ct = cycleTime(r);
+      const sc = isB ? null : seqCheck(r, base);
+      h += '<tr class="click" data-open="' + esc(r.id) + '">';
+      h += '<td><b>' + esc(runName(r)) + '</b>' + (isB ? ' <span class="tag">Baseline</span>' : '') + '<div class="muted" style="font-size:13px">' + esc(r.label || '') + '</div></td>';
+      h += '<td class="num" style="text-align:left">' + esc(fmtDate(r.createdAt)) + '</td>';
+      h += '<td class="ink2" style="min-width:160px">' + esc(r.condition || (isB ? 'Reference cycle' : '—')) + '</td>';
+      h += '<td class="num">' + esc(fmtS(ct)) + '</td>';
+      h += '<td class="num">' + (isB ? '<span class="muted">—</span>' : esc(fmtD(ct - baseCt)) + ' <span class="muted">' + esc(fmtPct(baseCt ? (ct - baseCt) / baseCt : null)) + '</span>') + '</td>';
+      h += '<td class="num">' + workEls(r).length + '</td>';
+      h += '<td>' + (isB ? '<span class="muted">Reference</span>' : (sc.same ? 'Same as baseline' : '<span data-tip="' + esc(seqSummary(sc)) + '" style="border-bottom:1px dotted var(--muted)">Differs</span>')) + '</td>';
+      h += '<td class="num">' + flagCount(r) + '</td>';
+      h += '<td>' + statusPill(r.status) + '</td>';
+      h += '<td class="ink2" style="white-space:nowrap">' + esc(sourceLabel(r)) + '</td>';
+      h += '</tr>';
+    }
+    h += '</tbody></table></div></section>';
+
+    // element variation
+    h += '<section class="sec"><div class="sec-h"><h2>Element times across runs</h2><span class="note">Baseline vs every run-through, by work element</span></div>';
+    h += variationHtml(base, others);
+    h += '</section>';
+    V.innerHTML = h;
+  }
+  function statePill(r) {
+    const st = (r.analysis && r.analysis.state) || '';
+    if (st === 'running') return '<span class="pill busy"><i></i>Analyzing</span>';
+    if (st === 'failed') return '<span class="pill bad">' + ICON.warn + 'Didn’t finish</span>';
+    return '<span class="pill busy"><i></i>Queued</span>';
+  }
+  function stateLine(r) {
+    const a = r.analysis || {};
+    if (a.state === 'running') return (LOCAL ? 'Your agent started at ' : 'Claude Code started at ') + fmtClock(a.startedAt) + '. Usually 1–3 minutes.';
+    if (a.state === 'failed') return a.note || 'The analysis stopped before writing results.';
+    return LOCAL ? 'Queued at ' + fmtClock(a.requestedAt) + '. Ask your agent to analyze it.' : 'Sent at ' + fmtClock(a.requestedAt) + '. Waiting for a Claude Code session to pick it up.';
+  }
+  function pendingSection(list) {
+    let h = '<section class="sec"><div class="sec-h"><h2>Being analyzed</h2><span class="note">' + (LOCAL ? 'Your agent fills these in' : 'Claude Code fills these in') + ' · the page updates by itself</span></div><div class="panel tbl-wrap"><table class="tbl"><tbody>';
+    for (const r of list) {
+      h += '<tr class="click" data-open="' + esc(r.id) + '"><td style="white-space:nowrap"><b>' + esc(runName(r)) + '</b><div class="muted" style="font-size:13px">' + esc(r.label || r.condition || '') + '</div></td><td>' + statePill(r) + '</td><td class="ink2">' + esc(stateLine(r)) + '</td></tr>';
+    }
+    return h + '</tbody></table></div></section>';
+  }
+  function ccMessage(id, refId) {
+    if (LOCAL) return refId ? 'Compare run ' + id + ' with ' + refId + ' (follow AGENTS.md in this repo)' : 'Analyze run ' + id + ' (follow AGENTS.md in this repo)';
+    const trig = S.settings.analysisTriggerId;
+    return trig ? 'Fire the Routine ' + trig + ' (“LEGO Station Run Log: analyze queued runs”) with the text: Analyze run ' + id
+      : 'Analyze the queued run ' + id + ' in the LEGO Station Run Log app at ' + ARTIFACT_URL;
+  }
+  function ccErrorCopy(code, msg) {
+    switch (code) {
+      case 'not_configured': return 'The analysis routine isn’t set up for this app yet.';
+      case 'no_mcp': return 'This view can’t start Claude Code from the page.';
+      case 'not_in_manifest': return 'Claude Code access was declined for this page. Reload the page to be asked again.';
+      case 'needs_reauth': return 'Reconnect Claude Code in claude.ai Settings → Connectors, then press Start again.';
+      case 'server_not_connected': case 'selection_required': case 'server_not_found': return 'Claude Code isn’t reachable from this view (' + code + ').';
+      case 'blocked_by_policy': case 'approval_required': return 'Your organization’s policy blocks starting Claude Code from a page.';
+      case 'tool_error': return 'Claude Code refused to start the routine' + (msg ? ': ' + msg : '.');
+      case 'server_unavailable': case 'upstream_error': return 'Couldn’t confirm the analysis started. If this still says Queued in a few minutes, press Start again.';
+      default: return 'Couldn’t start Claude Code (' + (code || 'error') + ').';
+    }
+  }
+  async function fireAnalysis(runId, text) {
+    const trig = S.settings.analysisTriggerId;
+    if (!trig) { S.ccErr[runId] = 'not_configured'; return false; }
+    if (!S.mcp) { S.ccErr[runId] = 'no_mcp'; return false; }
+    try {
+      const res = await S.mcp.callTool(CC_SERVER, 'fire_trigger', { trigger_id: trig, text: text || ('Analyze run ' + runId) });
+      const p = res && res.payload;
+      const sid = p && typeof p === 'object' ? (p.session_id || (p.session && p.session.id) || '') : '';
+      if (sid) S.ccSession[runId] = String(sid);
+      delete S.ccErr[runId]; delete S.ccErrMsg[runId];
+      return true;
+    } catch (e) {
+      S.ccErr[runId] = (e && e.code) || 'error';
+      S.ccErrMsg[runId] = (e && e.message) || '';
+      return false;
+    }
+  }
+  function sessionLink(id) {
+    const sid = S.ccSession[id];
+    if (!sid) return '';
+    return '<p><a href="https://claude.ai/code/' + esc(sid.replace(/^cse_/, 'session_')) + '" target="_blank" rel="noopener">Open the Claude Code session ↗</a></p>';
+  }
+  function renderPendingRun(run) {
+    const V = $('#view');
+    const a = run.analysis || {};
+    const vid = run.video || {};
+    const st = a.state || 'queued';
+    const age = minutesSince(st === 'running' ? a.startedAt : a.requestedAt);
+    let h = '<div><button class="back" type="button" data-go="runs">← All runs</button></div>';
+    h += '<div class="head"><div><div class="eyebrow">' + esc(fmtDate(run.createdAt)) + (LOCAL ? ' · Your agent' : ' · Claude Code') + '</div><h1>' + esc(runName(run)) + (run.label ? ' · ' + esc(run.label) : '') + '</h1>' + (run.condition ? '<p class="sub">What changed: ' + esc(run.condition) + '</p>' : '') + '</div><div class="actions">' + statePill(run) + (writable() ? '<button class="btn sm danger" type="button" data-act="delete">Delete</button>' : '') + '</div></div>';
+    if (S.confirmDelete) h += '<div class="confirm"><span>Delete ' + esc(runName(run)) + ' and its video? This can’t be undone.</span><span class="spacer"></span><button class="btn sm danger" type="button" data-act="delete-yes">Delete run</button><button class="btn sm" type="button" data-act="delete-no">Keep it</button></div>';
+    h += '<div class="detail"><div class="player">';
+    h += vid.assetId ? '<video id="run-video" src="' + esc(blob(vid.assetId)) + '" controls playsinline preload="metadata"></video><div class="vid-missing" id="vid-err" hidden>This browser can’t play the stored video. Claude Code reads it with its own tools.</div>' : '<div class="vid-missing">No video stored.</div>';
+    h += '</div><div class="panel pad sec state">';
+    if (st === 'running') {
+      h += '<span class="eyebrow">In progress</span><h2>' + (LOCAL ? 'Your agent is analyzing this run' : 'Claude Code is analyzing this run') + '</h2><p>Started at ' + esc(fmtClock(a.startedAt)) + '. It reads the video frame by frame, times each element against the baseline, saves a frame per step and fills in this page. Usually 1–3 minutes. You can leave this page; it updates by itself.</p>' + sessionLink(run.id);
+      if (age != null && age > 15 && writable()) h += '<p class="notice">This has been running for ' + Math.round(age) + ' minutes, which is longer than usual.</p><div class="actions"><button class="btn" type="button" data-act="cc-retry">Reset and start again</button><button class="btn" type="button" data-act="cc-manual">Time it by hand</button></div>';
+    } else if (st === 'failed') {
+      h += '<span class="eyebrow">Stopped</span><h2>The analysis didn’t finish</h2><p>' + esc(a.note || 'Claude Code stopped before writing results.') + '</p>';
+      if (writable()) h += '<div class="actions"><button class="btn primary" type="button" data-act="cc-retry">Try again</button><button class="btn" type="button" data-act="cc-manual">Time it by hand</button></div>';
+    } else if (LOCAL) {
+      h += '<span class="eyebrow">Queued</span><h2>Waiting for your agent</h2><p>Queued at ' + esc(fmtClock(a.requestedAt)) + '. In a terminal in this repo folder, ask your coding agent to analyze it. In Claude Code type <b>/analyze-runs</b>; in Codex or any other agent, paste the line below. It reads the video frame by frame, compares it with the reference run and fills in this page, which updates by itself.</p>';
+      h += '<div class="ccmsg" id="cc-msg">' + esc(ccMessage(run.id)) + '</div><div class="actions"><button class="btn sm" type="button" data-act="copy-cc">Copy message</button>' + (writable() ? '<button class="btn sm" type="button" data-act="cc-manual">Time it by hand instead</button>' : '') + '</div>';
+    } else {
+      h += '<span class="eyebrow">Queued</span><h2>Waiting for Claude Code</h2><p>Sent at ' + esc(fmtClock(a.requestedAt)) + '. A fresh Claude Code session picks it up, reads the video frame by frame like the baseline, and fills in this page. The whole analysis usually takes 1–3 minutes.</p>' + sessionLink(run.id);
+      const err = S.ccErr[run.id];
+      if (err) h += '<div class="notice err">' + esc(ccErrorCopy(err, S.ccErrMsg[run.id])) + '</div>';
+      if (writable()) h += '<div class="actions"><button class="btn' + (err || (age != null && age > 5) ? ' primary' : '') + '" type="button" data-act="cc-retry">Start again</button><button class="btn" type="button" data-act="cc-manual">Time it by hand</button></div>';
+      if (err || !S.mcp || (age != null && age > 5)) h += '<p>If it doesn’t start from here, paste this into any Claude Code session:</p><div class="ccmsg" id="cc-msg">' + esc(ccMessage(run.id)) + '</div><div><button class="btn sm" type="button" data-act="copy-cc">Copy message</button></div>';
+    }
+    h += '</div></div>';
+    V.innerHTML = h;
+    if (vid.assetId) bindRunPlayer(1);
+  }
+  async function ccRetry(run) {
+    const a = run.analysis || {};
+    if (a.state !== 'queued') {
+      try { await S.db.collection('runs').doc(run.id).update({ analysis: { state: 'queued', mode: hasEls(run) ? (a.mode || 'full') : 'full', requestedAt: new Date().toISOString(), note: '' } }); }
+      catch (e) { toast(handleWriteError(e)); return; }
+    }
+    if (LOCAL) { toast('Queued. Ask your agent to analyze it.'); S.renderedKey = null; render(); return; }
+    const ok = await fireAnalysis(run.id, hasEls(run) && a.mode === 'compare' ? 'Compare run ' + run.id + ' with ' + ((refFor(run) || {}).id || '') : null);
+    toast(ok ? 'Sent to Claude Code' : ccErrorCopy(S.ccErr[run.id], S.ccErrMsg[run.id]));
+    S.renderedKey = null; render();
+  }
+  async function ccRecheck(run, ref) {
+    if (!ref) return;
+    try {
+      await S.db.collection('runs').doc(run.id).update({ compareToRunId: ref.id, analysis: { state: 'queued', mode: 'compare', requestedAt: new Date().toISOString(), note: '' } });
+    } catch (e) { toast(handleWriteError(e)); return; }
+    delete S.localRef[run.id];
+    if (LOCAL) { toast('Queued. Ask your agent: ' + ccMessage(run.id, ref.id)); S.renderedKey = null; render(); return; }
+    const ok = await fireAnalysis(run.id, 'Compare run ' + run.id + ' with ' + ref.id);
+    toast(ok ? 'Claude Code is re-checking against ' + runName(ref) : ccErrorCopy(S.ccErr[run.id], S.ccErrMsg[run.id]));
+    S.renderedKey = null; render();
+  }
+  async function setCompare(run, refId) {
+    S.localRef[run.id] = refId;
+    S.renderedKey = null;
+    render();
+    if (writable() && !isRechecking(run) && refId !== run.compareToRunId) {
+      try { await S.db.collection('runs').doc(run.id).update({ compareToRunId: refId }); }
+      catch (e) { /* keep the local pick */ }
+    }
+  }
+  async function setBaseline(id) {
+    try { await saveSettings({ baselineRunId: id, updatedAt: new Date().toISOString() }); toast(runName(findDone(id) || { number: '?' }) + ' is now the baseline'); }
+    catch (e) { toast(handleWriteError(e)); render(); }
+  }
+  function shotHtml(fs) {
+    if (fs && fs.closeupAssetId) return '<img src="' + esc(blob(fs.closeupAssetId)) + '" alt="Close-up of the finished assembly" loading="lazy">';
+    if (fs && fs.frameAssetId) return '<img src="' + esc(blob(fs.frameAssetId)) + '" alt="Finished assembly" loading="lazy">';
+    return '<div class="no">No frame saved</div>';
+  }
+  function comparisonHtml(run, ref) {
+    const a = run.analysis || {};
+    const busy = isRechecking(run);
+    const canCC = writable() && (LOCAL || !!S.settings.analysisTriggerId) && !!(run.video && run.video.assetId);
+    const who = LOCAL ? 'your agent' : 'Claude Code';
+    const opts = refOptions(run, ref && ref.id);
+    let h = '<section class="sec" id="cmp"><div class="sec-h"><h2>Comparison</h2>';
+    if (opts) h += '<label class="cmp-pick"><span>Compare with</span><select class="in" id="cmp-select"' + (busy ? ' disabled' : '') + '>' + (ref ? '' : '<option value="" selected>Choose a run…</option>') + opts + '</select></label>';
+    h += '</div>';
+    if (!ref) return h + '<div class="panel pad"><p class="ink2">' + (opts ? 'This is the baseline. Choose a run above to compare it with.' : 'Add another run to compare with.') + '</p></div></section>';
+    const ct = cycleTime(run), rct = cycleTime(ref);
+    const sc = seqCheck(run, ref);
+    const judged = run.comparedToRunId ? S.runs.find(r => r.id === run.comparedToRunId) : null;
+    h += '<div class="panel pad sec">';
+    h += '<div class="verdict">' + statusPill(run.status) + '<div><b>' + (judged ? 'Verdict against ' + esc(runName(judged)) : 'Verdict') + '</b><p class="ink2">' + esc(run.statusNote || 'No note.') + '</p>';
+    const diffs = Array.isArray(run.differences) ? run.differences : [];
+    if (diffs.length) h += '<ul class="diffs">' + diffs.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>';
+    h += '</div></div>';
+    if (busy && LOCAL) h += '<div class="notice">Queued for your agent to re-check against ' + esc(runName(findDone(run.compareToRunId) || ref)) + '. Ask it:</div><div class="ccmsg" id="cc-msg">' + esc(ccMessage(run.id, run.compareToRunId || ref.id)) + '</div><div><button class="btn sm" type="button" data-act="copy-cc">Copy message</button></div>';
+    else if (busy) h += '<div class="notice">Claude Code is re-checking this run against ' + esc(runName(findDone(run.compareToRunId) || ref)) + (a.state === 'running' ? ' (started ' + esc(fmtClock(a.startedAt)) + ')' : ' (sent ' + esc(fmtClock(a.requestedAt)) + ')') + '. This section updates when it finishes, usually within 1–2 minutes.</div>' + sessionLink(run.id);
+    else if (a.state === 'failed') h += '<div class="notice err">The last re-check didn’t finish: ' + esc(a.note || 'no reason given') + '</div>';
+    else if (judged && judged.id !== ref.id) h += '<div class="notice">The verdict above was made against ' + esc(runName(judged)) + '. The numbers below compare with ' + esc(runName(ref)) + '.</div>';
+    else if (!judged && run.source && run.source.method === 'claude-code') h += '<div class="notice">This run was analyzed before comparisons were recorded. Re-check it to get a verdict against ' + esc(runName(ref)) + '.</div>';
+    if (canCC && !busy && (!judged || judged.id !== ref.id || a.state === 'failed')) h += '<div><button class="btn" type="button" data-act="cc-recheck">Re-check against ' + esc(runName(ref)) + ' with ' + who + '</button></div>';
+    else if (canCC && !busy) h += '<div><button class="btn sm ghost" type="button" data-act="cc-recheck">Re-check again</button></div>';
+    h += '<p class="cmp-line"><b>Cycle</b> ' + esc(fmtS(ct)) + ' vs ' + esc(fmtS(rct)) + ' (' + esc(fmtD(ct - rct)) + (rct ? ', ' + esc(fmtPct((ct - rct) / rct)) : '') + ') · <b>Sequence</b> ' + esc(seqSummary(sc)) + '</p>';
+    const span = Math.max(1, Math.ceil(Math.max(ct || 0, rct || 0) + 0.25));
+    h += legendHtml() + '<div class="tl cmp-tl"><div class="tl-axis-row"><div></div>' + axisHtml(span) + '<div></div></div>';
+    for (const pair of [[ref, 'Reference'], [run, 'This run']]) {
+      const r = pair[0], me = r === run;
+      h += '<div class="tl-row static' + (me ? '' : ' is-base') + '"><div class="lab"><b>' + esc(runName(r)) + '</b><div>' + esc(pair[1]) + '</div></div>' + stripHtml(cycleEls(r), { t0: r.cycle ? r.cycle.start : 0, span, baseMap: me ? durByKey(ref) : null, refLabel: runName(ref) }) + '<div class="val"><div>' + esc(fmtS(cycleTime(r))) + '</div><div>' + (me ? esc(fmtD(ct - rct)) : 'reference') + '</div></div></div>';
+    }
+    h += '</div>';
+    // element by element
+    const rMap = durByKey(ref), tMap = durByKey(run);
+    const keys = [];
+    for (const e of workEls(ref)) if (e.key && e.key !== 'other' && !keys.includes(e.key)) keys.push(e.key);
+    const label = k => ((workEls(ref).find(e => e.key === k)) || {}).label || k;
+    const kindOf = k => ((workEls(ref).find(e => e.key === k)) || {}).kind || 'other';
+    h += '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Element</th><th class="num">' + esc(runName(ref)) + '</th><th class="num">This run</th><th class="num">Difference</th></tr></thead><tbody>';
+    for (const k of keys) {
+      const rd = rMap[k], td = tMap[k];
+      const pct = fin(rd) && fin(td) && rd ? (td - rd) / rd : null;
+      h += '<tr><td><span class="el-name"><i class="sw k-' + esc(kindOf(k)) + '"></i>' + esc(label(k)) + '</span></td><td class="num">' + esc(fmtS(rd)) + '</td><td class="num">' + (fin(td) ? esc(fmtS(td)) : '<span class="muted">not seen</span>') + '</td><td class="num' + (pct != null && Math.abs(pct) >= 0.25 ? ' big' : '') + '">' + (fin(td) ? esc(fmtD(td - rd)) + (pct != null ? ' <span class="muted">' + esc(Math.abs(pct) >= 1 ? (td / rd).toFixed(1) + '×' : fmtPct(pct)) + '</span>' : '') : '—') + '</td></tr>';
+    }
+    for (const e of workEls(run).filter(e => !e.key || e.key === 'other' || !keys.includes(e.key))) {
+      h += '<tr><td><span class="el-name"><i class="sw k-' + esc(e.kind) + '"></i>' + esc(e.label) + '</span></td><td class="num"><span class="muted">not in ' + esc(runName(ref)) + '</span></td><td class="num">' + esc(fmtS(dur(e))) + '</td><td class="num big">new</td></tr>';
+    }
+    h += '</tbody></table></div>';
+    // finished state
+    const tfs = run.finalState || {}, rfs = ref.finalState || {};
+    h += '<div class="sec"><span class="eyebrow">Finished assembly · ' + esc(MATCH[tfs.matchesBaseline] || 'Not assessed') + '</span><div class="fs-pair"><figure><figcaption>' + esc(runName(ref)) + ' (reference)</figcaption>' + shotHtml(rfs) + '</figure><figure><figcaption>This run</figcaption>' + shotHtml(tfs) + '</figure></div>' + (tfs.note ? '<p class="ink2">' + esc(tfs.note) + '</p>' : '') + '</div>';
+    return h + '</div></section>';
+  }
+  async function ccAnalyze(btn) {
+    const d = S.draft;
+    if (!d || d.busy) return;
+    if (!S.assets) { d.error = 'Sending a run to Claude Code needs Editor access, so the video can be stored for it.'; renderNew(); return; }
+    if (!d.videoAssetId && d.fileSize > MAX_ASSET) { d.error = 'This video is over 20 MB, so it can’t be stored for Claude Code. Trim it to one cycle and try again.'; renderNew(); return; }
+    d.busy = true;
+    if (btn) { btn.disabled = true; btn.textContent = 'Storing the video…'; }
+    const now = new Date().toISOString();
+    let id = '';
+    try {
+      if (!d.videoAssetId) {
+        const isMov = /quicktime/i.test(d.file.type) || /\.mov$/i.test(d.file.name);
+        const res = await S.assets.upload(d.file, { type: isMov || !d.file.type ? 'video/mp4' : d.file.type });
+        d.videoAssetId = res.id;
+      }
+      if (btn) btn.textContent = 'Queuing the run…';
+      const number = nextNumber();
+      id = 'run-' + String(number).padStart(3, '0') + '-' + uid().slice(0, 4);
+      await S.db.collection('runs').doc(id).set({
+        number, label: String(d.label || '').trim(), condition: String(d.condition || '').trim(), createdAt: now,
+        video: { assetId: d.videoAssetId, fileName: d.fileName, durationS: d.meta.durationS, width: d.meta.width, height: d.meta.height },
+        status: 'INSUFFICIENT_INFORMATION', statusNote: '', elements: [], processData: [], limitations: [],
+        source: { method: 'claude-code' }, analysis: { state: 'queued', mode: 'full', requestedAt: now },
+        compareToRunId: d.compareTo || (baseline() || {}).id || ''
+      });
+    } catch (e) {
+      d.busy = false;
+      const code = e && e.code;
+      d.error = id && ['invalid_argument', 'quota_exceeded', 'resource_exhausted', 'revoked'].includes(code) ? handleWriteError(e) : 'Couldn’t store the video for Claude Code (' + (code || 'error') + '). Try again, or time the run by hand.';
+      renderNew();
+      return;
+    }
+    d.saved = true; d.dirty = false;
+    if (LOCAL) { toast('Run queued. Ask your agent to analyze it.'); go('run', id, true); return; }
+    if (btn) btn.textContent = 'Starting Claude Code…';
+    const ok = await fireAnalysis(id);
+    toast(ok ? 'Sent to Claude Code' : 'Run queued. Start it from the run page.');
+    go('run', id, true);
+  }
+  function variationHtml(base, others) {
+    const els = workEls(base).filter(e => e.key && e.key !== 'other');
+    if (!others.length) {
+      return '<div class="panel pad"><p class="ink2">Once there’s a run-through, this table shows each element’s baseline time next to the mean and range across runs, so you can see which steps vary most.</p></div>';
+    }
+    const maps = others.map(durByKey);
+    const rows = els.map(e => {
+      const b = dur(e);
+      const vals = maps.map(m => m[e.key]).filter(fin);
+      const n = vals.length;
+      const mean = n ? vals.reduce((a, c) => a + c, 0) / n : null;
+      return { e, b, n, mean, min: n ? Math.min(...vals) : null, max: n ? Math.max(...vals) : null };
+    });
+    const top = Math.max(0.5, ...rows.map(r => Math.max(r.b, r.max || 0)));
+    let h = '<div class="panel tbl-wrap"><table class="tbl"><thead><tr><th>Element</th><th class="num">Baseline</th><th class="num">Runs</th><th class="num">Mean</th><th class="num">Range</th><th class="num">Mean vs baseline</th><th style="min-width:170px">Spread <span style="text-transform:none;letter-spacing:0;font-weight:400">(<span style="color:var(--accent)">|</span> baseline · ● mean · ━ range)</span></th></tr></thead><tbody>';
+    for (const r of rows) {
+      const pos = v => (v / top * 100).toFixed(2) + '%';
+      h += '<tr><td><span class="el-name"><i class="sw k-' + esc(r.e.kind) + '"></i>' + esc(r.e.label) + '</span></td>';
+      h += '<td class="num">' + esc(fmtS(r.b)) + '</td><td class="num">' + r.n + ' of ' + others.length + '</td>';
+      h += '<td class="num">' + (r.mean == null ? '—' : esc(fmtS(r.mean))) + '</td>';
+      h += '<td class="num">' + (r.n ? esc(r.min.toFixed(2) + '–' + r.max.toFixed(2) + ' s') : '—') + '</td>';
+      h += '<td class="num">' + (r.mean == null ? '—' : esc(fmtD(r.mean - r.b))) + '</td>';
+      h += '<td><div class="rbar" data-tip="' + esc(r.e.label + '\nBaseline ' + fmtS(r.b) + (r.n ? '\nMean ' + fmtS(r.mean) + ' · range ' + r.min.toFixed(2) + '–' + r.max.toFixed(2) + ' s' : '\nNot seen in run-throughs')) + '"><i class="rail"></i>';
+      if (r.n) h += '<i class="rng" style="left:' + pos(r.min) + ';width:calc(' + pos(r.max - r.min) + ' + 2px)"></i><i class="mean" style="left:' + pos(r.mean) + '"></i>';
+      h += '<i class="base" style="left:' + pos(r.b) + '"></i></div></td></tr>';
+    }
+    h += '</tbody></table></div>';
+    return h;
+  }
+
+  // ---------- run sheet ----------
+  function renderRun(id) {
+    const V = $('#view');
+    if (S.dbUnavailable) { renderRuns(); return; }
+    if (!S.runsLoaded) { V.innerHTML = loadingState(); return; }
+    const run = S.runs.find(r => r.id === id);
+    if (!run) { V.innerHTML = emptyState('Run not found', 'This run may have been deleted.', '<button class="btn" type="button" data-go="runs">All runs</button>'); S.renderedKey = null; return; }
+    const base = baseline();
+    const ref0 = refFor(run);
+    const key = [run._raw, base && base._raw, S.settings.baselineRunId, S.confirmDelete, writable(), S.mcp, ref0 && ref0._raw, S.localRef[id], S.runs.length];
+    if (S.renderedKey && S.renderedKey.length === key.length && S.renderedKey.every((k, i) => k === key[i])) return;
+    S.renderedKey = key;
+    if (S.playerCleanup) { S.playerCleanup(); S.playerCleanup = null; }
+    if (isPending(run) || !base) { renderPendingRun(run); return; }
+
+    const isB = base && base.id === run.id;
+    const ref = ref0;
+    const ct = cycleTime(run), baseCt = cycleTime(ref);
+    const baseMap = ref ? durByKey(ref) : null;
+    const refName = ref ? runName(ref) : 'reference';
+    const vid = run.video || {};
+    const ar = vid.width && vid.height ? vid.width + ' / ' + vid.height : '9 / 16';
+    const span = Math.max(1, fin(vid.durationS) ? vid.durationS : Math.max(...elementsOf(run).map(e => e.end), (run.cycle && run.cycle.end) || 1));
+    const els = elementsOf(run);
+    const sc = ref ? seqCheck(run, ref) : null;
+    let n = 0;
+    const numbered = els.map(e => Object.assign({}, e, { n: e.kind === 'idle' ? null : ++n }));
+
+    let h = '<div><button class="back" type="button" data-go="runs">← All runs</button></div>';
+    h += '<div class="head"><div><div class="eyebrow">' + esc(fmtDate(run.createdAt)) + ' · ' + esc(sourceLabel(run)) + '</div><h1>' + esc(runName(run)) + (run.label ? ' · ' + esc(run.label) : '') + ' ' + (isB ? '<span class="tag">Baseline</span>' : '') + '</h1>';
+    if (run.condition) h += '<p class="sub">What changed: ' + esc(run.condition) + '</p>';
+    h += '</div><div class="actions">' + statusPill(run.status);
+    if (writable()) {
+      h += '<button class="btn sm" type="button" data-act="edit">Edit times</button>';
+      if (!isB) h += '<button class="btn sm" type="button" data-act="make-baseline">Make baseline</button>';
+    }
+    h += '<button class="btn sm" type="button" data-act="export">Export CSV</button>';
+    if (writable()) h += '<button class="btn sm danger" type="button" data-act="delete">Delete</button>';
+    h += '</div></div>';
+    if (S.confirmDelete) {
+      h += '<div class="confirm"><span>Delete ' + esc(runName(run)) + ' with its video and step frames? This can’t be undone.</span><span class="spacer"></span><button class="btn sm danger" type="button" data-act="delete-yes">Delete run</button><button class="btn sm" type="button" data-act="delete-no">Keep it</button></div>';
+    }
+
+    // KPIs
+    const ps = pressShare(run);
+    h += '<div class="stats">';
+    h += '<div class="panel stat"><span class="eyebrow">Cycle time</span><span class="v">' + esc(fmtT(ct)) + '<small> s</small></span><span class="s">' + esc(fmtT(run.cycle && run.cycle.start)) + ' → ' + esc(fmtT(run.cycle && run.cycle.end)) + ' s in the video</span></div>';
+    h += '<div class="panel stat"><span class="eyebrow">vs ' + esc(refName) + '</span><span class="v">' + (!ref ? '—' : esc(fmtD(ct - baseCt))) + '</span><span class="s">' + (!ref ? 'This run is the baseline' : esc(fmtPct(baseCt ? (ct - baseCt) / baseCt : null)) + ' against ' + esc(fmtS(baseCt))) + '</span></div>';
+    h += '<div class="panel stat"><span class="eyebrow">Work elements</span><span class="v">' + workEls(run).length + '</span><span class="s">' + (!ref ? 'Defines the standard sequence' : esc(sc.same ? 'Same sequence as ' + refName : 'Sequence differs from ' + refName)) + '</span></div>';
+    h += '<div class="panel stat"><span class="eyebrow">Pressing share</span><span class="v">' + (ps == null ? '—' : Math.round(ps * 100) + '<small>%</small>') + '</span><span class="s">Of cycle time spent pressing parts down</span></div>';
+    h += '<div class="panel stat"><span class="eyebrow">Flags</span><span class="v">' + flagCount(run) + '</span><span class="s">Notes, unclear spans, possible deviations</span></div>';
+    h += '</div>';
+
+    h += comparisonHtml(run, ref);
+
+    // player + log
+    h += '<div class="detail"><div class="player">';
+    if (vid.assetId) {
+      h += '<video id="run-video" src="' + esc(blob(vid.assetId)) + '" controls playsinline preload="metadata"></video>';
+      h += '<div class="vid-missing" id="vid-err" hidden>This browser can’t play the stored video. The step frames below still show each element.</div>';
+    } else {
+      h += '<div class="vid-missing">' + esc(vid.note || 'No video stored for this run. The step frames below show each element.') + '</div>';
+    }
+    h += '<div class="ctrls"><span class="tnow" id="t-now">' + (vid.assetId ? '0.00 s' : '') + '</span></div>';
+    h += '<dl class="meta-list">';
+    h += '<dt>Video</dt><dd>' + esc([vid.fileName, fin(vid.durationS) ? vid.durationS.toFixed(2) + ' s' : null, vid.width && vid.height ? vid.width + '×' + vid.height : null, vid.fps ? vid.fps + ' fps' : null].filter(Boolean).join(' · ') || '—') + '</dd>';
+    h += '<dt>Analysis</dt><dd>' + esc((run.source && run.source.note) || sourceLabel(run)) + '</dd>';
+    h += '</dl></div>';
+
+    h += '<div class="sec"><div class="sec-h"><h2>Event log</h2><span class="note">' + (vid.assetId ? 'Click an element to jump the video there' : 'Times are seconds into the video') + '</span></div>';
+    h += '<div class="panel" style="padding:4px 14px 10px"><div class="strip-box">' + stripHtml(els, { span, seekable: !!vid.assetId, tall: true, playhead: !!vid.assetId, id: 'run-track', baseMap, refLabel: refName, markers: run.cycle ? [{ t: run.cycle.start, label: 'START' }, { t: run.cycle.end, label: 'END' }] : [] }) + axisHtml(span) + '</div>' + legendHtml() + '</div>';
+    h += '<div class="panel tbl-wrap"><table class="tbl" id="log"><thead><tr><th>#</th><th class="num">Time</th><th>Element</th><th>What was visibly observed</th><th class="num">Duration</th>' + (!ref ? '' : '<th class="num">vs ' + esc(refName) + '</th>') + '<th>Flag</th></tr></thead><tbody>';
+    for (const e of numbered) {
+      const bd = baseMap && e.key ? baseMap[e.key] : null;
+      h += '<tr class="' + (vid.assetId ? 'click' : '') + '" data-seek="' + e.start + '" data-start="' + e.start + '" data-end="' + e.end + '">';
+      h += '<td class="code">' + (e.n == null ? '—' : e.n) + '</td>';
+      h += '<td class="num">' + esc(fmtT(e.start)) + '–' + esc(fmtT(e.end)) + '</td>';
+      h += '<td><span class="el-name"><i class="sw k-' + esc(e.kind) + (e.kind === 'idle' ? ' idle' : '') + '"></i><span>' + esc(e.label) + '</span></span></td>';
+      h += '<td class="obs">' + esc(e.observed || '') + '</td>';
+      h += '<td class="num">' + esc(fmtS(dur(e))) + '</td>';
+      if (ref) h += '<td class="num">' + (fin(bd) ? esc(fmtD(dur(e) - bd)) : '<span class="muted">' + (e.kind === 'idle' ? '—' : 'new') + '</span>') + '</td>';
+      h += '<td>' + flagChip(e.flagType) + (e.flag ? '<span class="flagtxt">' + esc(e.flag) + '</span>' : '') + '</td>';
+      h += '</tr>';
+    }
+    h += '</tbody></table></div></div></div>';
+
+    // storyboard
+    h += '<section class="sec"><div class="sec-h"><h2>Step frames</h2><span class="note">One frame per element, taken from the video</span></div><div class="board" style="--ar:' + esc(ar) + '">';
+    for (const e of numbered) {
+      h += '<button class="frame" type="button"' + (vid.assetId ? ' data-seek="' + (fin(e.frameT) ? e.frameT : e.start) + '"' : '') + '><div class="img">' + (e.frameAssetId ? '<img src="' + esc(blob(e.frameAssetId)) + '" alt="' + esc(e.label) + ' at ' + esc(fmtT(e.frameT)) + ' s" loading="lazy">' : '<span class="no">No frame saved</span>') + '</div>';
+      h += '<div class="cap"><span class="t">' + (e.n == null ? '' : esc(String(e.n)) + ' · ') + esc(fmtT(e.start)) + '–' + esc(fmtT(e.end)) + ' s</span><br><b>' + esc(e.label) + '</b>' + (e.flagType && e.flagType !== 'none' ? '<br>' + flagChip(e.flagType) : '') + '</div></button>';
+    }
+    h += '</div></section>';
+
+    // finished state (the comparison section shows it side by side when there is a reference)
+    const fs = run.finalState || {};
+    if (!ref) h += '<section class="sec"><div class="sec-h"><h2>Finished assembly</h2><span class="note">' + esc(MATCH[fs.matchesBaseline] || 'Not assessed') + '</span></div><div class="panel pad final" style="--ar:' + esc(ar) + '">';
+    if (!ref && fs.frameAssetId) h += '<div class="shot"><img src="' + esc(blob(fs.frameAssetId)) + '" alt="Assembly at rest after the cycle"></div>';
+    if (!ref && fs.closeupAssetId) h += '<div class="shot"><img src="' + esc(blob(fs.closeupAssetId)) + '" alt="Close-up of the finished assembly"></div>';
+    if (!ref) h += '<div class="compare"><span class="eyebrow">Reference state</span><p>' + esc(fs.note || 'No note.') + '</p>' + (run.statusNote ? '<p class="ink2"><b>Status:</b> ' + esc(run.statusNote) + '</p>' : '') + '</div></div></section>';
+
+    // lists
+    const pd = Array.isArray(run.processData) ? run.processData : [];
+    const lim = Array.isArray(run.limitations) ? run.limitations : [];
+    if (pd.length || lim.length) {
+      h += '<section class="lists">';
+      if (pd.length) h += '<div class="panel pad sec"><h2 style="font-size:16px">Process data this video yields</h2><ul>' + pd.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
+      if (lim.length) h += '<div class="panel pad sec"><h2 style="font-size:16px">Limitations</h2><ul>' + lim.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul></div>';
+      h += '</section>';
+    }
+    V.innerHTML = h;
+    if (vid.assetId) bindRunPlayer(span);
+  }
+  function bindRunPlayer(span) {
+    const v = $('#run-video');
+    if (!v) return;
+    const ph = $('#ph'), tnow = $('#t-now'), rows = $$('#log tbody tr');
+    let raf = 0;
+    const upd = () => {
+      const t = v.currentTime || 0;
+      if (ph) ph.style.left = Math.min(100, t / span * 100) + '%';
+      if (tnow) tnow.textContent = t.toFixed(2) + ' s';
+      for (const r of rows) {
+        const s = +r.dataset.start, e = +r.dataset.end;
+        r.classList.toggle('now', t >= s && t < e && !v.paused);
+      }
+    };
+    const loop = () => { upd(); if (!v.paused && !v.ended) raf = requestAnimationFrame(loop); };
+    const onPlay = () => { cancelAnimationFrame(raf); loop(); };
+    v.addEventListener('play', onPlay);
+    v.addEventListener('seeked', upd);
+    v.addEventListener('pause', upd);
+    v.addEventListener('timeupdate', upd);
+    v.addEventListener('error', () => { v.hidden = true; const e = $('#vid-err'); if (e) e.hidden = false; });
+    S.playerCleanup = () => { cancelAnimationFrame(raf); try { v.pause(); } catch (e) { /* ignore */ } };
+  }
+  function seekActive(t, reveal) {
+    const v = $('#run-video') || $('#ed-video');
+    if (!v || !fin(t)) return;
+    try { v.currentTime = Math.max(0, t); } catch (e) { /* ignore */ }
+    if (reveal) { const r = v.getBoundingClientRect(); if (r.bottom < 60 || r.top > window.innerHeight) try { v.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); } catch (e) { /* ignore */ } }
+  }
+
+  // ---------- actions on a run ----------
+  async function makeBaseline(run) {
+    try {
+      await saveSettings({ baselineRunId: run.id, updatedAt: new Date().toISOString() });
+      toast(runName(run) + ' is now the baseline');
+    } catch (e) { toast(handleWriteError(e)); render(); }
+  }
+  async function deleteRun(run) {
+    const ids = [];
+    if (run.video && run.video.assetId) ids.push(run.video.assetId);
+    for (const e of elementsOf(run)) if (e.frameAssetId) ids.push(e.frameAssetId);
+    if (run.finalState) { if (run.finalState.frameAssetId) ids.push(run.finalState.frameAssetId); if (run.finalState.closeupAssetId) ids.push(run.finalState.closeupAssetId); }
+    try {
+      await S.db.collection('runs').doc(run.id).delete();
+    } catch (e) { toast(handleWriteError(e)); S.confirmDelete = false; render(); return; }
+    if (S.settings.baselineRunId === run.id) { try { await saveSettings({ baselineRunId: '', updatedAt: new Date().toISOString() }); } catch (e) { /* falls back to lowest run */ } }
+    if (S.assets) for (const id of [...new Set(ids)]) { try { await S.assets.delete(id); } catch (e) { /* leave orphan */ } }
+    toast(runName(run) + ' deleted');
+    go('runs', null, true);
+  }
+  function csvCell(v) {
+    const s = v == null ? '' : String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function buildCsv() {
+    const base = baseline();
+    const bmap = durByKey(base);
+    const head = ['run_number', 'run_label', 'is_baseline', 'recorded', 'what_changed', 'cycle_start_s', 'cycle_end_s', 'cycle_time_s', 'status', 'element_key', 'element', 'kind', 'start_s', 'end_s', 'duration_s', 'baseline_duration_s', 'delta_vs_baseline_s', 'flag', 'flag_note', 'observed'];
+    const rows = [head.join(',')];
+    for (const r of doneRuns()) {
+      const isB = base && r.id === base.id;
+      for (const e of elementsOf(r)) {
+        const bd = e.key && fin(bmap[e.key]) ? bmap[e.key] : null;
+        rows.push([r.number, r.label, isB ? 'yes' : 'no', r.createdAt, r.condition, fmtT(r.cycle && r.cycle.start), fmtT(r.cycle && r.cycle.end), fmtT(cycleTime(r)), r.status, e.key, e.label, e.kind, fmtT(e.start), fmtT(e.end), fmtT(dur(e)), bd == null ? '' : fmtT(bd), bd == null || isB ? '' : fmtT(dur(e) - bd), e.flagType || 'none', e.flag, e.observed].map(csvCell).join(','));
+      }
+    }
+    return rows.join('\n') + '\n';
+  }
+  async function exportCsv() {
+    const csv = buildCsv();
+    if (S.downloads) {
+      try {
+        const res = await S.downloads.save({ filename: 'lego-station-runs.csv', data: csv });
+        if (res && res.status === 'saved') toast('CSV saved');
+        return;
+      } catch (e) {
+        if (e && e.code === 'declined') return;
+      }
+    }
+    showCsvFallback(csv);
+  }
+  function showCsvFallback(csv) {
+    const V = $('#view');
+    const box = document.createElement('div');
+    box.className = 'panel pad sec';
+    box.innerHTML = '<div class="sec-h"><h2>Export CSV</h2><button class="btn sm" type="button" data-act="copy-csv">Copy</button></div><p class="ink2" style="font-size:14px">Saving files isn’t available in this view. Copy the rows below into a spreadsheet.</p><textarea id="csv-out" class="in csv-box" readonly></textarea>';
+    V.prepend(box);
+    $('#csv-out').value = csv;
+    box.scrollIntoView({ block: 'start' });
+  }
+
+  // ---------- new run ----------
+  function nextNumber() { return S.runs.reduce((m, r) => Math.max(m, r.number || 0), 0) + 1; }
+  function renderNew() {
+    const V = $('#view');
+    if (S.dbUnavailable) { renderRuns(); return; }
+    if (!S.db) { V.innerHTML = loadingState(); return; }
+    if (!writable()) { V.innerHTML = emptyState('You can view runs but not add them', 'Adding a run needs Contributor or Editor access to this page. Ask the owner to change your access.', '<button class="btn" type="button" data-go="runs">All runs</button>'); return; }
+    const d = S.draft;
+    if (!d || d.stage === 'pick') { V.innerHTML = pickHtml(d && d.error); bindDrop(); return; }
+    if (d.stage === 'loaded') { V.innerHTML = loadedHtml(d); return; }
+    if (d.stage === 'analyzing') { V.innerHTML = analyzingHtml(d); return; }
+    if (d.stage === 'review') { renderEditor(); return; }
+  }
+  function pickHtml(err) {
+    const base = baseline();
+    let h = '<div class="head"><div><div class="eyebrow">New run · ' + esc('Run ' + nextNumber()) + '</div><h1>Log a run-through</h1><p class="sub">Film one full assembly cycle from above, like the baseline. Upload it here and Claude reads the video into an event log, or you time each element yourself. Either way you review the times before anything is saved.</p></div></div>';
+    if (err) h += '<div class="notice err">' + esc(err) + '</div>' + diagHtml(true);
+    h += '<label class="drop" id="drop" for="file-in">' + ICON.film + '<b>Drop the run video here</b><span class="ink2">or choose a file · MP4 or MOV · one cycle, ideally under a minute</span></label><input class="sr" type="file" id="file-in" accept="video/*">';
+    h += '<div class="how"><div class="panel"><b>Same camera position</b>Top-down, the whole plate and all parts in frame, same as ' + esc(base ? runName(base) : 'the baseline') + '.</div><div class="panel"><b>One cycle per video</b>Start with the parts laid out and hands out of frame. Stop after the finished assembly is set down.</div><div class="panel"><b>Hands only</b>Keep faces out of the shot. The log describes the work, never the person.</div></div>';
+    return h;
+  }
+  function bindDrop() {
+    const dz = $('#drop'), fi = $('#file-in');
+    if (!dz || !fi) return;
+    fi.addEventListener('change', () => { if (fi.files && fi.files[0]) loadFile(fi.files[0]); });
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+    dz.addEventListener('drop', e => {
+      e.preventDefault(); dz.classList.remove('over');
+      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) loadFile(f);
+    });
+  }
+  function loadVideo(src) {
+    return new Promise((res, rej) => {
+      const v = document.createElement('video');
+      v.muted = true; v.playsInline = true; v.preload = 'auto';
+      const to = setTimeout(() => rej(new Error('timeout')), 20000);
+      v.addEventListener('loadeddata', () => { clearTimeout(to); res(v); }, { once: true });
+      v.addEventListener('error', () => { clearTimeout(to); rej(new Error('decode')); }, { once: true });
+      v.src = src;
+      v.load();
+    });
+  }
+  function seek(v, t) {
+    return new Promise(res => {
+      const tt = Math.min(Math.max(0, t), Math.max(0, (v.duration || 0) - 0.03));
+      let done = false;
+      const fin2 = () => { if (done) return; done = true; clearTimeout(to); v.removeEventListener('seeked', fin2); res(); };
+      const to = setTimeout(fin2, 4000);
+      v.addEventListener('seeked', fin2);
+      v.currentTime = tt;
+    });
+  }
+  async function grabBlob(v, t, maxLong = 640, q = 0.82) {
+    await seek(v, t);
+    const w = v.videoWidth, h = v.videoHeight;
+    const k = Math.min(1, maxLong / Math.max(w, h));
+    const c = document.createElement('canvas');
+    c.width = Math.round(w * k); c.height = Math.round(h * k);
+    c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+    return new Promise(r => c.toBlob(r, 'image/jpeg', q));
+  }
+  async function loadFile(file) {
+    if (!file.type.startsWith('video/') && !/\.(mov|mp4|m4v|webm)$/i.test(file.name)) {
+      S.draft = { stage: 'pick', error: '“' + file.name + '” isn’t a video file. Choose an MP4 or MOV.' };
+      renderNew(); return;
+    }
+    dropDraft();
+    const url = URL.createObjectURL(file);
+    S.draft = { mode: 'new', stage: 'pick', file, objectUrl: url, videoSrc: url, fileName: file.name, fileSize: file.size, label: '', condition: '', dirty: true };
+    const d = S.draft;
+    const V = $('#view');
+    if (V) V.innerHTML = '<div class="panel empty" aria-busy="true"><p class="ink2">Opening “' + esc(file.name) + '”…</p></div>';
+    let v = null, firstErr = '';
+    try {
+      v = await loadVideo(url);
+      d.videoPath = 'device';
+    } catch (e) {
+      firstErr = e && e.message;
+    }
+    if (S.draft !== d) return;
+    // The page frame can refuse blob: video. Store the file and play it from the app's own storage instead.
+    if (!v && S.assets && file.size <= MAX_ASSET) {
+      if (V) V.innerHTML = '<div class="panel empty" aria-busy="true"><p class="ink2">Loading “' + esc(file.name) + '” through the app’s storage…</p></div>';
+      try {
+        const isMov = /quicktime/i.test(file.type) || /\.mov$/i.test(file.name);
+        const res = await S.assets.upload(file, { type: isMov || !file.type ? 'video/mp4' : file.type });
+        d.videoAssetId = res.id;
+        v = await loadVideo(res.url);
+        d.videoSrc = res.url;
+        d.videoPath = 'storage';
+      } catch (e) {
+        S.diag.lastError = 'stored copy: ' + ((e && (e.code || e.message)) || 'error');
+        if (d.videoAssetId) { S.assets.delete(d.videoAssetId).catch(() => {}); d.videoAssetId = null; }
+      }
+    }
+    if (S.draft !== d) return;
+    if (v) {
+      d.grabVid = v;
+      d.meta = { durationS: r2(v.duration), width: v.videoWidth, height: v.videoHeight };
+      d.stage = 'loaded';
+    } else {
+      URL.revokeObjectURL(url);
+      if (!S.diag.lastError) S.diag.lastError = 'video load: ' + (firstErr || 'error');
+      const blocked = S.diag.csp.some(x => /media/.test(x));
+      S.draft = { stage: 'pick', error: firstErr === 'timeout' ? 'The video took too long to load. Try a shorter clip.' : blocked && !S.assets ? 'This view blocks playing uploaded video, and your access level can’t store it. Ask for Editor access, or send the video to the page owner.' : file.size > MAX_ASSET && blocked ? 'This view blocks playing uploaded video directly, and the file is over 20 MB so it can’t go through the app’s storage. Trim it to one cycle and try again.' : 'This browser can’t decode “' + file.name + '”. iPhone videos recorded in High Efficiency (HEVC) often won’t play in Chrome or Edge: open this page in Safari, or set the camera to “Most Compatible” (H.264) and record again.' };
+    }
+    renderNew();
+  }
+  function diagHtml(open) {
+    const yes = t => '<span class="okk">' + esc(t) + '</span>', no = t => '<span class="bad">' + esc(t) + '</span>';
+    const im = S.sampleLimits && S.sampleLimits.images;
+    const d = S.draft || {};
+    let h = '<details class="panel diag"' + (open ? ' open' : '') + '><summary>Check this view</summary><dl>';
+    h += '<dt>Claude in this page</dt><dd>' + (S.sample === undefined ? 'Checking…' : S.sample ? (S.sampleOff ? no('Turned off for this visit (' + (S.diag.lastError || 'declined') + ')') : yes('Available')) : no('Not offered in this view')) + '</dd>';
+    h += '<dt>Frames to Claude</dt><dd>' + (!S.sample ? '—' : im ? yes('Up to ' + im.maxCount + ' images per request') : no('This view can’t send images' + (S.diag.limitsErr ? ' (' + S.diag.limitsErr + ')' : ''))) + '</dd>';
+    h += '<dt>Claude Code from this page</dt><dd>' + (S.mcp === undefined ? 'Checking…' : S.mcp ? yes('Available (asks the first time)') : no('Not offered in this view; a paste-in message is used instead')) + '</dd>';
+    h += '<dt>Video storage</dt><dd>' + (S.assets ? yes('Available') : no('Not available at your access level')) + '</dd>';
+    h += '<dt>Video playing from</dt><dd>' + (d.videoPath === 'device' ? 'Your device' : d.videoPath === 'storage' ? 'The app’s storage (direct playback was blocked)' : '—') + '</dd>';
+    h += '<dt>Blocked by the page frame</dt><dd>' + (S.diag.csp.length ? no(S.diag.csp.slice(-3).join('; ')) : 'Nothing so far') + '</dd>';
+    h += '<dt>Last error</dt><dd>' + (S.diag.lastError ? no(S.diag.lastError) : 'None') + '</dd>';
+    return h + '</dl></details>';
+  }
+  function sampleReady() {
+    return !!S.sample && !S.sampleOff && !!(S.sampleLimits && S.sampleLimits.images);
+  }
+  function loadedHtml(d) {
+    const n = nextNumber();
+    const m = d.meta;
+    let h = '<div class="head"><div><div class="eyebrow">New run · Run ' + n + '</div><h1>' + esc(d.fileName) + '</h1><p class="sub">' + esc(m.durationS.toFixed(2)) + ' s · ' + m.width + '×' + m.height + ' · ' + (d.fileSize / 1048576).toFixed(1) + ' MB</p></div><div class="actions"><button class="btn" type="button" data-act="replace-file">Choose another video</button></div></div>';
+    if (d.error) h += '<div class="notice err">' + esc(d.error) + '</div>';
+    h += '<div class="loaded"><div class="player"><video src="' + esc(d.videoSrc) + '" controls playsinline preload="auto"></video></div><div class="sec">';
+    h += '<div class="fields"><div class="row2"><label class="field"><span>Run name</span><input class="in" id="f-label" data-df="label" value="' + esc(d.label) + '" placeholder="e.g. Parts pre-sorted"></label><label class="field"><span>What changed this run</span><input class="in" id="f-cond" data-df="condition" value="' + esc(d.condition) + '" placeholder="e.g. plate turned 90°, parts laid out left to right"></label></div>' + (doneRuns().length ? '<label class="field" style="max-width:360px"><span>Compare with</span><select class="in" id="f-ref" data-df="compareTo">' + refOptions(null, d.compareTo || (baseline() || {}).id) + '</select></label>' : '') + '</div>';
+    h += '<div class="choices">';
+    if (LOCAL) {
+      h += '<div class="panel choice"><span class="eyebrow">Recommended</span><h3>Analyze with your agent</h3><p>Stores the video in this folder and adds the run as Queued. Then ask your coding agent (Claude Code, Codex) in this repo to analyze it. It reads the video frame by frame like the baseline and fills in the run; this page updates by itself.</p><button class="btn primary" type="button" data-act="cc-analyze">Queue for my agent</button></div>';
+    } else if (S.settings.analysisTriggerId) {
+      h += '<div class="panel choice"><span class="eyebrow">Recommended</span><h3>Analyze with Claude Code</h3><p>Stores the video and hands it to a fresh Claude Code session, which reads it frame by frame like the baseline and fills in the run. Usually 1–3 minutes; the run page updates by itself.' + (S.mcp === null ? ' This view can’t start Claude Code directly, so you’ll get a one-line message to paste into Claude Code.' : '') + '</p>' + (S.assets ? '<button class="btn primary" type="button" data-act="cc-analyze">Send to Claude Code</button>' : '<p class="notice">Needs Editor access so the video can be stored.</p>') + '</div>';
+    }
+    if (sampleReady()) {
+      h += '<div class="panel choice"><span class="eyebrow">Faster, less detailed</span><h3>Analyze in this page</h3><p>Sends frames every quarter second to Claude and fills in the event log for you to review before saving. About a minute.</p><button class="btn" type="button" data-act="analyze">Analyze here</button></div>';
+    }
+    h += '<div class="panel choice"><h3>Time it by hand</h3><p>Starts from the baseline’s elements. Scrub the video and set each start and end with one click.</p><button class="btn" type="button" data-act="manual">Time by hand</button></div>';
+    h += '</div>';
+    if (!S.assets) h += '<p class="notice">Your access level can save the timings but not the video or step frames. An Editor can add those later by re-saving the run.</p>';
+    else if (d.fileSize > MAX_ASSET) h += '<p class="notice">This video is over 20 MB, so only the step frames will be saved with the run, not the video itself.</p>';
+    if (!LOCAL) h += diagHtml(!sampleReady() && S.sample !== undefined);
+    h += '</div></div>';
+    return h;
+  }
+
+  // ---------- Claude analysis ----------
+  const STAGES = [['read', 'Reading the video'], ['frames', 'Pulling frames'], ['sheets', 'Laying out contact sheets'], ['wait', 'Waiting for Claude (often 30–90 s)'], ['write', 'Claude is writing the event log'], ['check', 'Checking the answer']];
+  function analyzingHtml(d) {
+    const a = d.an || {};
+    let h = '<div class="head"><div><div class="eyebrow">New run · analyzing</div><h1>' + esc(d.fileName) + '</h1><p class="sub">Claude reads the frames like a camera on the station: hands and parts only, compared with the baseline.</p></div><div class="actions"><button class="btn" type="button" data-act="stop">Stop</button></div></div>';
+    h += '<div class="loaded"><div class="player"><video src="' + esc(d.videoSrc) + '" muted playsinline preload="metadata"></video></div><div class="panel pad sec"><ul class="prog" id="prog">';
+    const idx = STAGES.findIndex(s => s[0] === a.stage);
+    STAGES.forEach((s, i) => {
+      const st = i < idx ? 'done' : i === idx ? 'active' : '';
+      h += '<li class="' + st + '" data-stage="' + s[0] + '"><i></i><span>' + esc(s[1]) + '</span><span class="d" id="pd-' + s[0] + '">' + esc((a.detail && a.detail[s[0]]) || '') + '</span></li>';
+    });
+    h += '</ul><div class="sheets" id="sheets"></div></div></div>';
+    return h;
+  }
+  function setStage(stage, detail) {
+    const d = S.draft;
+    if (!d || !d.an) return;
+    d.an.stage = stage;
+    if (detail != null) d.an.detail[stage] = detail;
+    const idx = STAGES.findIndex(s => s[0] === stage);
+    $$('#prog li').forEach((li, i) => {
+      li.className = i < idx ? 'done' : i === idx ? 'active' : '';
+    });
+    if (detail != null) { const el = $('#pd-' + stage); if (el) el.textContent = detail; }
+  }
+  function baselinePromptBlock(base) {
+    const lines = [];
+    const els = elementsOf(base);
+    lines.push('key | kind | element | baseline start–end (s) | baseline duration (s)');
+    for (const e of els) lines.push([e.key, e.kind, e.label, fmtT(e.start) + '–' + fmtT(e.end), fmtT(dur(e))].join(' | '));
+    lines.push('Baseline cycle: ' + fmtT(base.cycle && base.cycle.start) + ' → ' + fmtT(base.cycle && base.cycle.end) + ' s (cycle time ' + fmtT(cycleTime(base)) + ' s, from first hand entering to both hands leaving).');
+    if (base.finalState && base.finalState.note) lines.push('Baseline finished state: ' + base.finalState.note);
+    return lines.join('\n');
+  }
+  function buildPrompt(dt, durS, sheets, base) {
+    return [
+      'You are acting as a computer-vision system observing a simulated manual assembly station: a small LEGO build that stands in for one manual manufacturing step. The goal is to turn ordinary video into structured process data without the operator entering anything.',
+      '',
+      'The ' + sheets + ' attached image' + (sheets > 1 ? 's are contact sheets' : ' is a contact sheet') + ' of ONE video, read left to right, top to bottom, sheet by sheet. Every frame is labeled with its timestamp t in seconds. Frames are ' + dt.toFixed(2) + ' s apart; the video is ' + durS.toFixed(2) + ' s long, so any boundary you report is approximate to about ±' + dt.toFixed(2) + ' s.',
+      '',
+      'Rules:',
+      '- Report only what is visibly observable. Describe hands and parts, never the person: do not identify, describe or evaluate who is working.',
+      '- Do not invent actions you cannot see. If hands hide what happens, say so and flag the element "unclear".',
+      '- Do not treat an unusual action as an error or defect. Describe it and flag it "note" or "unclear". Use "deviation" only for a visible difference from the baseline sequence or finished state.',
+      '- Keep observed facts and inferences apart: write inferences as "appears to" or "likely".',
+      '',
+      'REFERENCE (' + runName(base) + ', the cycle this run is compared to). Parts: white 4×6 plate, pink 1×6 brick, light-blue 2×2 slope.',
+      baselinePromptBlock(base),
+      '',
+      'TASK',
+      '1. Find the cycle start (first hand enters the work area or a part first moves) and the cycle end (both hands have left and the assembly is at rest).',
+      '2. Break the visible work into elements in time order. Reuse a baseline key when it is the same action. Use key "other" for anything new: a repeated action, a re-grip, a dropped part, an extra press, an interruption. A repeated element gets its own row. A pause inside the cycle is kind "idle" with key "other" and label "Pause". Include idle_pre and idle_post rows when the video shows time before or after the cycle. Elements may overlap when two hands work at once (like hold_plate in the baseline).',
+      '3. Give times in seconds with 2 decimals, read from the frame labels.',
+      '4. Compare with the reference: missing, extra, repeated or reordered elements, elements done a clearly different way, and the finished state seen in the last frames.',
+      '5. Status: POSSIBLE_DEVIATION when something visibly differs from the reference (an element missing, added, repeated or reordered; an element done a clearly different way, such as a part held in the air instead of on the table; or a different finished state). Give each element behind it flagType "deviation" with the reason in "flag". INSUFFICIENT_INFORMATION when the video does not show enough to judge the sequence or finished state. NORMAL otherwise; speed differences alone are not deviations. A difference you suspect but cannot confirm is flagged "unclear" and does not make a deviation by itself. statusNote opens with the main reason.',
+      '',
+      'Reply with only one JSON object in exactly this shape (example values):',
+      '{"cycle":{"start":0.25,"end":6.0},"status":"NORMAL","statusNote":"One or two sentences on why.","elements":[{"key":"pick_pink","label":"Reach and grasp pink 1×6 brick","kind":"reach","start":0.25,"end":0.75,"observed":"What is visibly seen in these frames.","flagType":"none","flag":""}],"finalState":{"matchesBaseline":"yes","note":"What the finished assembly looks like versus the baseline."},"processData":["Data points this video could generate automatically."],"limitations":["What cannot be determined from this video."],"differences":["One short line per concrete difference from the reference, with times or positions; mark unconfirmed ones (unconfirmed)."]}',
+      'status is one of NORMAL, POSSIBLE_DEVIATION, INSUFFICIENT_INFORMATION. kind is one of reach, position, press, release, hold, idle, other. flagType is one of none, note, unclear, deviation. matchesBaseline is one of yes, no, unclear. Keep "observed" under 200 characters and "flag" under 120.'
+    ].join('\n');
+  }
+  async function analyze() {
+    const d = S.draft;
+    const base = (d && findDone(d.compareTo)) || baseline();
+    if (!d || !d.grabVid || !base) return;
+    d.comparedToRunId = base.id;
+    d.ctl = new AbortController();
+    d.an = { stage: 'read', detail: {} };
+    d.stage = 'analyzing';
+    d.error = null;
+    renderNew();
+    const v = d.grabVid;
+    try {
+      const durS = v.duration;
+      const maxCount = Math.max(1, Math.min(6, (S.sampleLimits.images && S.sampleLimits.images.maxCount) || 4));
+      const perSheet = 12;
+      let dt = Math.max(0.25, durS / 47);
+      let n = Math.floor(durS / dt) + 1;
+      if (n > maxCount * perSheet) { dt = durS / (maxCount * perSheet - 1); n = maxCount * perSheet; }
+      dt = Math.ceil(dt * 100) / 100;
+      n = Math.min(maxCount * perSheet, Math.floor((durS - 0.03) / dt) + 1);
+      const portrait = v.videoHeight >= v.videoWidth;
+      const cols = portrait ? 4 : 3, rows = portrait ? 3 : 4;
+      const cw = portrait ? 240 : 400;
+      const ch = Math.round(cw * v.videoHeight / v.videoWidth);
+      const headH = 34;
+      const sheetCount = Math.ceil(n / perSheet);
+      const sheets = [];
+      setStage('frames', '0/' + n);
+      for (let s = 0; s < sheetCount; s++) {
+        const c = document.createElement('canvas');
+        c.width = cols * cw; c.height = rows * ch + headH;
+        const g = c.getContext('2d');
+        g.fillStyle = '#111'; g.fillRect(0, 0, c.width, c.height);
+        g.fillStyle = '#fff'; g.font = '600 18px sans-serif'; g.textBaseline = 'middle';
+        const a = s * perSheet, b = Math.min(n, a + perSheet) - 1;
+        g.fillText('Sheet ' + (s + 1) + ' of ' + sheetCount + ' · frames every ' + dt.toFixed(2) + ' s · t = ' + (a * dt).toFixed(2) + '–' + (b * dt).toFixed(2) + ' s', 12, headH / 2);
+        for (let i = a; i <= b; i++) {
+          if (d.cancelled || d.ctl.signal.aborted) throw { code: 'cancelled' };
+          const t = i * dt;
+          await seek(v, t);
+          const k = i - a, x = (k % cols) * cw, y = headH + Math.floor(k / cols) * ch;
+          g.drawImage(v, x, y, cw, ch);
+          g.fillStyle = 'rgba(0,0,0,.72)'; g.fillRect(x + 4, y + 4, 92, 26);
+          g.fillStyle = '#ffd84d'; g.font = '600 17px monospace'; g.fillText('t=' + t.toFixed(2) + 's', x + 9, y + 17);
+          g.strokeStyle = '#111'; g.lineWidth = 2; g.strokeRect(x, y, cw, ch);
+          setStage('frames', (i + 1) + '/' + n);
+        }
+        sheets.push(c);
+      }
+      setStage('sheets', sheetCount + ' sheet' + (sheetCount > 1 ? 's' : ''));
+      const blobs = [];
+      for (const c of sheets) blobs.push(await new Promise(r => c.toBlob(r, 'image/jpeg', 0.85)));
+      const shBox = $('#sheets');
+      if (shBox) for (const b of blobs) { const im = document.createElement('img'); im.src = URL.createObjectURL(b); im.alt = 'Contact sheet sent to Claude'; shBox.appendChild(im); }
+      setStage('wait', '');
+      const prompt = buildPrompt(dt, durS, blobs.length, base);
+      let started = false;
+      const tier = 'complex';
+      const result = await S.sample.json(prompt, {
+        images: blobs, modelTier: tier, signal: d.ctl.signal,
+        onText: ({ text }) => { if (!started) { started = true; setStage('write', ''); } setStage('write', text.length + ' chars'); }
+      });
+      setStage('check', '');
+      fromClaude(d, result, dt);
+      d.stage = 'review';
+      d.dirty = true;
+      renderNew();
+      toast('Event log ready. Check the times, then save.');
+    } catch (e) {
+      if (S.draft !== d) return;
+      d.stage = 'loaded';
+      const code = e && e.code;
+      S.diag.lastError = 'analysis: ' + (code || (e && (e.name ? e.name + ': ' : '') + (e.message || '')) || 'error');
+      if (code !== 'cancelled') d.error = sampleErrorCopy(code) + ' (' + S.diag.lastError + ')';
+      if (['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed', 'images_unavailable'].includes(code)) S.sampleOff = true;
+      renderNew();
+    }
+  }
+  function sampleErrorCopy(code) {
+    switch (code) {
+      case 'not_granted': case 'sampling_disabled': case 'not_declared': case 'capability_disabled': case 'capability_removed':
+        return 'Claude isn’t available to this page for your account. Time the run by hand instead.';
+      case 'images_unavailable': return 'This view can’t send frames to Claude. Time the run by hand instead.';
+      case 'rate_limited': return 'Claude is busy or your usage limit is reached. Try again in a few minutes, or time the run by hand.';
+      case 'session_expired': return 'Your claude.ai session expired. Sign in again, then retry.';
+      case 'invalid_json': case 'empty_completion': return 'Claude’s answer couldn’t be read as an event log. Try again, or time the run by hand.';
+      case 'refused': return 'Claude declined to analyze this video. Time the run by hand instead.';
+      case 'image_rejected': case 'prompt_too_large': return 'The frames were too large to send. Trim the video to one cycle and try again.';
+      default: return 'Claude couldn’t finish (connection or service problem). Try again, or time the run by hand.';
+    }
+  }
+  function fromClaude(d, r, dt) {
+    const durS = d.meta.durationS;
+    const num = (x, def) => { const n = Number(x); return Number.isFinite(n) ? n : def; };
+    const ct = t => Math.min(Math.max(r2(t), 0), durS);
+    const cat = catalog();
+    const els = (r && Array.isArray(r.elements) ? r.elements : []).map(e => {
+      let s = ct(num(e && e.start, 0)), en = ct(num(e && e.end, s));
+      if (en < s) { const t = s; s = en; en = t; }
+      const c = cat.find(x => x.key === (e && e.key));
+      const kind = KINDS[e && e.kind] ? e.kind : c ? c.kind : 'other';
+      return { uid: uid(), key: c ? c.key : 'other', label: String((e && e.label) || (c && c.label) || 'Element').slice(0, 90), kind, start: s, end: en, observed: String((e && e.observed) || '').slice(0, 400), flagType: FLAGS[e && e.flagType] ? e.flagType : 'none', flag: String((e && e.flag) || '').slice(0, 240) };
+    }).sort(byStart);
+    const cyc = r && r.cycle ? r.cycle : {};
+    const work = els.filter(e => e.kind !== 'idle');
+    d.cycle = { start: ct(num(cyc.start, work.length ? work[0].start : 0)), end: ct(num(cyc.end, work.length ? Math.max(...work.map(e => e.end)) : durS)) };
+    d.elements = els.length ? els : templateElements();
+    d.status = STATUS[r && r.status] ? r.status : 'INSUFFICIENT_INFORMATION';
+    d.statusNote = String((r && r.statusNote) || '').slice(0, 600);
+    const fs = (r && r.finalState) || {};
+    d.finalState = { matchesBaseline: MATCH[fs.matchesBaseline] ? fs.matchesBaseline : 'unclear', note: String(fs.note || '').slice(0, 600) };
+    d.processData = (Array.isArray(r && r.processData) ? r.processData : []).map(String).join('\n');
+    d.limitations = (Array.isArray(r && r.limitations) ? r.limitations : []).map(String).join('\n');
+    d.differences = (Array.isArray(r && r.differences) ? r.differences : []).map(x => String(x).slice(0, 240)).slice(0, 12);
+    d.source = { method: 'claude-page', note: 'Claude in page, contact sheets of frames every ' + dt.toFixed(2) + ' s, reviewed before saving', frameIntervalS: dt, analyzedAt: new Date().toISOString() };
+  }
+  function templateElements() {
+    const base = baseline();
+    const src = base ? elementsOf(base) : DEFAULT_CATALOG.map((c, i) => Object.assign({ start: i * 0.5, end: i * 0.5 + 0.5 }, c));
+    return src.map(e => ({ uid: uid(), key: e.key, label: e.label, kind: e.kind, start: e.start, end: e.end, observed: '', flagType: 'none', flag: '' }));
+  }
+  function startManual() {
+    const d = S.draft;
+    const base = baseline();
+    d.elements = templateElements();
+    const durS = d.meta.durationS;
+    for (const e of d.elements) { e.start = Math.min(e.start, durS); e.end = Math.min(e.end, durS); }
+    d.cycle = base && base.cycle ? { start: Math.min(base.cycle.start, durS), end: Math.min(base.cycle.end, durS) } : { start: 0, end: durS };
+    d.status = 'NORMAL'; d.statusNote = '';
+    d.finalState = { matchesBaseline: 'unclear', note: '' };
+    d.processData = base && Array.isArray(base.processData) ? base.processData.join('\n') : '';
+    d.limitations = 'Times set by hand from the video, about ±0.1 s.';
+    d.source = { method: 'manual', note: 'Timed by hand from the video', analyzedAt: new Date().toISOString() };
+    d.manualHint = true;
+    d.stage = 'review';
+    renderNew();
+  }
+
+  // ---------- editor ----------
+  function renderEditRoute(id) {
+    const V = $('#view');
+    if (S.dbUnavailable) { renderRuns(); return; }
+    if (!S.runsLoaded) { V.innerHTML = loadingState(); return; }
+    if (!writable()) { go('run', id, true); return; }
+    if (!S.draft || S.draft.runId !== id) {
+      const run = S.runs.find(r => r.id === id);
+      if (!run) { V.innerHTML = emptyState('Run not found', 'This run may have been deleted.', '<button class="btn" type="button" data-go="runs">All runs</button>'); return; }
+      const v = run.video || {};
+      const hasEls = elementsOf(run).length > 0;
+      const base = baseline();
+      S.draft = {
+        mode: 'edit', stage: 'review', runId: run.id, number: run.number, createdAt: run.createdAt,
+        label: run.label || '', condition: run.condition || '', fileName: v.fileName || '', videoSrc: v.assetId ? blob(v.assetId) : '', video: clone(v),
+        meta: { durationS: v.durationS || Math.max(1, ...elementsOf(run).map(e => e.end)), width: v.width, height: v.height },
+        cycle: hasEls ? clone(run.cycle || { start: 0, end: 0 }) : clone((base && base.cycle) || { start: 0, end: 1 }),
+        status: hasEls ? (run.status || 'NORMAL') : 'NORMAL', statusNote: hasEls ? (run.statusNote || '') : '',
+        elements: hasEls ? elementsOf(run).map(e => Object.assign(clone(e), { uid: uid() })) : templateElements(),
+        finalState: clone(run.finalState || { matchesBaseline: 'unclear', note: '' }),
+        processData: (run.processData || []).join('\n'), limitations: hasEls ? (run.limitations || []).join('\n') : 'Times set by hand from the video, about ±0.1 s.',
+        source: hasEls ? clone(run.source || {}) : { method: 'manual', note: 'Timed by hand from the video', analyzedAt: new Date().toISOString() },
+        manualHint: !hasEls, dirty: !hasEls,
+        compareTo: run.compareToRunId || '', comparedToRunId: run.comparedToRunId || '', differences: Array.isArray(run.differences) ? run.differences.slice() : null
+      };
+      if (v.assetId) loadVideo(blob(v.assetId)).then(gv => { if (S.draft && S.draft.runId === id) S.draft.grabVid = gv; }, () => {});
+    }
+    renderEditor();
+  }
+  function renderEditor() {
+    const d = S.draft;
+    const V = $('#view');
+    const cat = catalog();
+    const isNew = d.mode === 'new';
+    let h = '<div class="head"><div><div class="eyebrow">' + (isNew ? 'New run · Run ' + nextNumber() + ' · review' : 'Editing Run ' + esc(String(d.number))) + '</div><h1>' + (isNew ? 'Check the event log' : 'Edit times') + '</h1><p class="sub">' + (d.source && d.source.method === 'claude-page' && isNew ? 'Claude’s reading of the video is below. Play it back, fix any boundary with the Set buttons, and save when it matches what you see.' : d.manualHint ? 'Elements are copied from the baseline with its times. Scrub to each boundary and press the Set button next to that field.' : 'Adjust any boundary, flag or note, then save.') + '</p></div></div>';
+    h += '<div class="editor"><div class="ed-left">';
+    h += d.videoSrc ? '<div class="player"><video id="ed-video" src="' + esc(d.videoSrc) + '" controls playsinline preload="auto"></video></div>' : '<div class="vid-missing">No video stored for this run, so times can be typed but not set from playback.</div>';
+    if (d.videoSrc) h += '<div class="ctrls"><button class="btn sm" type="button" data-act="nudge" data-d="-0.1">−0.1 s</button><button class="btn sm" type="button" data-act="nudge" data-d="-0.0333">−1 fr</button><span class="tnow" id="t-now" style="min-width:64px;text-align:center">0.00 s</span><button class="btn sm" type="button" data-act="nudge" data-d="0.0333">+1 fr</button><button class="btn sm" type="button" data-act="nudge" data-d="0.1">+0.1 s</button><button class="btn sm" type="button" data-act="speed" id="speed-btn">0.5×</button></div>';
+    h += '<div class="panel" style="padding:2px 12px 10px"><div class="strip-box" id="ed-strip"></div></div>';
+    h += '</div><div class="ed-right">';
+    h += '<section class="panel pad sec"><div class="row2"><label class="field"><span>Run name</span><input class="in" id="e-label" data-df="label" value="' + esc(d.label) + '" placeholder="e.g. Parts pre-sorted"></label><label class="field"><span>What changed this run</span><input class="in" id="e-cond" data-df="condition" value="' + esc(d.condition) + '" placeholder="Leave blank if nothing changed"></label></div>';
+    h += '<div class="cyc"><span class="eyebrow" style="width:100%">Cycle</span>' + timeInput('cyc', 'start', 'Start', d.cycle.start) + timeInput('cyc', 'end', 'End', d.cycle.end) + '<span class="ct" id="cyc-time"></span></div></section>';
+    h += '<section class="sec"><div class="sec-h"><h2>Work elements</h2><span class="note">Seconds into the video</span></div><div class="panel pad"><div class="els" id="els"></div><div style="margin-top:12px"><button class="btn sm" type="button" data-act="add-el">' + ICON.plus + 'Add element</button></div></div></section>';
+    h += '<section class="panel pad sec"><div class="row2"><label class="field"><span>Overall status</span><select class="in" id="e-status" data-df="status">' + Object.keys(STATUS).map(k => '<option value="' + k + '"' + (d.status === k ? ' selected' : '') + '>' + esc(STATUS[k].label) + '</option>').join('') + '</select></label><label class="field"><span>Finished assembly</span><select class="in" id="e-match" data-df="match">' + Object.keys(MATCH).map(k => '<option value="' + k + '"' + (d.finalState.matchesBaseline === k ? ' selected' : '') + '>' + esc(MATCH[k]) + '</option>').join('') + '</select></label></div>';
+    h += '<label class="field"><span>Status note</span><textarea class="in" id="e-snote" data-df="statusNote" rows="2">' + esc(d.statusNote) + '</textarea></label>';
+    h += '<label class="field"><span>Finished assembly note</span><textarea class="in" id="e-fnote" data-df="finalNote" rows="2">' + esc(d.finalState.note) + '</textarea></label>';
+    h += '<div class="row2"><label class="field"><span>Process data this video yields (one per line)</span><textarea class="in" id="e-pd" data-df="processData" rows="4">' + esc(d.processData) + '</textarea></label><label class="field"><span>Limitations (one per line)</span><textarea class="in" id="e-lim" data-df="limitations" rows="4">' + esc(d.limitations) + '</textarea></label></div></section>';
+    h += '<div class="savebar"><span class="msg" id="save-msg">' + (S.assets ? 'Saving captures one frame per element' + (isNew && d.fileSize <= MAX_ASSET ? ' and stores the video.' : '.') : 'Timings save; frames and video need Editor access.') + '</span><span class="spacer"></span><button class="btn" type="button" data-act="cancel-edit">Cancel</button><button class="btn primary" type="button" data-act="save" id="save-btn">' + (isNew ? 'Save run' : 'Save changes') + '</button></div>';
+    h += '</div></div>';
+    V.innerHTML = h;
+    renderEls();
+    refreshDerived();
+    bindEditorVideo();
+  }
+  function timeInput(scope, field, label, val, u) {
+    const id = scope === 'cyc' ? 'cyc-' + field : 'el-' + u + '-' + field;
+    return '<span class="tin"><span class="lbl">' + esc(label) + '</span><input class="in t" type="number" step="0.01" min="0" inputmode="decimal" id="' + id + '" value="' + (fin(val) ? val.toFixed(2) : '') + '" ' + (scope === 'cyc' ? 'data-cyc="' + field + '"' : 'data-uid="' + u + '" data-f="' + field + '"') + ' aria-label="' + esc(label) + ' time in seconds">' + (S.draft.videoSrc ? '<button class="set" type="button" title="Use the current video time" aria-label="Set ' + esc(label.toLowerCase()) + ' to the current video time" data-act="set-time" data-scope="' + scope + '" data-field="' + field + '"' + (u ? ' data-uid="' + u + '"' : '') + '>' + ICON.set + '</button>' : '') + '</span>';
+  }
+  function renderEls() {
+    const d = S.draft;
+    const box = $('#els');
+    if (!box) return;
+    const active = document.activeElement && document.activeElement.id;
+    const cat = catalog();
+    let n = 0;
+    box.innerHTML = d.elements.map(e => {
+      const num = e.kind === 'idle' ? '—' : String(++n);
+      const known = cat.some(c => c.key === e.key);
+      let h = '<div class="el" data-row="' + e.uid + '"><span class="n">' + num + '</span>';
+      h += '<select class="in sel" id="el-' + e.uid + '-key" data-uid="' + e.uid + '" data-f="key" aria-label="Element">' + cat.map(c => '<option value="' + esc(c.key) + '"' + (c.key === e.key ? ' selected' : '') + '>' + esc(c.label) + '</option>').join('') + '<option value="other"' + (!known ? ' selected' : '') + '>Other (describe)…</option></select>';
+      h += '<select class="in flagsel" id="el-' + e.uid + '-flagType" data-uid="' + e.uid + '" data-f="flagType" aria-label="Flag">' + Object.keys(FLAGS).map(k => '<option value="' + k + '"' + ((e.flagType || 'none') === k ? ' selected' : '') + '>' + esc(FLAGS[k]) + '</option>').join('') + '</select>';
+      h += '<button class="x" type="button" data-act="rm-el" data-uid="' + e.uid + '" aria-label="Remove element">' + ICON.x + '</button>';
+      h += '<div class="times">' + timeInput('el', 'start', 'Start', e.start, e.uid) + timeInput('el', 'end', 'End', e.end, e.uid) + '<span class="dur" id="el-' + e.uid + '-dur">' + esc(fmtS(dur(e))) + '</span></div>';
+      if (!known) h += '<div class="custom"><input class="in" id="el-' + e.uid + '-label" data-uid="' + e.uid + '" data-f="label" value="' + esc(e.label) + '" placeholder="Describe the element, e.g. Re-grip blue slope" aria-label="Element name"><select class="in" id="el-' + e.uid + '-kind" data-uid="' + e.uid + '" data-f="kind" aria-label="Kind">' + Object.keys(KINDS).map(k => '<option value="' + k + '"' + (e.kind === k ? ' selected' : '') + '>' + esc(KINDS[k]) + '</option>').join('') + '</select></div>';
+      h += '<div class="sub"><textarea class="in" rows="2" id="el-' + e.uid + '-observed" data-uid="' + e.uid + '" data-f="observed" placeholder="What is visibly observed" aria-label="Observed">' + esc(e.observed || '') + '</textarea><input class="in" id="el-' + e.uid + '-flag" data-uid="' + e.uid + '" data-f="flag" value="' + esc(e.flag || '') + '" placeholder="Flag note" aria-label="Flag note"></div>';
+      return h + '</div>';
+    }).join('') || '<p class="muted">No elements. Add one below.</p>';
+    if (active) { const el = document.getElementById(active); if (el) try { el.focus(); } catch (e) { /* ignore */ } }
+  }
+  function refreshDerived() {
+    const d = S.draft;
+    if (!d) return;
+    const ct = d.cycle && fin(d.cycle.end) && fin(d.cycle.start) ? d.cycle.end - d.cycle.start : null;
+    const base = baseline();
+    const bct = cycleTime(base);
+    const c = $('#cyc-time');
+    if (c) c.textContent = 'Cycle time ' + fmtS(ct) + (bct != null && ct != null && !(d.mode === 'edit' && base && base.id === d.runId) ? ' · ' + fmtD(ct - bct) + ' vs baseline' : '');
+    const st = $('#ed-strip');
+    if (st) {
+      const span = Math.max(1, d.meta.durationS || 1);
+      st.innerHTML = stripHtml(d.elements.filter(e => fin(e.start) && fin(e.end)), { span, seekable: !!d.videoSrc, tall: true, playhead: !!d.videoSrc, id: 'ed-track', baseMap: durByKey(base), markers: fin(d.cycle.start) && fin(d.cycle.end) ? [{ t: d.cycle.start, label: 'START' }, { t: d.cycle.end, label: 'END' }] : [] }) + axisHtml(span);
+      updateEdPlayhead();
+    }
+  }
+  function updateEdPlayhead() {
+    const v = $('#ed-video'), ph = $('#ph'), tn = $('#t-now');
+    if (!v || !S.draft) return;
+    const span = Math.max(1, S.draft.meta.durationS || 1);
+    if (ph) ph.style.left = Math.min(100, (v.currentTime || 0) / span * 100) + '%';
+    if (tn) tn.textContent = (v.currentTime || 0).toFixed(2) + ' s';
+  }
+  function bindEditorVideo() {
+    const v = $('#ed-video');
+    if (!v) return;
+    let raf = 0;
+    const loop = () => { updateEdPlayhead(); if (!v.paused && !v.ended) raf = requestAnimationFrame(loop); };
+    v.addEventListener('play', () => { cancelAnimationFrame(raf); loop(); });
+    v.addEventListener('seeked', updateEdPlayhead);
+    v.addEventListener('timeupdate', updateEdPlayhead);
+    v.addEventListener('loadedmetadata', () => {
+      if (S.draft && fin(v.duration) && (!S.draft.meta.durationS || S.draft.mode === 'edit')) { S.draft.meta.durationS = r2(v.duration); refreshDerived(); }
+    });
+  }
+  function findEl(u) { return S.draft && S.draft.elements.find(e => e.uid === u); }
+  function setElTime(e, field, val) {
+    const v = r2(Math.max(0, val));
+    if (e[field] === v) return;
+    e[field] = v;
+    e.frameDirty = true;
+    S.draft.dirty = true;
+  }
+  function resortIfNeeded() {
+    const d = S.draft;
+    const before = d.elements.map(e => e.uid).join();
+    d.elements.sort(byStart);
+    if (d.elements.map(e => e.uid).join() !== before) renderEls();
+  }
+  async function saveDraft() {
+    const d = S.draft;
+    const msg = $('#save-msg'), btn = $('#save-btn');
+    const say = (t, err) => { if (msg) { msg.textContent = t; msg.classList.toggle('err', !!err); } };
+    // validate
+    if (!fin(d.cycle.start) || !fin(d.cycle.end) || d.cycle.end <= d.cycle.start) { say('Set a cycle end later than the cycle start.', true); return; }
+    const bad = d.elements.find(e => !fin(e.start) || !fin(e.end) || e.end < e.start);
+    if (bad) { say('“' + (bad.label || 'An element') + '” needs an end time at or after its start.', true); return; }
+    if (!d.elements.length) { say('Add at least one element.', true); return; }
+    const unnamed = d.elements.find(e => !String(e.label || '').trim());
+    if (unnamed) { say('Give every “Other” element a short description.', true); return; }
+    if (btn) btn.disabled = true;
+    d.saving = true;
+    const isNew = d.mode === 'new';
+    const number = isNew ? nextNumber() : d.number;
+    const id = isNew ? 'run-' + String(number).padStart(3, '0') + '-' + uid().slice(0, 4) : d.runId;
+    d.elements.sort(byStart);
+    const v = d.grabVid;
+    const notes = [];
+    let videoInfo = isNew ? { fileName: d.fileName, durationS: d.meta.durationS, width: d.meta.width, height: d.meta.height } : clone(d.video || {});
+    try {
+      if (S.assets && v) {
+        const need = d.elements.filter(e => !e.frameAssetId || e.frameDirty);
+        let i = 0;
+        for (const e of need) {
+          say('Capturing frames ' + (++i) + '/' + need.length + '…');
+          const t = r2(e.start + (e.end - e.start) / 2);
+          const b = await grabBlob(v, t);
+          if (!b) continue;
+          const res = await S.assets.upload(b, { type: 'image/jpeg' });
+          e.frameAssetId = res.id; e.frameT = t; delete e.frameDirty;
+        }
+        if (!d.finalState.frameAssetId || d.finalState.frameDirty || (isNew)) {
+          const t = Math.min(r2(d.cycle.end + 0.2), Math.max(0, d.meta.durationS - 0.05));
+          const b = await grabBlob(v, t);
+          if (b) { const res = await S.assets.upload(b, { type: 'image/jpeg' }); d.finalState.frameAssetId = res.id; d.finalState.frameT = t; }
+        }
+        if (isNew && d.videoAssetId) {
+          videoInfo.assetId = d.videoAssetId;
+        } else if (isNew && d.file) {
+          if (d.file.size <= MAX_ASSET) {
+            say('Storing the video…');
+            const isMov = /quicktime/i.test(d.file.type) || /\.mov$/i.test(d.file.name);
+            const type = isMov || !d.file.type ? 'video/mp4' : d.file.type;
+            try {
+              const res = await S.assets.upload(d.file, { type });
+              videoInfo.assetId = res.id;
+            } catch (e) {
+              notes.push(e && e.code === 'unsupported_type' ? 'Video format not accepted for storage; frames saved.' : 'Video wasn’t stored (' + ((e && e.code) || 'error') + '); frames saved.');
+            }
+          } else {
+            notes.push('Video over 20 MB, not stored; frames saved.');
+          }
+        }
+      }
+    } catch (e) {
+      const code = e && e.code;
+      if (code === 'rate_limited') notes.push('Some frames weren’t saved (upload limit reached).');
+      else if (code === 'quota_or_state') notes.push('Asset storage is full; some frames weren’t saved.');
+      else notes.push('Some frames weren’t saved (' + (code || 'error') + ').');
+    }
+    if (notes.length) videoInfo.note = notes.join(' ');
+    const doc = {
+      number, label: String(d.label || '').trim(), condition: String(d.condition || '').trim(),
+      createdAt: d.createdAt || new Date().toISOString(),
+      video: videoInfo,
+      cycle: { start: r2(d.cycle.start), end: r2(d.cycle.end) },
+      status: d.status, statusNote: String(d.statusNote || '').trim(),
+      elements: d.elements.map(e => {
+        const o = { key: e.key || 'other', label: String(e.label || '').trim(), kind: e.kind || 'other', start: r2(e.start), end: r2(e.end), observed: String(e.observed || '').trim(), flagType: e.flagType || 'none', flag: String(e.flag || '').trim() };
+        if (e.frameAssetId) o.frameAssetId = e.frameAssetId;
+        if (fin(e.frameT)) o.frameT = e.frameT;
+        return o;
+      }),
+      finalState: Object.assign({}, { matchesBaseline: d.finalState.matchesBaseline || 'unclear', note: String(d.finalState.note || '').trim() },
+        d.finalState.frameAssetId ? { frameAssetId: d.finalState.frameAssetId, frameT: d.finalState.frameT } : {},
+        d.finalState.closeupAssetId ? { closeupAssetId: d.finalState.closeupAssetId } : {}),
+      processData: String(d.processData || '').split('\n').map(s => s.trim()).filter(Boolean),
+      limitations: String(d.limitations || '').split('\n').map(s => s.trim()).filter(Boolean),
+      source: Object.assign({}, d.source || {}, isNew ? {} : { editedAt: new Date().toISOString() })
+    };
+    const cmpTo = d.compareTo || (isNew ? (baseline() || {}).id : '');
+    if (cmpTo) doc.compareToRunId = cmpTo;
+    if (d.comparedToRunId) doc.comparedToRunId = d.comparedToRunId;
+    if (Array.isArray(d.differences)) doc.differences = d.differences;
+    say('Saving the run…');
+    try {
+      await S.db.collection('runs').doc(id).set(doc);
+    } catch (e) {
+      d.saving = false;
+      if (btn) btn.disabled = false;
+      say(handleWriteError(e), true);
+      renderBar();
+      return;
+    }
+    toast(isNew ? 'Run ' + number + ' saved' : 'Run ' + number + ' updated');
+    d.dirty = false;
+    d.saved = true;
+    go('run', id, true);
+  }
+
+  // ---------- leave confirm ----------
+  function renderLeaveConfirm() {
+    let box = $('#leave');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'leave';
+      box.className = 'confirm';
+      $('#view').prepend(box);
+    }
+    box.innerHTML = '<span>Leave without saving this run? The timings you’ve set will be lost.</span><span class="spacer"></span><button class="btn sm danger" type="button" data-act="leave-yes">Discard and leave</button><button class="btn sm" type="button" data-act="leave-no">Keep editing</button>';
+    box.scrollIntoView({ block: 'nearest' });
+  }
+
+  // ---------- tooltip & toast ----------
+  const tip = $('#tip');
+  function showTip(el, x, y) {
+    const t = el.getAttribute('data-tip');
+    if (!t) return;
+    tip.textContent = t;
+    tip.hidden = false;
+    const r = tip.getBoundingClientRect();
+    let left = x + 14, top = y + 14;
+    if (left + r.width > window.innerWidth - 8) left = x - r.width - 14;
+    if (top + r.height > window.innerHeight - 8) top = y - r.height - 14;
+    tip.style.left = Math.max(8, left) + 'px';
+    tip.style.top = Math.max(8, top) + 'px';
+  }
+  function hideTip() { if (tip) tip.hidden = true; }
+  document.addEventListener('pointermove', e => {
+    const el = e.target.closest && e.target.closest('[data-tip]');
+    if (el) showTip(el, e.clientX, e.clientY); else hideTip();
+  });
+  document.addEventListener('scroll', hideTip, { passive: true });
+  let toastTimer = 0;
+  function toast(t) {
+    const el = $('#toast');
+    el.textContent = t;
+    el.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.hidden = true; }, 3200);
+  }
+
+  // ---------- events ----------
+  document.addEventListener('click', e => {
+    const t = e.target;
+    const goEl = t.closest('[data-go]');
+    if (goEl) { e.preventDefault(); go(goEl.getAttribute('data-go')); return; }
+    const act = t.closest('[data-act]');
+    if (act) { onAct(act.getAttribute('data-act'), act, e); return; }
+    const track = t.closest('.track.seekable');
+    if (track) {
+      const r = track.getBoundingClientRect();
+      const span = +track.dataset.span, t0 = +track.dataset.t0 || 0;
+      seekActive(t0 + Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * span);
+      return;
+    }
+    const sk = t.closest('[data-seek]');
+    if (sk && (S.route.view === 'run' || S.route.view === 'edit' || S.route.view === 'new')) { seekActive(+sk.getAttribute('data-seek'), true); return; }
+    const op = t.closest('[data-open]');
+    if (op) { go('run', op.getAttribute('data-open')); }
+  });
+  document.addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.tl-row[data-open]')) { e.preventDefault(); go('run', e.target.getAttribute('data-open')); }
+  });
+  function onAct(a, el) {
+    const d = S.draft;
+    const run = S.route.view === 'run' ? S.runs.find(r => r.id === S.route.id) : null;
+    switch (a) {
+      case 'edit': if (run) go('edit', run.id); break;
+      case 'make-baseline': if (run) makeBaseline(run); break;
+      case 'delete': S.confirmDelete = true; S.renderedKey = null; render(); break;
+      case 'delete-no': S.confirmDelete = false; S.renderedKey = null; render(); break;
+      case 'delete-yes': if (run) deleteRun(run); break;
+      case 'export': exportCsv(); break;
+      case 'copy-csv': {
+        const ta = $('#csv-out');
+        if (!ta) break;
+        const p = navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(ta.value) : Promise.reject();
+        p.then(() => toast('Copied'), () => { ta.focus(); ta.select(); toast('Selected. Press Ctrl+C or ⌘C to copy.'); });
+        break;
+      }
+      case 'replace-file': dropDraft(); S.draft = { stage: 'pick' }; renderNew(); break;
+      case 'analyze': analyze(); break;
+      case 'manual': startManual(); break;
+      case 'cc-analyze': ccAnalyze(el); break;
+      case 'cc-retry': if (run) { el.disabled = true; ccRetry(run); } break;
+      case 'cc-manual': if (run) go('edit', run.id); break;
+      case 'cc-recheck': if (run) { el.disabled = true; ccRecheck(run, refFor(run)); } break;
+      case 'copy-cc': {
+        const m = $('#cc-msg');
+        if (!m) break;
+        const p = navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(m.textContent) : Promise.reject();
+        p.then(() => toast('Copied. Paste it into Claude Code.'), () => { const r = document.createRange(); r.selectNodeContents(m); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); toast('Selected. Press Ctrl+C or ⌘C to copy.'); });
+        break;
+      }
+      case 'stop': if (d && d.ctl) d.ctl.abort(); if (d) { d.cancelled = true; d.stage = 'loaded'; setTimeout(() => { if (S.draft === d) { d.cancelled = false; renderNew(); } }, 0); } break;
+      case 'nudge': { const v = $('#ed-video'); if (v) { v.pause(); v.currentTime = Math.max(0, Math.min(v.duration || 0, v.currentTime + (+el.dataset.d))); } break; }
+      case 'speed': { const v = $('#ed-video'); if (v) { v.playbackRate = v.playbackRate === 1 ? 0.5 : v.playbackRate === 0.5 ? 0.25 : 1; el.textContent = (v.playbackRate === 1 ? '0.5' : v.playbackRate === 0.5 ? '0.25' : '1') + '×'; toast('Playback ' + v.playbackRate + '×'); } break; }
+      case 'set-time': {
+        const v = $('#ed-video');
+        if (!v || !d) break;
+        const t = r2(v.currentTime || 0);
+        if (el.dataset.scope === 'cyc') { d.cycle[el.dataset.field] = t; d.finalState.frameDirty = true; d.dirty = true; const inp = $('#cyc-' + el.dataset.field); if (inp) inp.value = t.toFixed(2); }
+        else {
+          const e2 = findEl(el.dataset.uid);
+          if (!e2) break;
+          setElTime(e2, el.dataset.field, t);
+          const inp = $('#el-' + e2.uid + '-' + el.dataset.field); if (inp) inp.value = t.toFixed(2);
+          const du = $('#el-' + e2.uid + '-dur'); if (du) du.textContent = fmtS(dur(e2));
+          resortIfNeeded();
+        }
+        refreshDerived();
+        break;
+      }
+      case 'add-el': {
+        if (!d) break;
+        const v = $('#ed-video');
+        const t = r2(v ? v.currentTime || 0 : (d.cycle.end || 0));
+        const ne = { uid: uid(), key: 'other', label: '', kind: 'other', start: t, end: r2(Math.min(t + 0.3, d.meta.durationS || t + 0.3)), observed: '', flagType: 'note', flag: '' };
+        d.elements.push(ne); d.dirty = true;
+        d.elements.sort(byStart);
+        renderEls(); refreshDerived();
+        const inp = document.getElementById('el-' + ne.uid + '-label'); if (inp) inp.focus();
+        break;
+      }
+      case 'rm-el': if (d) { d.elements = d.elements.filter(x => x.uid !== el.dataset.uid); d.dirty = true; renderEls(); refreshDerived(); } break;
+      case 'save': if (d && !d.saving) saveDraft(); break;
+      case 'cancel-edit': if (d && d.mode === 'edit') go('run', d.runId); else go('runs'); break;
+      case 'leave-yes': { const to = S.leaveTo; S.leaveTo = null; if (d) d.dirty = false; go(to ? to.view : 'runs', to && to.id, true); break; }
+      case 'leave-no': { S.leaveTo = null; const b = $('#leave'); if (b) b.remove(); break; }
+    }
+  }
+  document.addEventListener('input', e => {
+    const t = e.target;
+    const d = S.draft;
+    if (!d) return;
+    if (t.dataset.df) {
+      const f = t.dataset.df;
+      if (f === 'finalNote') d.finalState.note = t.value;
+      else if (f === 'match') d.finalState.matchesBaseline = t.value;
+      else d[f] = t.value;
+      d.dirty = true;
+      return;
+    }
+    if (t.dataset.cyc) {
+      const v = parseFloat(t.value);
+      d.cycle[t.dataset.cyc] = fin(v) ? r2(v) : NaN;
+      d.finalState.frameDirty = true;
+      d.dirty = true;
+      refreshDerived();
+      return;
+    }
+    if (t.dataset.uid && t.dataset.f) {
+      const el = findEl(t.dataset.uid);
+      if (!el) return;
+      const f = t.dataset.f;
+      if (f === 'start' || f === 'end') {
+        const v = parseFloat(t.value);
+        if (fin(v)) setElTime(el, f, v); else el[f] = NaN;
+        const du = $('#el-' + el.uid + '-dur'); if (du) du.textContent = fmtS(dur(el));
+        refreshDerived();
+      } else if (f === 'label' || f === 'observed' || f === 'flag') {
+        el[f] = t.value; d.dirty = true;
+        if (f === 'label') refreshDerived();
+      }
+    }
+  });
+  document.addEventListener('change', e => {
+    const t = e.target;
+    if (t.id === 'cmp-select') { const run = S.runs.find(r => r.id === S.route.id); if (run && t.value) setCompare(run, t.value); return; }
+    if (t.id === 'base-select') { if (t.value) setBaseline(t.value); return; }
+    const d = S.draft;
+    if (!d) return;
+    if (t.dataset.uid && t.dataset.f) {
+      const el = findEl(t.dataset.uid);
+      if (!el) return;
+      const f = t.dataset.f;
+      if (f === 'key') {
+        const c = catalog().find(x => x.key === t.value);
+        if (c) { el.key = c.key; el.label = c.label; el.kind = c.kind; }
+        else { el.key = 'other'; el.label = ''; el.kind = 'other'; }
+        d.dirty = true; renderEls(); refreshDerived();
+        if (!c) { const inp = document.getElementById('el-' + el.uid + '-label'); if (inp) inp.focus(); }
+      } else if (f === 'kind' || f === 'flagType') {
+        el[f] = t.value; d.dirty = true; renderEls(); refreshDerived();
+      } else if (f === 'start' || f === 'end') {
+        resortIfNeeded(); refreshDerived();
+      }
+    }
+  });
+
+  // ---------- boot ----------
+  document.addEventListener('securitypolicyviolation', e => {
+    const what = (e.effectiveDirective || e.violatedDirective || 'policy') + ' ' + String(e.blockedURI || '').slice(0, 40);
+    if (!S.diag.csp.includes(what)) S.diag.csp.push(what);
+  });
+  if (LOCAL) {
+    const p = document.createElement('p');
+    p.textContent = 'Running locally: runs and videos live in the data/ folder of this repo. Commit and push data/ to share them with your team.';
+    const foot = $('.foot'); if (foot) foot.appendChild(p);
+  }
+  render();
+  init();
+})();
+</script>
+

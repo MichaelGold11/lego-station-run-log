@@ -1,0 +1,13 @@
+{
+  "name": "lego-station-run-log",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Time study of a LEGO assembly station from ordinary video, analyzed by a coding agent.",
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.mjs",
+    "runlog": "node scripts/runlog.mjs",
+    "check": "node scripts/runlog.mjs validate"
+  }
+}

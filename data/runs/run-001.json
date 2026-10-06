@@ -1,0 +1,185 @@
+{
+  "condition": "",
+  "createdAt": "2026-10-01T23:35:00.000Z",
+  "cycle": {
+    "end": 5.6,
+    "start": 0.1
+  },
+  "elements": [
+    {
+      "end": 0.1,
+      "flag": "",
+      "flagType": "none",
+      "frameAssetId": "d1552a5f2131c6b7f9b5d11c650c1cbc",
+      "frameT": 0,
+      "key": "idle_pre",
+      "kind": "idle",
+      "label": "Idle before cycle",
+      "observed": "Three loose parts on the table: blue 2×2 slope, pink 1×6 brick, white 4×6 plate. No hands.",
+      "start": 0
+    },
+    {
+      "end": 0.7,
+      "flag": "",
+      "flagType": "none",
+      "frameAssetId": "a3347aa01bb725cace3a6440776494fa",
+      "frameT": 0.5,
+      "key": "pick_pink",
+      "kind": "reach",
+      "label": "Reach and grasp pink 1×6 brick",
+      "observed": "One hand enters from the top right, closes on the pink brick and lifts it.",
+      "start": 0.1
+    },
+    {
+      "end": 0.9,
+      "flag": "Overlaps the pick: both hands working at once.",
+      "flagType": "note",
+      "frameAssetId": "4c3c48cfc9cdeea8701a96ff46c46ef8",
+      "frameT": 0.8,
+      "key": "hold_plate",
+      "kind": "hold",
+      "label": "Hold the base plate",
+      "observed": "Second hand enters from the bottom and grips the near edge of the plate.",
+      "start": 0.6
+    },
+    {
+      "end": 1,
+      "flag": "",
+      "flagType": "none",
+      "frameAssetId": "c0794f352f15ea962e0fb8e4ade4b5ee",
+      "frameT": 1,
+      "key": "place_pink",
+      "kind": "position",
+      "label": "Place pink brick on plate",
+      "observed": "Pink brick lowered lengthwise onto the plate, second stud column in camera view.",
+      "start": 0.7
+    },
+    {
+      "end": 2.4,
+      "flag": "Longest element. Pressing force and click are not visible.",
+      "flagType": "note",
+      "frameAssetId": "ece8cfd10f427b8792fbf84c8b002c5c",
+      "frameT": 1.8,
+      "key": "seat_pink",
+      "kind": "press",
+      "label": "Press pink brick down",
+      "observed": "Fingers stay on the brick and press along it; the hand hides most of the brick.",
+      "start": 1
+    },
+    {
+      "end": 3.1,
+      "flag": "Half-built piece turned mid-cycle; reason not visible.",
+      "flagType": "note",
+      "frameAssetId": "197991bf6d0652a14f8c6be5e5645213",
+      "frameT": 2.9,
+      "key": "pick_blue",
+      "kind": "reach",
+      "label": "Reach and grasp blue 2×2 slope",
+      "observed": "Hand releases the pink brick, moves to the blue slope and picks it up. The other hand turns the half-built piece about 30–45°.",
+      "start": 2.4
+    },
+    {
+      "end": 3.6,
+      "flag": "",
+      "flagType": "none",
+      "frameAssetId": "3513158b7d95b4663d9b2748d9e564b7",
+      "frameT": 3.4,
+      "key": "carry_blue",
+      "kind": "position",
+      "label": "Carry blue slope",
+      "observed": "Blue slope moved to the half-built piece.",
+      "start": 3.1
+    },
+    {
+      "end": 4,
+      "flag": "Possible in-hand turn; a re-grip or re-placement can't be confirmed.",
+      "flagType": "unclear",
+      "frameAssetId": "eabc31e7d575e4cdee7369fa6dcc58be",
+      "frameT": 3.8,
+      "key": "orient_blue",
+      "kind": "position",
+      "label": "Position and orient blue slope",
+      "observed": "Slope held at an angle against the side of the pink brick; appears to turn in the fingers before going down.",
+      "start": 3.6
+    },
+    {
+      "end": 5,
+      "flag": "Hidden by hands.",
+      "flagType": "unclear",
+      "frameAssetId": "d3a2fc7980fc13689c396a075ee4c4f3",
+      "frameT": 4.8,
+      "key": "seat_blue",
+      "kind": "press",
+      "label": "Press blue slope down",
+      "observed": "Both hands on the assembly, mostly hidden. By about 4.8 s the slope is visible lying flat to the right of the pink brick.",
+      "start": 4
+    },
+    {
+      "end": 5.6,
+      "flag": "",
+      "flagType": "none",
+      "frameAssetId": "827a44694579ec5ae71a52cc2228ec70",
+      "frameT": 5.4,
+      "key": "release",
+      "kind": "release",
+      "label": "Release and set down",
+      "observed": "Assembly turned back to its starting angle and put down; both hands out of frame by 5.6 s.",
+      "start": 5
+    },
+    {
+      "end": 8.27,
+      "flag": "No hands in view, so the shift is inferred to be camera movement.",
+      "flagType": "note",
+      "frameAssetId": "7f996b97c18e8c0cf1c6b0b5a6d6edc9",
+      "frameT": 8.2,
+      "key": "idle_post",
+      "kind": "idle",
+      "label": "Idle after cycle",
+      "observed": "Finished assembly alone on the table. Its position and size in frame shift, mostly after about 7.0 s.",
+      "start": 5.6
+    }
+  ],
+  "finalState": {
+    "closeupAssetId": "ff09480f69b64a522ff5fdb85a3c0029",
+    "frameAssetId": "652f19eb50653886c84b53c3a48cc3c2",
+    "frameT": 5.8,
+    "matchesBaseline": "yes",
+    "note": "Pink 1×6 brick on the plate's second stud column, full length. Blue 2×2 slope over columns 3–4, rows 3–4, studs next to the pink brick, slope facing outward. One white column left free. Matches the attached reference photos viewed from the opposite end."
+  },
+  "label": "Baseline",
+  "limitations": [
+    "Seating can't be confirmed: both pressing elements are hidden by hands, so presses can't be counted and a lift-and-replace can't be ruled out. Snap sounds in the audio track were not analyzed.",
+    "One cycle only: no way yet to say whether 5.5 s is typical or whether turning the piece is method or a one-off.",
+    "No written standard work, so only the final state was compared, against the reference photos.",
+    "Top-down 2D view: no height or gap information; parts were identified by counting studs.",
+    "Blank background: camera movement can't be fully separated from object movement.",
+    "Not visible: defects such as cracks or shade differences, operator intent, and anything before recording started."
+  ],
+  "number": 1,
+  "processData": [
+    "Cycle start and end (hands enter and leave the work area) and cycle time",
+    "Element sequence, checkable against a standard order",
+    "Time per element, e.g. pressing took about 2.4 s of the 5.5 s cycle (about 44%)",
+    "Parts handled: 3 of 3, each once, no drops or repeated picks",
+    "Two-hand overlap: second hand busy from 0.6 s to 5.6 s",
+    "Handling events: 1 re-orientation of the half-built piece, 1 possible re-grip, 0 confirmed repeats",
+    "Final-state check against a reference image: parts present, placement, slope direction",
+    "Confidence per element: how much of it was hidden by hands"
+  ],
+  "source": {
+    "analyzedAt": "2026-10-01T23:40:00.000Z",
+    "frameIntervalS": 0.1,
+    "method": "claude-code",
+    "note": "Claude Code, frame by frame at 0.1 s steps, reviewed in chat"
+  },
+  "status": "NORMAL",
+  "statusNote": "Each of the three parts was handled once in a clear order and nothing was dropped. The finished layout matches the reference photos. One cycle only, so there is no baseline variance yet; flags are observations, not deviations.",
+  "video": {
+    "assetId": "4081cb727cb16f26e1c0f010874db7b4",
+    "durationS": 8.27,
+    "fileName": "IMG_8191.MOV",
+    "fps": 30,
+    "height": 1280,
+    "width": 720
+  }
+}
