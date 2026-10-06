@@ -303,6 +303,9 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
 .diag dd { margin: 0; overflow-wrap: anywhere; }
 .diag .bad { color: var(--crit-ink); }
 .diag .okk { color: var(--good-ink); }
+/* Live camera test */
+.cam-view { width: 100%; max-height: 70vh; background: #000; border-radius: 8px; display: block; object-fit: contain; }
+.cam-err { font-family: var(--f-mono); font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 @media (max-width: 900px) {
   .detail, .editor, .loaded { grid-template-columns: minmax(0, 1fr); }
@@ -530,12 +533,14 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     try { h = (location.hash || '').slice(1); } catch (e) { h = ''; }
     if (!h || h === 'runs') return { view: 'runs' };
     if (h === 'new') return { view: 'new' };
+    if (h === 'camera') return { view: 'camera' };
     if (h.indexOf('edit-') === 0) return { view: 'edit', id: h.slice(5) };
     return { view: 'run', id: h };
   }
   function hashFor(r) {
     if (r.view === 'runs') return '#runs';
     if (r.view === 'new') return '#new';
+    if (r.view === 'camera') return '#camera';
     if (r.view === 'edit') return '#edit-' + r.id;
     return '#' + r.id;
   }
@@ -638,6 +643,8 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     else if (v === 'run') renderRun(S.route.id);
     else if (v === 'new') renderNew();
     else if (v === 'edit') renderEditRoute(S.route.id);
+    else if (v === 'camera') renderCamera();
+    if (v !== 'camera') camStop();
   }
   function renderBar() {
     const nav = $('#bar-nav');
@@ -645,6 +652,7 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     let h = '';
     if (v !== 'runs') h += '<button class="btn ghost" type="button" data-go="runs">All runs</button>';
     if (writable() && v !== 'new' && v !== 'edit') h += '<button class="btn primary" type="button" data-go="new">' + ICON.plus + 'New run</button>';
+    if (v !== 'camera') h += '<button class="btn ghost" type="button" data-go="camera">Camera test</button>';
     if (S.canWrite === false || S.readOnly) h += '<span class="ro">View only</span>';
     nav.innerHTML = h;
   }
@@ -1277,6 +1285,7 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     let h = '<div class="head"><div><div class="eyebrow">New run · ' + esc('Run ' + nextNumber()) + '</div><h1>Log a run-through</h1><p class="sub">Film one full assembly cycle from above, like the baseline. Upload it here and Claude reads the video into an event log, or you time each element yourself. Either way you review the times before anything is saved.</p></div></div>';
     if (err) h += '<div class="notice err">' + esc(err) + '</div>' + diagHtml(true);
     h += '<label class="drop" id="drop" for="file-in">' + ICON.film + '<b>Drop the run video here</b><span class="ink2">or choose a file · MP4 or MOV · one cycle, ideally under a minute</span></label><input class="sr" type="file" id="file-in" accept="video/*">';
+    h += '<div class="actions" style="justify-content:center"><label class="btn primary" for="rec-in">' + 'Record with phone camera</label><input class="sr" type="file" id="rec-in" accept="video/*" capture="environment"><span class="muted" style="font-size:13px">Opens your phone’s rear camera. Stop recording and the clip goes straight into analysis.</span></div>';
     h += '<div class="how"><div class="panel"><b>Same camera position</b>Top-down, the whole plate and all parts in frame, same as ' + esc(base ? runName(base) : 'the baseline') + '.</div><div class="panel"><b>One cycle per video</b>Start with the parts laid out and hands out of frame. Stop after the finished assembly is set down.</div><div class="panel"><b>Hands only</b>Keep faces out of the shot. The log describes the work, never the person.</div></div>';
     return h;
   }
@@ -1284,6 +1293,8 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     const dz = $('#drop'), fi = $('#file-in');
     if (!dz || !fi) return;
     fi.addEventListener('change', () => { if (fi.files && fi.files[0]) loadFile(fi.files[0]); });
+    const ri = $('#rec-in');
+    if (ri) ri.addEventListener('change', () => { if (ri.files && ri.files[0]) loadFile(ri.files[0]); });
     dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
     dz.addEventListener('dragleave', () => dz.classList.remove('over'));
     dz.addEventListener('drop', e => {
@@ -1838,6 +1849,76 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     go('run', id, true);
   }
 
+  // ---------- live camera test (standalone; touches no analysis code) ----------
+  const CAM = { stream: null, busy: false, error: '', info: '', devices: [], deviceId: '' };
+  function camEnv() {
+    const lines = [];
+    lines.push('Secure context: ' + (window.isSecureContext ? 'yes' : 'no'));
+    lines.push('navigator.mediaDevices: ' + (navigator.mediaDevices ? 'present' : 'missing'));
+    lines.push('getUserMedia: ' + (navigator.mediaDevices && navigator.mediaDevices.getUserMedia ? 'present' : 'missing'));
+    try {
+      const pp = document.permissionsPolicy || document.featurePolicy;
+      lines.push('Frame allows camera: ' + (pp && pp.allowsFeature ? (pp.allowsFeature('camera') ? 'yes' : 'NO (blocked by the page frame)') : 'unknown in this browser'));
+    } catch (e) { lines.push('Frame allows camera: unknown'); }
+    try { lines.push('In a frame: ' + (window.self !== window.top ? 'yes' : 'no')); } catch (e) { lines.push('In a frame: yes (cross-origin)'); }
+    lines.push('Browser: ' + navigator.userAgent);
+    return lines.join('\n');
+  }
+  function renderCamera() {
+    const V = $('#view');
+    const on = !!CAM.stream;
+    let h = '<div><button class="back" type="button" data-go="runs">← All runs</button></div>';
+    h += '<div class="head"><div><div class="eyebrow">Live camera · test only</div><h1>Camera test</h1><p class="sub">Checks whether this page can open your camera (rear camera preferred). Nothing is recorded, saved or sent anywhere.</p></div><div class="actions">';
+    h += on ? '<button class="btn" type="button" data-act="cam-stop">Stop camera</button>' : '<button class="btn primary" type="button" data-act="cam-start"' + (CAM.busy ? ' disabled' : '') + '>' + (CAM.busy ? 'Opening camera…' : 'Start camera') + '</button>';
+    if (CAM.devices.length) h += '<label class="cmp-pick"><span>Camera</span><select class="in" id="cam-select">' + CAM.devices.map((d, i) => '<option value="' + esc(d.deviceId) + '"' + (d.deviceId === CAM.deviceId ? ' selected' : '') + '>' + esc(d.label || 'Camera ' + (i + 1)) + '</option>').join('') + '</select></label>';
+    h += '</div></div>';
+    h += '<div class="panel pad sec"><video id="cam-video" class="cam-view" autoplay muted playsinline' + (on ? '' : ' hidden') + '></video>';
+    if (!on && !CAM.error) h += '<p class="ink2">Press Start camera. Your browser should ask for camera permission.</p>';
+    if (CAM.info) h += '<p class="cam-err ink2">' + esc(CAM.info) + '</p>';
+    if (CAM.error) {
+      h += '<div class="notice err cam-err">' + esc(CAM.error) + '</div>';
+      h += '<div class="sec"><p class="ink2">Live preview isn’t available here. You can still record a cycle with the phone’s camera and analyze it right away:</p><div><label class="btn primary" for="cam-rec">Record with phone camera</label><input class="sr" type="file" id="cam-rec" accept="video/*" capture="environment"></div></div>';
+    }
+    h += '</div>';
+    h += '<details class="panel diag"' + (CAM.error ? ' open' : '') + '><summary>Browser details</summary><div class="pad cam-err ink2">' + esc(camEnv()) + '</div></details>';
+    V.innerHTML = h;
+    const cr = $('#cam-rec');
+    if (cr) cr.addEventListener('change', () => { const f = cr.files && cr.files[0]; if (f) { go('new'); loadFile(f); } });
+    const v = $('#cam-video');
+    if (v && CAM.stream) { v.srcObject = CAM.stream; v.play().catch(() => {}); }
+  }
+  async function camStart() {
+    if (CAM.busy || CAM.stream) return;
+    CAM.error = ''; CAM.info = ''; CAM.busy = true;
+    renderCamera();
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw { name: 'NotSupported', message: 'navigator.mediaDevices.getUserMedia is not available here' + (window.isSecureContext ? '.' : ' (page is not a secure context).') };
+      }
+      const video = CAM.deviceId ? { deviceId: { exact: CAM.deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } } : { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } };
+      const stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
+      if (S.route.view !== 'camera') { stream.getTracks().forEach(t => t.stop()); return; }
+      CAM.stream = stream;
+      const tr = stream.getVideoTracks()[0];
+      const st = tr && tr.getSettings ? tr.getSettings() : {};
+      // Labels are only filled in after permission is granted, so list cameras now.
+      try { CAM.devices = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput'); } catch (e) { CAM.devices = []; }
+      CAM.deviceId = st.deviceId || CAM.deviceId;
+      CAM.info = 'Camera open: ' + ((tr && tr.label) || 'unnamed camera') + '\n' + [st.facingMode ? 'facing ' + st.facingMode : 'facing not reported', st.width && st.height ? st.width + '×' + st.height : null, st.frameRate ? Math.round(st.frameRate) + ' fps' : null].filter(Boolean).join(' · ');
+      if (tr) tr.addEventListener('ended', () => { CAM.stream = null; CAM.error = 'Camera stopped: the track ended (camera disconnected, or another app took it).'; if (S.route.view === 'camera') renderCamera(); });
+    } catch (e) {
+      CAM.error = 'Camera failed\n' + ((e && e.name) || 'Error') + ': ' + ((e && e.message) || String(e)) + (e && e.constraint ? '\nConstraint: ' + e.constraint : '');
+    } finally {
+      CAM.busy = false;
+    }
+    if (S.route.view === 'camera') renderCamera();
+  }
+  function camStop() {
+    if (CAM.stream) { CAM.stream.getTracks().forEach(t => { try { t.stop(); } catch (e) { /* ignore */ } }); }
+    CAM.stream = null;
+    const v = $('#cam-video'); if (v) v.srcObject = null;
+  }
+
   // ---------- leave confirm ----------
   function renderLeaveConfirm() {
     let box = $('#leave');
@@ -1912,6 +1993,8 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
       case 'delete-no': S.confirmDelete = false; S.renderedKey = null; render(); break;
       case 'delete-yes': if (run) deleteRun(run); break;
       case 'export': exportCsv(); break;
+      case 'cam-start': camStart(); break;
+      case 'cam-stop': camStop(); CAM.info = ''; renderCamera(); break;
       case 'copy-csv': {
         const ta = $('#csv-out');
         if (!ta) break;
@@ -2009,6 +2092,7 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     const t = e.target;
     if (t.id === 'cmp-select') { const run = S.runs.find(r => r.id === S.route.id); if (run && t.value) setCompare(run, t.value); return; }
     if (t.id === 'base-select') { if (t.value) setBaseline(t.value); return; }
+    if (t.id === 'cam-select') { CAM.deviceId = t.value; camStop(); camStart(); return; }
     const d = S.draft;
     if (!d) return;
     if (t.dataset.uid && t.dataset.f) {
