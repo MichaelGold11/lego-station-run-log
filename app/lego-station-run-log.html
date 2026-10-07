@@ -811,9 +811,9 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
       h += '<td class="num">' + esc(fmtS(ct)) + '</td>';
       h += '<td class="num">' + (isB ? '<span class="muted">—</span>' : esc(fmtD(ct - baseCt)) + ' <span class="muted">' + esc(fmtPct(baseCt ? (ct - baseCt) / baseCt : null)) + '</span>') + '</td>';
       h += '<td class="num">' + workEls(r).length + '</td>';
-      h += '<td>' + (isB ? '<span class="muted">Standard</span>' : (pcs => isUntimed(r, base) || isUntimed(base, null) ? '<span class="chip p-unclear" data-tip="Saved without analyzing the video">Not checked</span>' : pcs.issues.length ? '<span class="chip p-bad" data-tip="' + esc(pcs.issues.join('\n')) + '">' + pcs.issues.length + ' issue' + (pcs.issues.length === 1 ? '' : 's') + '</span>' : '<span class="chip p-ok">Matches</span>')(procedureCheck(r, base))) + '</td>';
+      h += '<td>' + (isB ? '<span class="muted">Standard</span>' : (pcs => isUntimed(r, base) || isUntimed(base, null) || pcs.copied || StandardCheck.findCopy(r, S.runs) ? '<span class="chip p-unclear" data-tip="Saved without analyzing the video, or its steps are a copy of another run">Not checked</span>' : pcs.issues.length ? '<span class="chip p-bad" data-tip="' + esc(pcs.issues.join('\n')) + '">' + pcs.issues.length + ' issue' + (pcs.issues.length === 1 ? '' : 's') + '</span>' : '<span class="chip p-ok">Matches</span>')(procedureCheck(r, base))) + '</td>';
       h += '<td class="num">' + flagCount(r) + '</td>';
-      h += '<td>' + statusPill(r.status) + '</td>';
+      h += '<td>' + statusPill(shownStatus(r)) + '</td>';
       h += '<td class="ink2" style="white-space:nowrap">' + esc(sourceLabel(r)) + '</td>';
       h += '</tr>';
     }
@@ -971,7 +971,7 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     const sc = seqCheck(run, ref);
     const judged = run.comparedToRunId ? S.runs.find(r => r.id === run.comparedToRunId) : null;
     h += '<div class="panel pad sec">';
-    h += '<div class="verdict">' + statusPill(run.status) + '<div><b>' + (judged ? 'Verdict against ' + esc(runName(judged)) : 'Verdict') + '</b><p class="ink2">' + esc(run.statusNote || 'No note.') + '</p>';
+    h += '<div class="verdict">' + statusPill(shownStatus(run)) + '<div><b>' + (judged ? 'Verdict against ' + esc(runName(judged)) : 'Verdict') + '</b><p class="ink2">' + esc(run.statusNote || 'No note.') + '</p>';
     const diffs = Array.isArray(run.differences) ? run.differences : [];
     if (diffs.length) h += '<ul class="diffs">' + diffs.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>';
     h += '</div></div>';
@@ -1034,68 +1034,147 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
   }
 
   // ---------- procedure check ----------
-  // Step-by-step check of a run's procedure against its reference (the standard run).
-  // Uses the same sequence data as seqCheck plus the analysis flags; speed alone is never an issue.
-  function lcsKeys(a, b) {
-    const m = a.length, n = b.length, t = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
-    for (let i = m - 1; i >= 0; i--) for (let j = n - 1; j >= 0; j--) t[i][j] = a[i] === b[j] ? t[i + 1][j + 1] + 1 : Math.max(t[i + 1][j], t[i][j + 1]);
-    const keep = new Set();
-    for (let i = 0, j = 0; i < m && j < n;) { if (a[i] === b[j]) { keep.add(a[i]); i++; j++; } else if (t[i + 1][j] >= t[i][j + 1]) i++; else j++; }
-    return keep;
-  }
-  function procedureCheck(run, ref) {
-    const bEls = workEls(ref), rEls = workEls(run);
-    const steps = [];
-    for (const e of bEls) if (e.key && e.key !== 'other' && !steps.some(s => s.key === e.key)) steps.push({ key: e.key, label: e.label, kind: e.kind });
-    const firstOrder = els => [...new Set(els.filter(e => e.kind !== 'hold' && e.key && e.key !== 'other').map(e => e.key))];
-    const bOrder = firstOrder(bEls).filter(k => rEls.some(e => e.key === k));
-    const rOrder = firstOrder(rEls).filter(k => bOrder.includes(k));
-    const inOrder = lcsKeys(bOrder, rOrder);
-    const issues = [];
-    let unclear = 0;
-    const out = steps.map((st, i) => {
-      const hits = rEls.filter(e => e.key === st.key);
-      const row = { n: i + 1, label: st.label, state: 'ok', chip: 'Done', detail: '' };
-      if (!hits.length) {
-        row.state = 'bad'; row.chip = 'Missing';
-        row.detail = 'This step was not seen in the run.';
-      } else {
-        const at = 'at ' + fmtT(hits[0].start) + ' s';
-        const dev = hits.find(e => e.flagType === 'deviation');
-        const unc = hits.find(e => e.flagType === 'unclear');
-        if (st.kind !== 'hold' && bOrder.includes(st.key) && !inOrder.has(st.key)) {
+  // ===== BEGIN standard-check =====
+  // Step-by-step check of a run against its standard (reference) run. Self-contained on purpose:
+  // scripts/standard-check.mjs loads this exact block, so the app, `runlog.mjs finish/validate` and
+  // the tests judge every run the same way. The verdict follows from the step data, so a saved
+  // NORMAL can't hide a missing, extra, repeated, out-of-order or differently done step.
+  const StandardCheck = (() => {
+    // A step's time is listed when it differs from the standard's by more than minS and by more
+    // than ratio × the standard's time. With countsAsDeviation false, speed alone is never a deviation.
+    const TIMING = { minS: 0.3, ratio: 0.5, countsAsDeviation: false };
+    // How a step was done, as an analysis can record it in element.method. "unclear" or a missing
+    // value is never compared.
+    const METHOD = {
+      hand: { values: ['left', 'right', 'both'], say: (got, want) => 'Done with ' + HANDS[got] + '; the standard uses ' + HANDS[want] + '.' },
+      offTable: { values: ['yes', 'no'], say: got => got === 'yes' ? 'Piece lifted off the table; the standard keeps it on the table.' : 'Piece kept on the table; the standard lifts it.' }
+    };
+    const HANDS = { left: 'the left hand', right: 'the right hand', both: 'both hands' };
+    const fin = n => typeof n === 'number' && Number.isFinite(n);
+    const round = n => Math.round(n * 100) / 100;
+    const t2 = n => (fin(n) ? n.toFixed(2) : '?');
+    const signed = n => (n >= 0 ? '+' : '−') + Math.abs(n).toFixed(2) + ' s';
+    const durOf = e => Math.max(0, (e.end || 0) - (e.start || 0));
+    const total = els => round(els.reduce((a, e) => a + durOf(e), 0));
+    const sorted = run => (run && Array.isArray(run.elements) ? run.elements : []).slice().sort((a, b) => (a.start - b.start) || (a.end - b.end));
+    const work = run => sorted(run).filter(e => e.kind !== 'idle');
+    const known = e => !!e.key && e.key !== 'other';
+    // Every step with its times to 0.01 s. Two analyses of different recordings never share it by chance.
+    const signature = run => JSON.stringify(sorted(run).map(e => [e.key, Math.round(e.start * 100), Math.round(e.end * 100)]));
+    // Keys of b that keep a's order (longest common subsequence); the rest are out of order.
+    function inOrderKeys(a, b) {
+      const m = a.length, n = b.length, t = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+      for (let i = m - 1; i >= 0; i--) for (let j = n - 1; j >= 0; j--) t[i][j] = a[i] === b[j] ? t[i + 1][j + 1] + 1 : Math.max(t[i + 1][j], t[i][j + 1]);
+      const keep = new Set();
+      for (let i = 0, j = 0; i < m && j < n;) { if (a[i] === b[j]) { keep.add(a[i]); i++; j++; } else if (t[i + 1][j] >= t[i][j + 1]) i++; else j++; }
+      return keep;
+    }
+    function methodDiffs(hits, stdEls) {
+      const out = [];
+      for (const f of Object.keys(METHOD)) {
+        const ok = v => METHOD[f].values.includes(v);
+        const want = stdEls.map(e => e.method && e.method[f]).find(ok);
+        if (!want) continue;
+        const got = hits.map(e => e.method && e.method[f]).find(v => ok(v) && v !== want);
+        if (got) out.push(METHOD[f].say(got, want));
+      }
+      return out;
+    }
+    function compare(run, std, opts) {
+      const timing = Object.assign({}, TIMING, opts && opts.timing);
+      const sEls = work(std), rEls = work(run);
+      const steps = [];
+      for (const e of sEls) if (known(e) && !steps.some(s => s.key === e.key)) steps.push({ key: e.key, label: e.label, kind: e.kind });
+      const firstOrder = els => [...new Set(els.filter(e => e.kind !== 'hold' && known(e)).map(e => e.key))];
+      const sOrder = firstOrder(sEls).filter(k => rEls.some(e => e.key === k));
+      const rOrder = firstOrder(rEls).filter(k => sOrder.includes(k));
+      const ordered = inOrderKeys(sOrder, rOrder);
+      const labelOf = k => (steps.find(s => s.key === k) || {}).label || k;
+      const issues = [], timingNotes = [];
+      let unclear = 0;
+      const rows = steps.map((st, i) => {
+        const hits = rEls.filter(e => e.key === st.key), stdEls = sEls.filter(e => e.key === st.key);
+        const row = { n: i + 1, key: st.key, label: st.label, kind: st.kind, state: 'ok', chip: 'Done', detail: '', start: hits.length ? hits[0].start : null, durS: hits.length ? total(hits) : null, stdDurS: total(stdEls), deltaS: null };
+        if (!hits.length) {
+          row.state = 'bad'; row.chip = 'Missing';
+          row.detail = 'Not seen in this run. The standard does it as step ' + row.n + '.';
+          issues.push('Missing: ' + st.label);
+          return row;
+        }
+        const notes = [];
+        const at = 'at ' + t2(hits[0].start) + ' s';
+        if (st.kind !== 'hold' && sOrder.includes(st.key) && !ordered.has(st.key)) {
           const pos = rOrder.indexOf(st.key);
           row.state = 'bad'; row.chip = 'Out of order';
-          row.detail = 'Done ' + at + (pos > 0 ? ', after “' + ((steps.find(x => x.key === rOrder[pos - 1]) || {}).label || rOrder[pos - 1]) + '”' : ', first') + '. The standard does it as step ' + (i + 1) + '.';
+          notes.push('Done ' + at + (pos > 0 ? ', after “' + labelOf(rOrder[pos - 1]) + '”' : ', first') + '. The standard does it as step ' + row.n + '.');
         } else if (hits.length > 1) {
           row.state = 'bad'; row.chip = 'Repeated ×' + hits.length;
-          row.detail = 'Done ' + hits.length + ' times, at ' + hits.map(e => fmtT(e.start) + ' s').join(', ') + '.';
+          notes.push('Done ' + hits.length + ' times, at ' + hits.map(e => t2(e.start) + ' s').join(', ') + '.');
         }
-        if (dev) {
+        const how = methodDiffs(hits, stdEls);
+        const dev = hits.find(e => e.flagType === 'deviation');
+        if (how.length || dev) {
           if (row.state === 'ok') { row.state = 'bad'; row.chip = 'Done differently'; }
-          row.detail = (row.detail ? row.detail + ' ' : '') + (dev.flag || dev.observed || 'Done a different way than the standard.');
+          notes.push(...how);
+          if (dev) notes.push((dev.flag || dev.observed || 'Done a different way than the standard').replace(/\.?$/, '.'));
+        }
+        const delta = round(row.durS - row.stdDurS);
+        if (Math.abs(delta) > Math.max(timing.minS, timing.ratio * row.stdDurS)) {
+          row.deltaS = delta;
+          timingNotes.push(st.label + ': ' + t2(row.durS) + ' s vs ' + t2(row.stdDurS) + ' s in the standard (' + signed(delta) + ')');
+          notes.push('Took ' + t2(row.durS) + ' s vs ' + t2(row.stdDurS) + ' s in the standard (' + signed(delta) + ').');
+          if (timing.countsAsDeviation && row.state === 'ok') { row.state = 'bad'; row.chip = delta > 0 ? 'Too slow' : 'Too fast'; }
         }
         if (row.state === 'ok') {
-          if (unc) { row.state = 'unclear'; row.chip = 'Unclear'; row.detail = (unc.flag || 'Hands hide part of this step').replace(/\.?$/, '.') + ' Not counted as an issue.'; unclear++; }
-          else row.detail = 'Done ' + at + ' · took ' + fmtS(hits.reduce((a, e) => a + dur(e), 0)) + '.';
+          const unc = hits.find(e => e.flagType === 'unclear');
+          if (unc) { row.state = 'unclear'; row.chip = 'Unclear'; notes.unshift((unc.flag || 'Hands hide part of this step').replace(/\.?$/, '.') + ' Not counted as an issue.'); unclear++; }
+          else notes.unshift('Done ' + at + ' · took ' + t2(row.durS) + ' s.');
         }
-      }
-      if (row.state === 'bad') issues.push(row.chip + ': ' + st.label);
-      return row;
-    });
-    const extras = rEls.filter(e => !e.key || e.key === 'other' || !steps.some(s => s.key === e.key)).map(e => ({ label: e.label || 'Unlabeled step', start: e.start, detail: e.flag || e.observed || '' }));
-    for (const x of extras) issues.push('Extra step: ' + x.label);
-    const fs = run.finalState || {};
-    if (fs.matchesBaseline === 'no') issues.push('Finished build differs from the standard');
-    return { steps: out, extras, issues, unclear, finalDiffers: fs.matchesBaseline === 'no', finalNote: fs.note || '' };
+        row.detail = notes.join(' ');
+        if (row.state === 'bad') issues.push(row.chip + ': ' + st.label);
+        return row;
+      });
+      const extras = rEls.filter(e => !known(e) || !steps.some(s => s.key === e.key)).map(e => ({ label: e.label || 'Unlabeled step', start: e.start, detail: e.flag || e.observed || '' }));
+      for (const x of extras) issues.push('Extra step: ' + x.label + ' at ' + t2(x.start) + ' s');
+      const fs = (run && run.finalState) || {};
+      if (fs.matchesBaseline === 'no') issues.push('Finished build differs from the standard');
+      const copied = run !== std && rEls.length > 0 && signature(run) === signature(std);
+      const reported = (run && run.status) || '';
+      const status = copied || !rEls.length || reported === 'INSUFFICIENT_INFORMATION' ? 'INSUFFICIENT_INFORMATION'
+        : issues.length || reported === 'POSSIBLE_DEVIATION' ? 'POSSIBLE_DEVIATION' : 'NORMAL';
+      return {
+        standardId: (std && std.id) || '', steps: rows, extras, issues, timing: timingNotes, timingCounts: !!timing.countsAsDeviation, unclear,
+        finalDiffers: fs.matchesBaseline === 'no', finalNote: fs.note || '', copied, status, reported, raised: !!reported && status !== reported
+      };
+    }
+    // Another run with exactly the same steps and times but a different recording: one was copied.
+    function findCopy(run, others) {
+      if (!work(run).length) return null;
+      const sig = signature(run), v = run.video || {};
+      const sameVideo = o => { const w = o.video || {}; return v.sha256 && w.sha256 ? v.sha256 === w.sha256 : !!(v.assetId && v.assetId === w.assetId); };
+      return (others || []).find(o => o !== run && (!run.id || o.id !== run.id) && work(o).length && signature(o) === sig && !sameVideo(o)) || null;
+    }
+    return { TIMING, METHOD, compare, signature, findCopy };
+  })();
+  // ===== END standard-check =====
+  const procedureCheck = (run, ref) => StandardCheck.compare(run, ref);
+  // The status shown for a run: its saved verdict, raised when the standard check finds a step
+  // problem the verdict didn't count, or lowered to "not checked" when its steps are a copy.
+  function shownStatus(run) {
+    const ref = refFor(run);
+    if (!ref || !hasEls(run)) return run.status;
+    if (isUntimed(run, ref) || isUntimed(ref, null)) return 'INSUFFICIENT_INFORMATION';
+    return StandardCheck.compare(run, ref).status;
   }
   function procedureHtml(run, ref) {
     const pc = procedureCheck(run, ref);
     const n = pc.issues.length;
     const un = untimedNote(run, ref);
     if (un) return '<section class="sec" id="proc"><div class="sec-h"><h2>Procedure check</h2></div><div class="panel pad sec"><div class="proc-banner unsure" role="alert">' + ICON.na + '<div><b>Not checked · ' + (isUntimed(run, ref) ? 'this run was' : 'the standard was') + ' never analyzed</b><p>' + esc(un) + ' Analyze the video with Claude, or open Edit times and set each step from the video.</p></div></div>' + (writable() ? '<div class="actions"><button class="btn primary" type="button" data-act="edit">Set the times from the video</button></div>' : '') + '</div></section>';
-    let h = '<section class="sec" id="proc"><div class="sec-h"><h2>Procedure check</h2><span class="note">Each step of ' + esc(runName(ref)) + ' (the standard), in order · speed alone is not an issue</span></div><div class="panel pad sec">';
-    if (n) h += '<div class="proc-banner bad" role="alert">' + ICON.warn + '<div><b>Procedure differs from the standard · ' + n + ' issue' + (n === 1 ? '' : 's') + '</b><p>' + esc(pc.issues.join(' · ')) + '. Check the assembly before it moves on; this is a possible deviation for a person to confirm.</p></div></div>';
+    const twin = pc.copied ? ref : StandardCheck.findCopy(run, S.runs);
+    if (twin) return '<section class="sec" id="proc"><div class="sec-h"><h2>Procedure check</h2></div><div class="panel pad sec"><div class="proc-banner unsure" role="alert">' + ICON.na + '<div><b>Not checked · steps copied from ' + esc(runName(twin)) + '</b><p>Every step and time in this run is exactly the same as in ' + esc(runName(twin)) + (twin === ref ? ' (the standard)' : '') + ', which is a different recording. The times were copied, not read from this video, so nothing in it was checked. Analyze the video, or open Edit times and set each step from the video.</p></div></div>' + (writable() ? '<div class="actions"><button class="btn primary" type="button" data-act="edit">Set the times from the video</button></div>' : '') + '</div></section>';
+    let h = '<section class="sec" id="proc"><div class="sec-h"><h2>Procedure check</h2><span class="note">Each step of ' + esc(runName(ref)) + ' (the standard), in order · ' + (pc.timingCounts ? 'big timing differences count as issues' : 'speed alone is not an issue') + '</span></div><div class="panel pad sec">';
+    if (n) h += '<div class="proc-banner bad" role="alert">' + ICON.warn + '<div><b>Procedure differs from the standard · ' + n + ' issue' + (n === 1 ? '' : 's') + '</b><p>' + esc(pc.issues.join(' · ')) + '. Check the assembly before it moves on; this is a possible deviation for a person to confirm.' + (pc.raised ? ' The saved verdict said ' + esc((STATUS[pc.reported] || {}).label || pc.reported) + '; the step data overrides it.' : '') + '</p></div></div>';
     else if (pc.unclear) h += '<div class="proc-banner unsure">' + ICON.na + '<div><b>Procedure matches the standard · ' + pc.unclear + ' step' + (pc.unclear === 1 ? '' : 's') + ' unclear</b><p>Every step was seen once and in order. Some steps were partly hidden from the camera.</p></div></div>';
     else h += '<div class="proc-banner ok">' + ICON.ok + '<div><b>Procedure matches the standard</b><p>Every step was seen once, in the standard order, done the same way.</p></div></div>';
     h += '<ol class="proc-list">';
@@ -1105,7 +1184,9 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     }
     for (const x of pc.extras) h += '<li class="bad"><span class="pn">+</span><span class="pt">' + esc(x.label) + '</span><span class="chip p-bad">Extra step</span><span class="pd">' + esc('Not in the standard. At ' + fmtT(x.start) + ' s.' + (x.detail ? ' ' + x.detail : '')) + '</span></li>';
     h += '<li class="' + (pc.finalDiffers ? 'bad' : 'ok') + '"><span class="pn">✓</span><span class="pt">Finished build</span><span class="chip ' + (pc.finalDiffers ? 'p-bad">Differs' : (run.finalState || {}).matchesBaseline === 'yes' ? 'p-ok">Matches' : 'p-unclear">Not confirmed') + '</span><span class="pd">' + esc(pc.finalNote) + '</span></li>';
-    return h + '</ol></div></section>';
+    h += '</ol>';
+    if (pc.timing.length) h += '<div class="sec"><span class="eyebrow">Timing differences · ' + (pc.timingCounts ? 'counted as issues' : 'listed, not counted as deviations') + '</span><ul class="diffs">' + pc.timing.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul><p class="muted" style="font-size:13px">Listed when a step differs from the standard by more than ' + StandardCheck.TIMING.minS.toFixed(1) + ' s and by more than ' + Math.round(StandardCheck.TIMING.ratio * 100) + '% of its time.</p></div>';
+    return h + '</div></section>';
   }
 
   async function ccAnalyze(btn) {
@@ -1113,6 +1194,9 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     if (!d || d.busy) return;
     if (!S.assets) { d.error = 'Sending a run to Claude Code needs Editor access, so the video can be stored for it.'; renderNew(); return; }
     if (!d.videoAssetId && d.fileSize > MAX_ASSET) { d.error = 'This video is over 20 MB, so it can’t be stored for Claude Code. Trim it to one cycle and try again.'; renderNew(); return; }
+    if (d.shaReady) await d.shaReady;
+    const same = d.sha256 && S.runs.find(r => r.video && r.video.sha256 === d.sha256);
+    if (same) { d.error = 'This exact video is already ' + runName(same) + '. Record a new cycle, or open ' + runName(same) + '.'; renderNew(); return; }
     d.busy = true;
     if (btn) { btn.disabled = true; btn.textContent = 'Storing the video…'; }
     const now = new Date().toISOString();
@@ -1128,7 +1212,7 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
       id = 'run-' + String(number).padStart(3, '0') + '-' + uid().slice(0, 4);
       await S.db.collection('runs').doc(id).set({
         number, label: String(d.label || '').trim(), condition: String(d.condition || '').trim(), createdAt: now,
-        video: { assetId: d.videoAssetId, fileName: d.fileName, durationS: d.meta.durationS, width: d.meta.width, height: d.meta.height },
+        video: Object.assign({ assetId: d.videoAssetId, fileName: d.fileName, durationS: d.meta.durationS, width: d.meta.width, height: d.meta.height }, d.sha256 ? { sha256: d.sha256 } : {}),
         status: 'INSUFFICIENT_INFORMATION', statusNote: '', elements: [], processData: [], limitations: [],
         source: { method: 'claude-code' }, analysis: { state: 'queued', mode: 'full', requestedAt: now },
         compareToRunId: d.compareTo || (baseline() || {}).id || ''
@@ -1208,7 +1292,7 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     let h = '<div><button class="back" type="button" data-go="runs">← All runs</button></div>';
     h += '<div class="head"><div><div class="eyebrow">' + esc(fmtDate(run.createdAt)) + ' · ' + esc(sourceLabel(run)) + '</div><h1>' + esc(runName(run)) + (run.label ? ' · ' + esc(run.label) : '') + ' ' + (isB ? '<span class="tag">Baseline</span>' : '') + '</h1>';
     if (run.condition) h += '<p class="sub">What changed: ' + esc(run.condition) + '</p>';
-    h += '</div><div class="actions">' + statusPill(run.status);
+    h += '</div><div class="actions">' + statusPill(shownStatus(run));
     if (writable()) {
       h += '<button class="btn sm" type="button" data-act="edit">Edit times</button>';
       if (!isB) h += '<button class="btn sm" type="button" data-act="make-baseline">Make baseline</button>';
@@ -1354,7 +1438,7 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
       const isB = base && r.id === base.id;
       for (const e of elementsOf(r)) {
         const bd = e.key && fin(bmap[e.key]) ? bmap[e.key] : null;
-        rows.push([r.number, r.label, isB ? 'yes' : 'no', r.createdAt, r.condition, fmtT(r.cycle && r.cycle.start), fmtT(r.cycle && r.cycle.end), fmtT(cycleTime(r)), r.status, e.key, e.label, e.kind, fmtT(e.start), fmtT(e.end), fmtT(dur(e)), bd == null ? '' : fmtT(bd), bd == null || isB ? '' : fmtT(dur(e) - bd), e.flagType || 'none', e.flag, e.observed].map(csvCell).join(','));
+        rows.push([r.number, r.label, isB ? 'yes' : 'no', r.createdAt, r.condition, fmtT(r.cycle && r.cycle.start), fmtT(r.cycle && r.cycle.end), fmtT(cycleTime(r)), shownStatus(r), e.key, e.label, e.kind, fmtT(e.start), fmtT(e.end), fmtT(dur(e)), bd == null ? '' : fmtT(bd), bd == null || isB ? '' : fmtT(dur(e) - bd), e.flagType || 'none', e.flag, e.observed].map(csvCell).join(','));
       }
     }
     return rows.join('\n') + '\n';
@@ -1448,6 +1532,13 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
     return new Promise(r => c.toBlob(r, 'image/jpeg', q));
   }
+  // SHA-256 of the recording as captured. Needs a secure context (https or localhost); null elsewhere.
+  async function fileSha256(file) {
+    try {
+      const h = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+      return Array.from(new Uint8Array(h), b => b.toString(16).padStart(2, '0')).join('');
+    } catch (e) { return null; }
+  }
   async function loadFile(file) {
     if (!file.type.startsWith('video/') && !/\.(mov|mp4|m4v|webm)$/i.test(file.name)) {
       S.draft = { stage: 'pick', error: '“' + file.name + '” isn’t a video file. Choose an MP4 or MOV.' };
@@ -1457,6 +1548,7 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     const url = URL.createObjectURL(file);
     S.draft = { mode: 'new', stage: 'pick', file, objectUrl: url, videoSrc: url, fileName: file.name, fileSize: file.size, label: '', condition: '', dirty: true };
     const d = S.draft;
+    d.shaReady = fileSha256(file).then(h => { d.sha256 = h; return h; });
     const V = $('#view');
     if (V) V.innerHTML = '<div class="panel empty" aria-busy="true"><p class="ink2">Opening “' + esc(file.name) + '”…</p></div>';
     let v = null, firstErr = '';
@@ -1565,9 +1657,9 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
   function baselinePromptBlock(base) {
     const lines = [];
     const els = elementsOf(base);
-    lines.push('key | kind | element | baseline start–end (s) | baseline duration (s)');
-    for (const e of els) lines.push([e.key, e.kind, e.label, fmtT(e.start) + '–' + fmtT(e.end), fmtT(dur(e))].join(' | '));
-    lines.push('Baseline cycle: ' + fmtT(base.cycle && base.cycle.start) + ' → ' + fmtT(base.cycle && base.cycle.end) + ' s (cycle time ' + fmtT(cycleTime(base)) + ' s, from first hand entering to both hands leaving).');
+    // No times: this run is timed from its own frames, and reference times only invite copying.
+    lines.push('key | kind | element | how it was done in the reference');
+    for (const e of els) lines.push([e.key, e.kind, e.label, e.observed || ''].join(' | '));
     if (base.finalState && base.finalState.note) lines.push('Baseline finished state: ' + base.finalState.note);
     return lines.join('\n');
   }
@@ -1588,14 +1680,14 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
       '',
       'TASK',
       '1. Find the cycle start (first hand enters the work area or a part first moves) and the cycle end (both hands have left and the assembly is at rest).',
-      '2. Break the visible work into elements in time order. Reuse a baseline key when it is the same action. Use key "other" for anything new: a repeated action, a re-grip, a dropped part, an extra press, an interruption. A repeated element gets its own row. A pause inside the cycle is kind "idle" with key "other" and label "Pause". Include idle_pre and idle_post rows when the video shows time before or after the cycle. Elements may overlap when two hands work at once (like hold_plate in the baseline).',
+      '2. Break the visible work into elements in time order, timed only from these frames. Reuse a baseline key only when it is the same action done the same way; a step done differently keeps its key but gets flagType "deviation". If a reference step does not happen, leave it out (do not add a row for it). Use key "other" for anything new: a repeated action, a re-grip, a dropped part, an extra press, an interruption. A repeated element gets its own row. A pause inside the cycle is kind "idle" with key "other" and label "Pause". Include idle_pre and idle_post rows when the video shows time before or after the cycle. Elements may overlap when two hands work at once (like hold_plate in the baseline).',
       '3. Give times in seconds with 2 decimals, read from the frame labels.',
       '4. Compare with the reference: missing, extra, repeated or reordered elements, elements done a clearly different way, and the finished state seen in the last frames.',
       '5. Status: POSSIBLE_DEVIATION when something visibly differs from the reference (an element missing, added, repeated or reordered; an element done a clearly different way, such as a part held in the air instead of on the table; or a different finished state). Give each element behind it flagType "deviation" with the reason in "flag". INSUFFICIENT_INFORMATION when the video does not show enough to judge the sequence or finished state. NORMAL otherwise; speed differences alone are not deviations. A difference you suspect but cannot confirm is flagged "unclear" and does not make a deviation by itself. statusNote opens with the main reason.',
       '',
       'Reply with only one JSON object in exactly this shape (example values):',
-      '{"cycle":{"start":0.25,"end":6.0},"status":"NORMAL","statusNote":"One or two sentences on why.","elements":[{"key":"pick_pink","label":"Reach and grasp pink 1×6 brick","kind":"reach","start":0.25,"end":0.75,"observed":"What is visibly seen in these frames.","flagType":"none","flag":""}],"finalState":{"matchesBaseline":"yes","note":"What the finished assembly looks like versus the baseline."},"processData":["Data points this video could generate automatically."],"limitations":["What cannot be determined from this video."],"differences":["One short line per concrete difference from the reference, with times or positions; mark unconfirmed ones (unconfirmed)."]}',
-      'status is one of NORMAL, POSSIBLE_DEVIATION, INSUFFICIENT_INFORMATION. kind is one of reach, position, press, release, hold, idle, other. flagType is one of none, note, unclear, deviation. matchesBaseline is one of yes, no, unclear. Keep "observed" under 200 characters and "flag" under 120.'
+      '{"cycle":{"start":0.25,"end":6.0},"status":"NORMAL","statusNote":"One or two sentences on why.","elements":[{"key":"pick_pink","label":"Reach and grasp pink 1×6 brick","kind":"reach","start":0.25,"end":0.75,"observed":"What is visibly seen in these frames.","flagType":"none","flag":"","method":{"hand":"right","offTable":"no"}}],"finalState":{"matchesBaseline":"yes","note":"What the finished assembly looks like versus the baseline."},"processData":["Data points this video could generate automatically."],"limitations":["What cannot be determined from this video."],"differences":["One short line per concrete difference from the reference, with times or positions; mark unconfirmed ones (unconfirmed)."]}',
+      'status is one of NORMAL, POSSIBLE_DEVIATION, INSUFFICIENT_INFORMATION. kind is one of reach, position, press, release, hold, idle, other. flagType is one of none, note, unclear, deviation. method.hand (which hand does the step) is one of left, right, both, unclear; method.offTable (does the part or plate being worked leave the table) is one of yes, no, unclear. matchesBaseline is one of yes, no, unclear. Keep "observed" under 200 characters and "flag" under 120.'
     ].join('\n');
   }
   async function analyze() {
@@ -1689,6 +1781,11 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
       default: return 'Claude couldn’t finish (connection or service problem). Try again, or time the run by hand.';
     }
   }
+  function cleanMethod(m) {
+    const out = {};
+    for (const f of Object.keys(StandardCheck.METHOD)) if (m && (StandardCheck.METHOD[f].values.includes(m[f]) || m[f] === 'unclear')) out[f] = m[f];
+    return Object.keys(out).length ? out : undefined;
+  }
   function fromClaude(d, r, dt) {
     const durS = d.meta.durationS;
     const num = (x, def) => { const n = Number(x); return Number.isFinite(n) ? n : def; };
@@ -1699,12 +1796,13 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
       if (en < s) { const t = s; s = en; en = t; }
       const c = cat.find(x => x.key === (e && e.key));
       const kind = KINDS[e && e.kind] ? e.kind : c ? c.kind : 'other';
-      return { uid: uid(), key: c ? c.key : 'other', label: String((e && e.label) || (c && c.label) || 'Element').slice(0, 90), kind, start: s, end: en, observed: String((e && e.observed) || '').slice(0, 400), flagType: FLAGS[e && e.flagType] ? e.flagType : 'none', flag: String((e && e.flag) || '').slice(0, 240) };
+      return { uid: uid(), key: c ? c.key : 'other', label: String((e && e.label) || (c && c.label) || 'Element').slice(0, 90), kind, start: s, end: en, observed: String((e && e.observed) || '').slice(0, 400), flagType: FLAGS[e && e.flagType] ? e.flagType : 'none', flag: String((e && e.flag) || '').slice(0, 240), method: cleanMethod(e && e.method) };
     }).sort(byStart);
     const cyc = r && r.cycle ? r.cycle : {};
     const work = els.filter(e => e.kind !== 'idle');
     d.cycle = { start: ct(num(cyc.start, work.length ? work[0].start : 0)), end: ct(num(cyc.end, work.length ? Math.max(...work.map(e => e.end)) : durS)) };
-    d.elements = els.length ? els : templateElements();
+    if (!els.length) throw { code: 'empty_completion' };
+    d.elements = els;
     d.status = STATUS[r && r.status] ? r.status : 'INSUFFICIENT_INFORMATION';
     d.statusNote = String((r && r.statusNote) || '').slice(0, 600);
     const fs = (r && r.finalState) || {};
@@ -1714,21 +1812,20 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     d.differences = (Array.isArray(r && r.differences) ? r.differences : []).map(x => String(x).slice(0, 240)).slice(0, 12);
     d.source = { method: 'claude-page', note: 'Claude in page, contact sheets of frames every ' + dt.toFixed(2) + ' s, reviewed before saving', frameIntervalS: dt, analyzedAt: new Date().toISOString() };
   }
+  // The standard's steps with blank times: every time must be read from this video.
   function templateElements() {
     const base = baseline();
-    const src = base ? elementsOf(base) : DEFAULT_CATALOG.map((c, i) => Object.assign({ start: i * 0.5, end: i * 0.5 + 0.5 }, c));
-    return src.map(e => ({ uid: uid(), key: e.key, label: e.label, kind: e.kind, start: e.start, end: e.end, observed: '', flagType: 'none', flag: '' }));
+    const src = base ? elementsOf(base) : DEFAULT_CATALOG;
+    return src.map(e => ({ uid: uid(), key: e.key, label: e.label, kind: e.kind, start: NaN, end: NaN, observed: '', flagType: 'none', flag: '' }));
   }
-  const elSig = els => JSON.stringify((els || []).map(e => [e.key, r2(e.start), r2(e.end)]));
+  // Steps without a start sort after the timed ones and keep their order.
+  const byStartUnsetLast = (a, b) => (fin(a.start) ? 0 : 1) - (fin(b.start) ? 0 : 1) || (fin(a.start) && fin(b.start) ? byStart(a, b) : 0);
   function startManual() {
     const d = S.draft;
     const base = baseline();
     d.elements = templateElements();
-    const durS = d.meta.durationS;
-    for (const e of d.elements) { e.start = Math.min(e.start, durS); e.end = Math.min(e.end, durS); }
-    d.cycle = base && base.cycle ? { start: Math.min(base.cycle.start, durS), end: Math.min(base.cycle.end, durS) } : { start: 0, end: durS };
-    d.status = 'INSUFFICIENT_INFORMATION'; d.statusNote = '';
-    d.templateSig = elSig(d.elements);
+    d.cycle = { start: NaN, end: NaN };
+    d.status = 'NORMAL'; d.statusNote = '';
     d.finalState = { matchesBaseline: 'unclear', note: '' };
     d.processData = base && Array.isArray(base.processData) ? base.processData.join('\n') : '';
     d.limitations = 'Times set by hand from the video, about ±0.1 s.';
@@ -1754,8 +1851,8 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
         mode: 'edit', stage: 'review', runId: run.id, number: run.number, createdAt: run.createdAt,
         label: run.label || '', condition: run.condition || '', fileName: v.fileName || '', videoSrc: v.assetId ? blob(v.assetId) : '', video: clone(v),
         meta: { durationS: v.durationS || Math.max(1, ...elementsOf(run).map(e => e.end)), width: v.width, height: v.height },
-        cycle: hasEls ? clone(run.cycle || { start: 0, end: 0 }) : clone((base && base.cycle) || { start: 0, end: 1 }),
-        status: hasEls ? (run.status || 'NORMAL') : 'INSUFFICIENT_INFORMATION', statusNote: hasEls ? (run.statusNote || '') : '',
+        cycle: hasEls ? clone(run.cycle || { start: 0, end: 0 }) : { start: NaN, end: NaN },
+        status: hasEls ? (run.status || 'NORMAL') : 'NORMAL', statusNote: hasEls ? (run.statusNote || '') : '',
         elements: hasEls ? elementsOf(run).map(e => Object.assign(clone(e), { uid: uid() })) : templateElements(),
         finalState: clone(run.finalState || { matchesBaseline: 'unclear', note: '' }),
         processData: (run.processData || []).join('\n'), limitations: hasEls ? (run.limitations || []).join('\n') : 'Times set by hand from the video, about ±0.1 s.',
@@ -1763,7 +1860,6 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
         manualHint: !hasEls, dirty: !hasEls,
         compareTo: run.compareToRunId || '', comparedToRunId: run.comparedToRunId || '', differences: Array.isArray(run.differences) ? run.differences.slice() : null
       };
-      if (!hasEls || isUntimed(run, base)) S.draft.templateSig = elSig(S.draft.elements);
       if (v.assetId) loadVideo(blob(v.assetId)).then(gv => { if (S.draft && S.draft.runId === id) S.draft.grabVid = gv; }, () => {});
     }
     renderEditor();
@@ -1773,7 +1869,7 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     const V = $('#view');
     const cat = catalog();
     const isNew = d.mode === 'new';
-    let h = '<div class="head"><div><div class="eyebrow">' + (isNew ? 'New run · Run ' + nextNumber() + ' · review' : 'Editing Run ' + esc(String(d.number))) + '</div><h1>' + (isNew ? 'Check the event log' : 'Edit times') + '</h1><p class="sub">' + (d.source && d.source.method === 'claude-page' && isNew ? 'Claude’s reading of the video is below. Play it back, fix any boundary with the Set buttons, and save when it matches what you see.' : d.manualHint ? 'Elements are copied from the baseline with its times. Scrub to each boundary and press the Set button next to that field.' : 'Adjust any boundary, flag or note, then save.') + '</p></div></div>';
+    let h = '<div class="head"><div><div class="eyebrow">' + (isNew ? 'New run · Run ' + nextNumber() + ' · review' : 'Editing Run ' + esc(String(d.number))) + '</div><h1>' + (isNew ? 'Check the event log' : 'Edit times') + '</h1><p class="sub">' + (d.source && d.source.method === 'claude-page' && isNew ? 'Claude’s reading of the video is below. Play it back, fix any boundary with the Set buttons, and save when it matches what you see.' : d.manualHint ? 'The standard’s steps are listed with blank times. Scrub to each boundary and press the Set button next to that field. Remove any step that wasn’t done, and add any step that was done extra.' : 'Adjust any boundary, flag or note, then save.') + '</p></div></div>';
     h += '<div class="editor"><div class="ed-left">';
     h += d.videoSrc ? '<div class="player"><video id="ed-video" src="' + esc(d.videoSrc) + '" controls playsinline preload="auto"></video></div>' : '<div class="vid-missing">No video stored for this run, so times can be typed but not set from playback.</div>';
     if (d.videoSrc) h += '<div class="ctrls"><button class="btn sm" type="button" data-act="nudge" data-d="-0.1">−0.1 s</button><button class="btn sm" type="button" data-act="nudge" data-d="-0.0333">−1 fr</button><span class="tnow" id="t-now" style="min-width:64px;text-align:center">0.00 s</span><button class="btn sm" type="button" data-act="nudge" data-d="0.0333">+1 fr</button><button class="btn sm" type="button" data-act="nudge" data-d="0.1">+0.1 s</button><button class="btn sm" type="button" data-act="speed" id="speed-btn">0.5×</button></div>';
@@ -1863,7 +1959,7 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
   function resortIfNeeded() {
     const d = S.draft;
     const before = d.elements.map(e => e.uid).join();
-    d.elements.sort(byStart);
+    d.elements.sort(byStartUnsetLast);
     if (d.elements.map(e => e.uid).join() !== before) renderEls();
   }
   async function saveDraft() {
@@ -1871,14 +1967,25 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     const msg = $('#save-msg'), btn = $('#save-btn');
     const say = (t, err) => { if (msg) { msg.textContent = t; msg.classList.toggle('err', !!err); } };
     // validate
-    if (!fin(d.cycle.start) || !fin(d.cycle.end) || d.cycle.end <= d.cycle.start) { say('Set a cycle end later than the cycle start.', true); return; }
-    const bad = d.elements.find(e => !fin(e.start) || !fin(e.end) || e.end < e.start);
-    if (bad) { say('“' + (bad.label || 'An element') + '” needs an end time at or after its start.', true); return; }
-    if (!d.elements.length) { say('Add at least one element.', true); return; }
-    if (d.templateSig && elSig(d.elements) === d.templateSig && !d.saveUntimed) {
-      if (msg) { msg.classList.add('err'); msg.innerHTML = 'None of the step times were set from the video yet. Set each step with the Set buttons, or save the video now and have it analyzed later. <button class="btn sm" type="button" data-act="save-untimed">Save as not analyzed</button>'; }
+    const unset = d.elements.filter(e => !fin(e.start) || !fin(e.end));
+    if (unset.length) {
+      const later = d.mode === 'new' && S.assets ? ' Or keep the video and have it analyzed later. <button class="btn sm" type="button" data-act="save-untimed">Save as not analyzed</button>' : '';
+      if (msg) { msg.classList.add('err'); msg.innerHTML = esc(unset.length + ' step' + (unset.length === 1 ? ' has' : 's have') + ' no time yet, starting with “' + (unset[0].label || 'a step') + '”. Set each from the video, and remove (×) any step that wasn’t done.') + later; }
       return;
     }
+    if (!fin(d.cycle.start) || !fin(d.cycle.end) || d.cycle.end <= d.cycle.start) { say('Set a cycle end later than the cycle start.', true); return; }
+    const bad = d.elements.find(e => e.end < e.start);
+    if (bad) { say('“' + (bad.label || 'An element') + '” needs an end time at or after its start.', true); return; }
+    if (!d.elements.length) { say('Add at least one element.', true); return; }
+    if (d.mode === 'new' && d.shaReady) await d.shaReady;
+    const sameVid = d.mode === 'new' && d.sha256 && S.runs.find(r => r.video && r.video.sha256 === d.sha256);
+    if (sameVid) { say('This exact video is already ' + runName(sameVid) + '. Record a new cycle, or edit ' + runName(sameVid) + ' instead.', true); return; }
+    const editing = d.mode === 'edit' ? S.runs.find(r => r.id === d.runId) : null;
+    const ref = d.mode === 'new' ? findDone(d.compareTo) || baseline() : editing ? refFor(editing) : null;
+    const asRun = { id: d.runId, status: d.status, elements: d.elements, finalState: d.finalState, video: Object.assign({}, d.video, d.videoAssetId ? { assetId: d.videoAssetId } : {}, d.sha256 ? { sha256: d.sha256 } : {}) };
+    const check = ref && ref.id !== d.runId ? StandardCheck.compare(asRun, ref) : null;
+    const twin = check && check.copied ? ref : StandardCheck.findCopy(asRun, S.runs);
+    if (twin) { say('Every step and time here is exactly the same as in ' + runName(twin) + ', a different recording. Set the times from this video before saving.', true); return; }
     const unnamed = d.elements.find(e => !String(e.label || '').trim());
     if (unnamed) { say('Give every “Other” element a short description.', true); return; }
     if (btn) btn.disabled = true;
@@ -1889,7 +1996,7 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     d.elements.sort(byStart);
     const v = d.grabVid;
     const notes = [];
-    let videoInfo = isNew ? { fileName: d.fileName, durationS: d.meta.durationS, width: d.meta.width, height: d.meta.height } : clone(d.video || {});
+    let videoInfo = isNew ? Object.assign({ fileName: d.fileName, durationS: d.meta.durationS, width: d.meta.width, height: d.meta.height }, d.sha256 ? { sha256: d.sha256 } : {}) : clone(d.video || {});
     try {
       if (S.assets && v) {
         const need = d.elements.filter(e => !e.frameAssetId || e.frameDirty);
@@ -1937,9 +2044,11 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
       createdAt: d.createdAt || new Date().toISOString(),
       video: videoInfo,
       cycle: { start: r2(d.cycle.start), end: r2(d.cycle.end) },
-      status: d.saveUntimed ? 'INSUFFICIENT_INFORMATION' : d.status, statusNote: d.saveUntimed ? 'Not analyzed yet: the video is saved, but no step was timed or checked against the standard.' : String(d.statusNote || '').trim(),
+      status: check ? check.status : d.status,
+      statusNote: (check && check.raised ? 'Standard check: ' + check.issues.join('; ') + '. ' : '') + String(d.statusNote || '').trim(),
       elements: d.elements.map(e => {
         const o = { key: e.key || 'other', label: String(e.label || '').trim(), kind: e.kind || 'other', start: r2(e.start), end: r2(e.end), observed: String(e.observed || '').trim(), flagType: e.flagType || 'none', flag: String(e.flag || '').trim() };
+        if (e.method) o.method = e.method;
         if (e.frameAssetId) o.frameAssetId = e.frameAssetId;
         if (fin(e.frameT)) o.frameT = e.frameT;
         return o;
@@ -1949,8 +2058,9 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
         d.finalState.closeupAssetId ? { closeupAssetId: d.finalState.closeupAssetId } : {}),
       processData: String(d.processData || '').split('\n').map(s => s.trim()).filter(Boolean),
       limitations: String(d.limitations || '').split('\n').map(s => s.trim()).filter(Boolean),
-      source: Object.assign({}, d.source || {}, isNew ? {} : { editedAt: new Date().toISOString() }, d.templateSig ? { untimed: !!d.saveUntimed } : {})
+      source: Object.assign({}, d.source || {}, isNew ? {} : { editedAt: new Date().toISOString() })
     };
+    if (check) doc.check = { against: ref.id, status: check.status, issues: check.issues, timing: check.timing, checkedAt: new Date().toISOString() };
     const cmpTo = d.compareTo || (isNew ? (baseline() || {}).id : '');
     if (cmpTo) doc.compareToRunId = cmpTo;
     if (d.comparedToRunId) doc.comparedToRunId = d.comparedToRunId;
@@ -2163,14 +2273,14 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
         const t = r2(v ? v.currentTime || 0 : (d.cycle.end || 0));
         const ne = { uid: uid(), key: 'other', label: '', kind: 'other', start: t, end: r2(Math.min(t + 0.3, d.meta.durationS || t + 0.3)), observed: '', flagType: 'note', flag: '' };
         d.elements.push(ne); d.dirty = true;
-        d.elements.sort(byStart);
+        d.elements.sort(byStartUnsetLast);
         renderEls(); refreshDerived();
         const inp = document.getElementById('el-' + ne.uid + '-label'); if (inp) inp.focus();
         break;
       }
       case 'rm-el': if (d) { d.elements = d.elements.filter(x => x.uid !== el.dataset.uid); d.dirty = true; renderEls(); refreshDerived(); } break;
       case 'save': if (d && !d.saving) saveDraft(); break;
-      case 'save-untimed': if (d && !d.saving) { d.saveUntimed = true; saveDraft(); } break;
+      case 'save-untimed': if (d && !d.saving && d.mode === 'new') ccAnalyze(el); break;
       case 'cancel-edit': if (d && d.mode === 'edit') go('run', d.runId); else go('runs'); break;
       case 'leave-yes': { const to = S.leaveTo; S.leaveTo = null; if (d) d.dirty = false; go(to ? to.view : 'runs', to && to.id, true); break; }
       case 'leave-no': { S.leaveTo = null; const b = $('#leave'); if (b) b.remove(); break; }

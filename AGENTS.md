@@ -141,6 +141,14 @@ flags.** Time this video from its own frames, even if it looks identical.
   ("Compared with Run 1: ...").
 - `differences`: one short line per concrete difference, each with its evidence (times, stud
   rows, which hand). `[]` when there are none.
+- **The standard check backs this up.** `finish` compares your elements with the reference's
+  (the same code the web app runs, `StandardCheck` in the app file). A missing, extra,
+  repeated or out-of-order step, a `deviation` flag, a `method` that differs from the
+  reference's, or `matchesBaseline: "no"` makes the run POSSIBLE_DEVIATION even if you wrote
+  NORMAL, and the issues are prepended to `statusNote` and saved in `check`. Big timing
+  differences (over 0.3 s and over 50% of the reference step) are listed in `check.timing`,
+  not counted as deviations. `finish` refuses a result whose steps and times exactly match
+  another run's: that means they were copied, not read from this video.
 
 ### 6. Write the result
 
@@ -160,7 +168,7 @@ Full mode:
   "elements": [
     { "key": "pick_pink", "label": "Reach and grasp pink 1×6 brick", "kind": "reach",
       "start": 0.70, "end": 1.50, "observed": "One hand enters from the top, closes on the pink brick and lifts it.",
-      "flagType": "none", "flag": "" }
+      "flagType": "none", "flag": "", "method": { "hand": "right", "offTable": "no" } }
   ],
   "finalState": { "matchesBaseline": "yes", "note": "What the finished assembly looks like versus the reference.",
                   "closeupAssetId": "<id printed by closeup>" },
@@ -171,7 +179,10 @@ Full mode:
 
 Every element needs `key`, `label`, `kind`, `start`, `end`, `observed`, `flagType` and `flag`
 (idle rows too). Optional: `frameT` (when to take its frame) or `frameAssetId` (a frame you
-saved with `stills`). Keep `observed` under 200 characters and `flag` under 120. `flag` is
+saved with `stills`), and `method`: how the step was done, `hand` (`left`, `right`, `both`,
+`unclear`) and `offTable` (does the part or plate being worked leave the table: `yes`, `no`,
+`unclear`). Record `method` whenever you can see it; the check compares it with the
+reference's, never `unclear`. Keep `observed` under 200 characters and `flag` under 120. `flag` is
 `""` when `flagType` is `none`. `idle_post` ends at the video's duration (`claim` prints it).
 
 Compare mode (the run already has elements): view this run's and the reference's
