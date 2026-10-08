@@ -10,6 +10,7 @@
   --accent: #a3522a; --accent-2: #8a4321; --on-accent: #ffffff; --accent-wash: rgba(163, 82, 42, .08);
   --k-reach: #2a78d6; --k-position: #eb6834; --k-press: #1baf7a; --k-release: #eda100; --k-hold: #e87ba4; --k-idle: #c9ccc9; --k-other: #8d9197;
   --good: #0ca30c; --good-ink: #006300; --warn: #fab219; --warn-ink: #7a5200; --crit: #d03b3b; --crit-ink: #b02e2e;
+  --dv-fast: #3f6fb0; --dv-slow: #c2571f; --rec: #d03b3b;
   --tip-bg: #15181b; --tip-fg: #f3f4f2;
   --shadow: 0 1px 2px rgba(21, 24, 27, .06);
   --f-ui: "Saira", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -22,6 +23,7 @@
     --accent: #dc8b55; --accent-2: #e9a273; --on-accent: #15181b; --accent-wash: rgba(220, 139, 85, .12);
     --k-reach: #3987e5; --k-position: #d95926; --k-press: #199e70; --k-release: #c98500; --k-hold: #d55181; --k-idle: #3a3f45; --k-other: #80858c;
     --good-ink: #3fbf3f; --warn-ink: #fab219; --crit-ink: #e66767;
+    --dv-fast: #6b98d6; --dv-slow: #e07a43; --rec: #e66767;
     --tip-bg: #eff1ef; --tip-fg: #15181b;
     --shadow: 0 1px 2px rgba(0, 0, 0, .35);
     color-scheme: dark;
@@ -33,6 +35,7 @@
   --accent: #dc8b55; --accent-2: #e9a273; --on-accent: #15181b; --accent-wash: rgba(220, 139, 85, .12);
   --k-reach: #3987e5; --k-position: #d95926; --k-press: #199e70; --k-release: #c98500; --k-hold: #d55181; --k-idle: #3a3f45; --k-other: #80858c;
   --good-ink: #3fbf3f; --warn-ink: #fab219; --crit-ink: #e66767;
+  --dv-fast: #6b98d6; --dv-slow: #e07a43; --rec: #e66767;
   --tip-bg: #eff1ef; --tip-fg: #15181b;
   --shadow: 0 1px 2px rgba(0, 0, 0, .35);
   color-scheme: dark;
@@ -323,6 +326,76 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
 /* Live camera test */
 .cam-view { width: 100%; max-height: 70vh; background: #000; border-radius: 8px; display: block; object-fit: contain; }
 .cam-err { font-family: var(--f-mono); font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cam-wrap { position: relative; }
+.rec-pill { position: absolute; top: 10px; left: 10px; display: inline-flex; align-items: center; gap: 7px; padding: 3px 10px; border-radius: 999px; background: rgba(0, 0, 0, .7); color: #fff; font: 600 13px/1.4 var(--f-mono); letter-spacing: .04em; }
+.rec-pill i { width: 9px; height: 9px; border-radius: 50%; background: var(--rec); animation: pulse 1s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .rec-pill i { animation: none; } }
+.btn.rec { background: var(--rec); border-color: var(--rec); color: #fff; }
+.btn.rec:hover { filter: brightness(.92); }
+.btn.rec .dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
+
+/* Deviation from the baseline */
+.dev { display: grid; gap: 22px; }
+.dev-sum { display: grid; grid-template-columns: minmax(220px, 1.4fr) repeat(3, minmax(130px, 1fr)); gap: 12px; }
+.dev-fig { display: grid; gap: 2px; align-content: start; padding: 12px 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); min-width: 0; }
+.dev-fig .v { font-family: var(--f-mono); font-size: 24px; font-weight: 500; line-height: 1.2; }
+.dev-fig .v small { font-size: 13px; color: var(--ink-2); font-weight: 400; }
+.dev-fig .s { font-size: 12.5px; color: var(--ink-2); }
+.dev-score .v { font-size: 34px; }
+.meter { position: relative; height: 10px; border-radius: 5px; background: var(--sunk); margin: 6px 0 2px; overflow: hidden; }
+.meter i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; background: var(--good); }
+.meter.warn i { background: var(--warn); }
+.meter.bad i { background: var(--crit); }
+.meter b { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--surface); }
+.meter-scale { position: relative; height: 14px; font: 10.5px/1 var(--f-mono); color: var(--muted); }
+.meter-scale span { position: absolute; transform: translateX(-50%); }
+.meter-scale span:first-child { transform: none; }
+.meter-scale span:last-child { transform: translateX(-100%); }
+.band { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 600; }
+.band svg { width: 12px; height: 12px; }
+.band.ok { color: var(--good-ink); } .band.warn { color: var(--warn-ink); } .band.bad { color: var(--crit-ink); }
+.dv { display: grid; }
+.dv-row { display: grid; grid-template-columns: minmax(0, 210px) minmax(0, 1fr) 118px; gap: 14px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.dv-row:last-child { border-bottom: 0; }
+.dv-row .lab { display: flex; gap: 8px; align-items: baseline; min-width: 0; font-size: 14px; }
+.dv-row .lab span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dv-row .lab .sw { transform: translateY(1px); }
+.dv-bar { position: relative; height: 20px; }
+.dv-bar::before { content: ""; position: absolute; left: 50%; top: -7px; bottom: -7px; width: 1px; background: var(--line-2); }
+.dv-bar i { position: absolute; top: 4px; height: 12px; min-width: 2px; }
+.dv-bar i.slow { left: 50%; background: var(--dv-slow); border-radius: 0 4px 4px 0; }
+.dv-bar i.fast { right: 50%; background: var(--dv-fast); border-radius: 4px 0 0 4px; }
+.dv-bar .chip { position: absolute; top: 0; left: 50%; transform: translateX(-50%); background: var(--surface); }
+.dv-val { text-align: right; font-family: var(--f-mono); font-size: 13.5px; line-height: 1.25; }
+.dv-val div + div { font-size: 11.5px; color: var(--muted); }
+.dv-axis { display: grid; grid-template-columns: minmax(0, 210px) minmax(0, 1fr) 118px; gap: 14px; font: 11px/1.3 var(--f-mono); color: var(--muted); padding-top: 6px; }
+.dv-axis .ax { display: flex; justify-content: space-between; }
+.dv-key { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--ink-2); }
+.dv-key span { display: inline-flex; align-items: center; gap: 6px; }
+.dv-key i { width: 14px; height: 10px; border-radius: 2px; display: inline-block; }
+.al { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; align-items: stretch; }
+.al-labs { display: grid; grid-template-rows: 34px 1fr 34px; font-size: 13px; line-height: 1.2; }
+.al-labs div { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+.al-labs b { font-weight: 600; }
+.al-labs span { color: var(--muted); font-size: 12px; }
+.al-plot svg { display: block; width: 100%; height: 130px; overflow: visible; }
+.al-plot .lane { fill: var(--surface-2); }
+.al-plot rect.el { fill: var(--c); stroke: var(--surface); stroke-width: 2px; vector-effect: non-scaling-stroke; }
+.al-plot rect.el.idle { fill: var(--k-idle); }
+.al-plot rect.miss { fill: none; stroke: var(--crit); stroke-width: 2px; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; }
+.al-plot rect.extra { stroke: var(--crit); stroke-width: 2.5px; }
+.al-plot line.link { stroke: var(--ink-2); stroke-opacity: .55; stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
+.al-plot line.link.bad { stroke: var(--crit); stroke-opacity: 1; stroke-width: 2.5px; }
+.al-plot line.link.far { stroke-opacity: .95; stroke-width: 2px; }
+.al-plot rect:hover { stroke: var(--ink); stroke-width: 2px; }
+.sbs { display: grid; grid-template-columns: repeat(2, minmax(0, 280px)); gap: 16px; }
+.sbs figure { margin: 0; display: grid; gap: 6px; align-content: start; }
+.sbs figcaption { font-size: 12.5px; color: var(--muted); }
+.sbs video { width: 100%; max-height: 52vh; border-radius: 6px; background: var(--sunk); display: block; }
+.tbl .mini { display: inline-block; width: 54px; height: 6px; border-radius: 3px; background: var(--sunk); vertical-align: 2px; margin-left: 8px; position: relative; overflow: hidden; }
+.tbl .mini i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--good); }
+.tbl .mini.warn i { background: var(--warn); }
+.tbl .mini.bad i { background: var(--crit); }
 
 @media (max-width: 900px) {
   .detail, .editor, .loaded { grid-template-columns: minmax(0, 1fr); }
@@ -348,6 +421,19 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
   .el .sub, .el .custom { grid-template-columns: minmax(0, 1fr); }
   .verdict { flex-direction: column; gap: 6px; }
   .cmp-pick select { min-width: 0; }
+  .dv-row { grid-template-columns: minmax(0, 1fr) 96px; gap: 4px 10px; }
+  .dv-row .lab { grid-column: 1; grid-row: 1; }
+  .dv-row .dv-val { grid-column: 2; grid-row: 1 / span 2; }
+  .dv-row .dv-bar { grid-column: 1; grid-row: 2; }
+  .dv-axis { grid-template-columns: minmax(0, 1fr) 96px; }
+  .dv-axis > div:first-child { display: none; }
+  .al { grid-template-columns: minmax(0, 1fr); }
+  .al-labs { grid-template-rows: none; grid-auto-flow: column; gap: 10px; }
+  .sbs { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+}
+@media (max-width: 900px) {
+  .dev-sum { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dev-score { grid-column: 1 / -1; }
 }
 </style>
 
@@ -605,8 +691,8 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     c.use('sample').then(async s => {
       S.sample = s;
       if (s) { try { S.sampleLimits = await s.limits(); } catch (e) { S.sampleLimits = null; S.diag.limitsErr = (e && e.code) || 'error'; } }
-      if (S.route.view === 'new' && S.draft && S.draft.stage === 'loaded') render();
-    }, () => { S.sample = null; });
+      if (S.route.view === 'new' && S.draft && S.draft.stage === 'loaded' && !maybeAutoAnalyze(S.draft)) render();
+    }, () => { S.sample = null; if (S.route.view === 'new' && S.draft && S.draft.stage === 'loaded') render(); });
     c.use('downloads').then(d => { S.downloads = d; }, () => {});
     c.use('mcp').then(m => {
       S.mcp = m;
@@ -669,7 +755,7 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     let h = '';
     if (v !== 'runs') h += '<button class="btn ghost" type="button" data-go="runs">All runs</button>';
     if (writable() && v !== 'new' && v !== 'edit') h += '<button class="btn primary" type="button" data-go="new">' + ICON.plus + 'New run</button>';
-    if (v !== 'camera') h += '<button class="btn ghost" type="button" data-go="camera">Camera test</button>';
+    if (v !== 'camera' && writable()) h += '<button class="btn ghost" type="button" data-go="camera">Record</button>';
     if (S.canWrite === false || S.readOnly) h += '<span class="ro">View only</span>';
     nav.innerHTML = h;
   }
@@ -799,7 +885,7 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
 
     // runs table
     h += '<section class="sec"><div class="sec-h"><h2>All runs</h2><span class="note">Click a run to open its event log and step frames</span></div>';
-    h += '<div class="panel tbl-wrap"><table class="tbl"><thead><tr><th>Run</th><th>Recorded</th><th>What changed</th><th class="num">Cycle</th><th class="num">vs baseline</th><th class="num">Elements</th><th>Procedure</th><th class="num">Flags</th><th>Status</th><th>Logged by</th></tr></thead><tbody>';
+    h += '<div class="panel tbl-wrap"><table class="tbl"><thead><tr><th>Run</th><th>Recorded</th><th>What changed</th><th class="num">Cycle</th><th class="num">vs baseline</th><th class="num">Off standard</th><th class="num">Elements</th><th>Procedure</th><th class="num">Flags</th><th>Status</th><th>Logged by</th></tr></thead><tbody>';
     for (const r of ordered) {
       const isB = r.id === base.id;
       const ct = cycleTime(r);
@@ -810,6 +896,8 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
       h += '<td class="ink2" style="min-width:160px">' + esc(r.condition || (isB ? 'Reference cycle' : '—')) + '</td>';
       h += '<td class="num">' + esc(fmtS(ct)) + '</td>';
       h += '<td class="num">' + (isB ? '<span class="muted">—</span>' : esc(fmtD(ct - baseCt)) + ' <span class="muted">' + esc(fmtPct(baseCt ? (ct - baseCt) / baseCt : null)) + '</span>') + '</td>';
+      const dvr = isB || deviationBlocked(r, base) ? null : deviationData(r, base);
+      h += '<td class="num">' + (!dvr || dvr.offPct == null ? '<span class="muted">—</span>' : '<span data-tip="' + esc(DEV_BANDS[dvr.band] + '\n' + fmtT(dvr.off) + ' s of step time differs from the baseline') + '">' + Math.round(dvr.offPct * 100) + '%<span class="mini ' + dvr.band + '"><i style="width:' + Math.min(100, dvr.offPct / 0.6 * 100).toFixed(0) + '%"></i></span></span>') + '</td>';
       h += '<td class="num">' + workEls(r).length + '</td>';
       h += '<td>' + (isB ? '<span class="muted">Standard</span>' : (pcs => isUntimed(r, base) || isUntimed(base, null) || pcs.copied || StandardCheck.findCopy(r, S.runs) ? '<span class="chip p-unclear" data-tip="Saved without analyzing the video, or its steps are a copy of another run">Not checked</span>' : pcs.issues.length ? '<span class="chip p-bad" data-tip="' + esc(pcs.issues.join('\n')) + '">' + pcs.issues.length + ' issue' + (pcs.issues.length === 1 ? '' : 's') + '</span>' : '<span class="chip p-ok">Matches</span>')(procedureCheck(r, base))) + '</td>';
       h += '<td class="num">' + flagCount(r) + '</td>';
@@ -1189,6 +1277,163 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     return h + '</div></section>';
   }
 
+  // ---------- deviation from the baseline (graphical) ----------
+  // Time off the standard = (sum of |step time − standard step time| + standard time of missing steps
+  // + time of extra steps) ÷ total standard step time. Bands: under 15% close, 15–35% noticeable, over 35% far.
+  const DEV_BANDS = { ok: 'Close to the standard', warn: 'Noticeably off the standard', bad: 'Far off the standard' };
+  function deviationData(run, ref) {
+    if (!run || !ref || !workEls(run).length || !workEls(ref).length) return null;
+    const pc = StandardCheck.compare(run, ref);
+    const stepKeys = pc.steps.map(s => s.key);
+    const steps = pc.steps.map(s => ({ key: s.key, label: s.label, kind: s.kind, state: s.state, chip: s.chip, durS: s.durS, stdDurS: s.stdDurS, delta: s.durS == null ? null : r2(s.durS - s.stdDurS) }));
+    const extras = workEls(run).filter(e => !e.key || e.key === 'other' || !stepKeys.includes(e.key)).map(e => ({ label: e.label || 'Unlabeled step', kind: e.kind || 'other', durS: r2(dur(e)), start: e.start }));
+    // A parallel hold runs alongside other steps, so its time would be counted twice: it is shown, not scored.
+    const scored = steps.filter(s => s.kind !== 'hold');
+    const stdTotal = scored.reduce((a, s) => a + s.stdDurS, 0);
+    let off = 0;
+    for (const s of scored) off += s.durS == null ? s.stdDurS : Math.abs(s.delta);
+    for (const x of extras) if (x.kind !== 'hold') off += x.durS;
+    const offPct = stdTotal > 0 ? off / stdTotal : null;
+    const band = offPct == null ? 'na' : offPct < 0.15 ? 'ok' : offPct < 0.35 ? 'warn' : 'bad';
+    return { pc, steps, extras, stdTotal: r2(stdTotal), off: r2(off), offPct, band, ct: cycleTime(run), rct: cycleTime(ref), issues: pc.issues.length, asStd: steps.filter(s => s.state !== 'bad').length };
+  }
+  // Runs whose times weren't read from their own video get no deviation picture (the procedure check explains why).
+  function deviationBlocked(run, ref) {
+    return isUntimed(run, ref) || isUntimed(ref, null) || StandardCheck.compare(run, ref).copied || !!StandardCheck.findCopy(run, S.runs);
+  }
+  function bandIcon(b) { return b === 'ok' ? ICON.ok : b === 'na' ? ICON.na : ICON.warn; }
+  function devSummaryHtml(dv, ref) {
+    const pct = dv.offPct == null ? null : Math.round(dv.offPct * 100);
+    const scaleMax = 60;
+    let h = '<div class="dev-sum">';
+    h += '<div class="dev-fig dev-score"><span class="eyebrow">Time off the standard</span><span class="v">' + (pct == null ? '—' : pct + '<small>%</small>') + '</span>';
+    h += '<div class="meter ' + dv.band + '" role="img" aria-label="' + esc((pct == null ? 'Not measured' : pct + '% off the standard') + ', ' + (DEV_BANDS[dv.band] || '')) + '"><i style="width:' + (pct == null ? 0 : Math.min(100, pct / scaleMax * 100)).toFixed(1) + '%"></i><b style="left:' + (15 / scaleMax * 100).toFixed(1) + '%"></b><b style="left:' + (35 / scaleMax * 100).toFixed(1) + '%"></b></div>';
+    h += '<div class="meter-scale"><span style="left:0">0%</span><span style="left:' + (15 / scaleMax * 100).toFixed(1) + '%">15</span><span style="left:' + (35 / scaleMax * 100).toFixed(1) + '%">35</span><span style="left:100%">60%+</span></div>';
+    h += '<span class="band ' + dv.band + '">' + bandIcon(dv.band) + esc(DEV_BANDS[dv.band] || 'Not measured') + '</span>';
+    h += '<span class="s">' + esc(fmtT(dv.off) + ' s of step time differs from ' + fmtT(dv.stdTotal) + ' s in ' + runName(ref) + (dv.steps.some(s => s.kind === 'hold') ? ' (parallel holds not counted)' : '')) + '</span></div>';
+    h += '<div class="dev-fig"><span class="eyebrow">Cycle time</span><span class="v">' + esc(fmtD(dv.ct - dv.rct)) + '</span><span class="s">' + esc(fmtS(dv.ct) + ' vs ' + fmtS(dv.rct)) + (dv.rct ? ' · ' + esc(fmtPct((dv.ct - dv.rct) / dv.rct)) : '') + '</span></div>';
+    h += '<div class="dev-fig"><span class="eyebrow">Steps done as standard</span><span class="v">' + dv.asStd + '<small> of ' + dv.steps.length + '</small></span><span class="s">' + (dv.extras.length ? dv.extras.length + ' extra step' + (dv.extras.length === 1 ? '' : 's') + ' not in the standard' : 'No extra steps') + '</span></div>';
+    h += '<div class="dev-fig"><span class="eyebrow">Procedure</span><span class="v">' + dv.issues + '<small> issue' + (dv.issues === 1 ? '' : 's') + '</small></span><span class="s">' + (dv.issues ? 'Missing, extra, repeated, out-of-order or done differently' : 'Same steps, same order') + '</span></div>';
+    return h + '</div>';
+  }
+  function devBarsHtml(dv, ref) {
+    const max = Math.max(0.5, ...dv.steps.filter(s => s.kind !== 'hold').map(s => s.delta == null ? 0 : Math.abs(s.delta)), ...dv.extras.map(x => x.durS));
+    const half = v => (Math.min(1, Math.abs(v) / max) * 50).toFixed(2) + '%';
+    let h = '<div class="dv-key"><span><i style="background:var(--dv-fast)"></i>Faster than ' + esc(runName(ref)) + '</span><span><i style="background:var(--dv-slow)"></i>Slower than ' + esc(runName(ref)) + '</span><span><span class="chip p-bad">Missing</span> / <span class="chip p-bad">Extra</span> step not matching the standard</span></div><div class="dv">';
+    for (const s of dv.steps) {
+      const tipBase = s.label + '\n' + runName(ref) + ' ' + fmtS(s.stdDurS);
+      h += '<div class="dv-row"><div class="lab"><i class="sw k-' + esc(s.kind) + (s.kind === 'idle' ? ' idle' : '') + '"></i><span>' + esc(s.label) + '</span></div>';
+      if (s.durS == null) {
+        h += '<div class="dv-bar" data-tip="' + esc(tipBase + '\nNot seen in this run') + '"><span class="chip p-bad">Missing</span></div><div class="dv-val"><div>—</div><div>std ' + esc(fmtS(s.stdDurS)) + '</div></div></div>';
+        continue;
+      }
+      const cls = s.delta > 0.005 ? 'slow' : s.delta < -0.005 ? 'fast' : '';
+      const pct = s.stdDurS ? s.delta / s.stdDurS : null;
+      h += '<div class="dv-bar" data-tip="' + esc(tipBase + '\nThis run ' + fmtS(s.durS) + ' · ' + fmtD(s.delta) + (s.state === 'bad' ? '\n' + s.chip : '')) + '">' + (cls ? '<i class="' + cls + '" style="width:' + half(s.delta) + '"></i>' : '') + (s.state === 'bad' && s.chip !== 'Missing' ? '<span class="chip p-bad" style="left:' + (cls === 'fast' ? '75%' : '25%') + '">' + esc(s.chip) + '</span>' : '') + '</div>';
+      h += '<div class="dv-val"><div>' + esc(fmtD(s.delta)) + '</div><div>' + esc(fmtS(s.durS)) + (pct != null && Math.abs(s.delta) >= 0.005 ? ' · ' + esc(Math.abs(pct) >= 1 ? (s.durS / s.stdDurS).toFixed(1) + '×' : fmtPct(pct)) : '') + '</div></div></div>';
+    }
+    for (const x of dv.extras) {
+      h += '<div class="dv-row"><div class="lab"><i class="sw k-' + esc(x.kind) + (x.kind === 'idle' ? ' idle' : '') + '"></i><span>' + esc(x.label) + '</span></div><div class="dv-bar" data-tip="' + esc(x.label + '\nNot in ' + runName(ref) + ' · at ' + fmtT(x.start) + ' s · ' + fmtS(x.durS)) + '"><i class="slow" style="width:' + half(x.durS) + '"></i><span class="chip p-bad" style="left:25%">Extra</span></div><div class="dv-val"><div>' + esc(fmtD(x.durS)) + '</div><div>not in std</div></div></div>';
+    }
+    h += '</div><div class="dv-axis"><div></div><div class="ax"><span>−' + max.toFixed(1) + ' s faster</span><span>0</span><span>slower +' + max.toFixed(1) + ' s</span></div><div></div></div>';
+    return h;
+  }
+  // Two lanes on one time axis: the standard on top, this run below, joined step to step.
+  // A slanted link means the step started earlier or later; a red link is out of order.
+  function devAlignHtml(run, ref) {
+    if (!run.cycle || !ref.cycle || !fin(run.cycle.start) || !fin(ref.cycle.start)) return '<p class="muted">Set the cycle start and end to see the alignment.</p>';
+    const ct = cycleTime(run) || 0, rct = cycleTime(ref) || 0;
+    const span = Math.max(1, Math.ceil(Math.max(ct, rct) + 0.25));
+    const W = 1000, H = 130, L1 = [6, 40], L2 = [90, 124];
+    const x = t => (t / span * W);
+    const rEls = cycleEls(ref).filter(e => e.kind !== 'idle'), tEls = cycleEls(run).filter(e => e.kind !== 'idle');
+    const r0 = ref.cycle.start, t0 = run.cycle.start;
+    const tKeys = tEls.map(e => e.key), rKeys = rEls.map(e => e.key);
+    const pc = StandardCheck.compare(run, ref);
+    const badKeys = new Set(pc.steps.filter(s => s.chip === 'Out of order').map(s => s.key));
+    const rect = (e, lane, z, cls, tip) => {
+      const hold = e.kind === 'hold';
+      const y = hold ? (lane === L1 ? lane[0] - 5 : lane[1] + 1) : lane[0];
+      const hgt = hold ? 4 : lane[1] - lane[0];
+      return '<rect class="' + cls + '" style="--c:var(--k-' + esc(e.kind || 'other') + ')" x="' + x(e.start - z).toFixed(1) + '" y="' + y + '" width="' + Math.max(2, x(e.end - e.start)).toFixed(1) + '" height="' + hgt + '" data-tip="' + esc(tip) + '"></rect>';
+    };
+    let links = '', top = '', bot = '';
+    top += '<rect class="lane" x="0" y="' + L1[0] + '" width="' + W + '" height="' + (L1[1] - L1[0]) + '"></rect><rect class="lane" x="0" y="' + L2[0] + '" width="' + W + '" height="' + (L2[1] - L2[0]) + '"></rect>';
+    for (const e of rEls) {
+      const seen = tKeys.includes(e.key);
+      top += rect(e, L1, r0, 'el', e.label + '\n' + runName(ref) + ': ' + fmtT(e.start - r0) + '–' + fmtT(e.end - r0) + ' s' + (seen ? '' : '\nNot seen in this run'));
+      if (!seen && e.key && e.key !== 'other') bot += '<rect class="miss" x="' + x(e.start - r0).toFixed(1) + '" y="' + L2[0] + '" width="' + Math.max(2, x(e.end - e.start)).toFixed(1) + '" height="' + (L2[1] - L2[0]) + '" data-tip="' + esc('Missing in this run: ' + e.label) + '"></rect>';
+    }
+    const seenOnce = new Set();
+    for (const e of tEls) {
+      const extra = !e.key || e.key === 'other' || !rKeys.includes(e.key) || seenOnce.has(e.key);
+      if (e.key) seenOnce.add(e.key);
+      bot += rect(e, L2, t0, 'el' + (extra ? ' extra' : ''), e.label + '\nThis run: ' + fmtT(e.start - t0) + '–' + fmtT(e.end - t0) + ' s' + (extra ? '\nNot in ' + runName(ref) + ' (extra or repeated)' : ''));
+    }
+    for (const key of [...new Set(rKeys)]) {
+      if (!key || key === 'other') continue;
+      const a = rEls.find(e => e.key === key), b = tEls.find(e => e.key === key);
+      if (!a || !b || a.kind === 'hold') continue;
+      const xa = x(a.start - r0), xb = x(b.start - t0);
+      const shift = (b.start - t0) - (a.start - r0);
+      const cls = badKeys.has(key) ? 'link bad' : Math.abs(shift) > 0.5 ? 'link far' : 'link';
+      links += '<line class="' + cls + '" x1="' + xa.toFixed(1) + '" y1="' + L1[1] + '" x2="' + xb.toFixed(1) + '" y2="' + L2[0] + '" data-tip="' + esc(a.label + '\nStarts ' + fmtD(shift) + ' vs ' + runName(ref) + (badKeys.has(key) ? '\nOut of order' : '')) + '"></line>';
+    }
+    let h = '<div class="al"><div class="al-labs"><div><b>' + esc(runName(ref)) + '</b><span>Standard · ' + esc(fmtS(rct)) + '</span></div><div></div><div><b>' + (run.id && run.number ? esc(runName(run)) : 'This run') + '</b><span>' + esc(fmtS(ct) + ' · ' + fmtD(ct - rct)) + '</span></div></div>';
+    h += '<div class="al-plot"><svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" role="img" aria-label="' + esc('Step alignment of this run against ' + runName(ref)) + '">' + top + links + bot + '</svg>' + axisHtml(span) + '</div></div>';
+    h += '<p class="muted" style="font-size:13px">Each line joins a step in ' + esc(runName(ref)) + ' to the same step in this run, both timed from cycle start. A slanted line means the step started earlier or later; a red line is out of order; a dashed red box is a step that was missed; a red-outlined block is an extra or repeated step.</p>';
+    return h;
+  }
+  function devVideosHtml(run, ref) {
+    const a = ref.video && ref.video.assetId, b = run.video && run.video.assetId;
+    if (!a || !b) return '';
+    let h = '<div class="sec"><span class="eyebrow">Watch side by side · both start at their cycle start</span><div class="sbs">';
+    h += '<figure><figcaption>' + esc(runName(ref)) + ' · standard</figcaption><video class="sbs-v" src="' + esc(blob(a)) + '" data-t0="' + (ref.cycle ? ref.cycle.start : 0) + '" muted playsinline preload="metadata" controls></video></figure>';
+    h += '<figure><figcaption>' + esc(runName(run)) + ' · this run</figcaption><video class="sbs-v" src="' + esc(blob(b)) + '" data-t0="' + (run.cycle ? run.cycle.start : 0) + '" muted playsinline preload="metadata" controls></video></figure>';
+    h += '</div><div class="actions"><button class="btn sm primary" type="button" data-act="sbs-play">Play both from cycle start</button><button class="btn sm" type="button" data-act="sbs-pause">Pause both</button><button class="btn sm" type="button" data-act="sbs-speed">Speed 1×</button></div></div>';
+    return h;
+  }
+  function partsHtml(run, ref, opts) {
+    const parts = Array.isArray(run.parts) ? run.parts : [];
+    if (!parts.length) return '';
+    let h = '<div class="sec"><span class="eyebrow">Where each part ended up · vs ' + esc(runName(ref)) + '</span>';
+    if (opts && opts.videos) h += '<div class="fs-pair"><figure><figcaption>' + esc(runName(ref)) + ' · standard</figcaption>' + shotHtml(ref.finalState) + '</figure><figure><figcaption>This run</figcaption>' + shotHtml(run.finalState) + '</figure></div>';
+    h += '<ol class="proc-list">';
+    parts.forEach((p, i) => {
+      const st = p.matchesBaseline === 'no' ? 'bad' : p.matchesBaseline === 'yes' ? 'ok' : 'unclear';
+      h += '<li class="' + st + '"><span class="pn">' + (i + 1) + '</span><span class="pt">' + esc(p.part) + '</span><span class="chip ' + (st === 'bad' ? 'p-bad">Placed wrong' : st === 'ok' ? 'p-ok">Matches' : 'p-unclear">Unclear') + '</span><span class="pd">' + esc('This run: ' + (p.where || '—') + (p.reference ? ' · Standard: ' + p.reference : '')) + '</span></li>';
+    });
+    return h + '</ol></div>';
+  }
+  function deviationInner(run, ref, opts) {
+    const dv = deviationData(run, ref);
+    if (!dv) return '';
+    let h = devSummaryHtml(dv, ref);
+    h += partsHtml(run, ref, opts);
+    h += '<div class="sec"><span class="eyebrow">Step by step · time difference from ' + esc(runName(ref)) + '</span>' + devBarsHtml(dv, ref) + '</div>';
+    h += '<div class="sec"><span class="eyebrow">Sequence alignment · ' + esc(runName(ref)) + ' vs this run</span>' + legendHtml() + devAlignHtml(run, ref) + '</div>';
+    if (opts && opts.videos) h += devVideosHtml(run, ref);
+    return h;
+  }
+  function deviationHtml(run, ref) {
+    if (!ref || !hasEls(run) || deviationBlocked(run, ref)) return '';
+    const inner = deviationInner(run, ref, { videos: true });
+    if (!inner) return '';
+    return '<section class="sec" id="dev"><div class="sec-h"><h2>Deviation from ' + esc(runName(ref)) + '</h2><span class="note">' + esc(runName(ref)) + (ref.id === (baseline() || {}).id ? ' is the baseline' : ' is the reference') + ' · hover any bar or block for its times</span></div><div class="panel pad dev">' + inner + '</div></section>';
+  }
+  function sbsAct(a, el) {
+    const vs = $$('.sbs-v');
+    if (!vs.length) return;
+    if (a === 'sbs-play') {
+      Promise.all(vs.map(v => { v.pause(); return seek(v, +v.dataset.t0 || 0); })).then(() => vs.forEach(v => v.play().catch(() => {})));
+    } else if (a === 'sbs-pause') vs.forEach(v => v.pause());
+    else if (a === 'sbs-speed') {
+      const r = vs[0].playbackRate === 1 ? 0.5 : vs[0].playbackRate === 0.5 ? 0.25 : 1;
+      vs.forEach(v => { v.playbackRate = r; });
+      el.textContent = 'Speed ' + r + '×';
+    }
+  }
+
   async function ccAnalyze(btn) {
     const d = S.draft;
     if (!d || d.busy) return;
@@ -1314,6 +1559,7 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     h += '<div class="panel stat"><span class="eyebrow">Flags</span><span class="v">' + flagCount(run) + '</span><span class="s">Notes, unclear spans, possible deviations</span></div>';
     h += '</div>';
 
+    if (ref) h += deviationHtml(run, ref);
     if (ref) h += procedureHtml(run, ref);
     h += comparisonHtml(run, ref);
 
@@ -1481,10 +1727,10 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
   }
   function pickHtml(err) {
     const base = baseline();
-    let h = '<div class="head"><div><div class="eyebrow">New run · ' + esc('Run ' + nextNumber()) + '</div><h1>Log a run-through</h1><p class="sub">Film one full assembly cycle from above, like the baseline. Upload it here and Claude reads the video into an event log, or you time each element yourself. Either way you review the times before anything is saved.</p></div></div>';
+    let h = '<div class="head"><div><div class="eyebrow">New run · ' + esc('Run ' + nextNumber()) + '</div><h1>Log a run-through</h1><p class="sub">Film one full assembly cycle from above, like the baseline. Upload it or record it with a camera, and it is compared with ' + esc(base ? runName(base) + ' (the baseline)' : 'the baseline') + ' automatically: you get the deviation as charts, then review the times before anything is saved.</p></div></div>';
     if (err) h += '<div class="notice err">' + esc(err) + '</div>' + diagHtml(true);
     h += '<label class="drop" id="drop" for="file-in">' + ICON.film + '<b>Drop the run video here</b><span class="ink2">or choose a file · MP4 or MOV · one cycle, ideally under a minute</span></label><input class="sr" type="file" id="file-in" accept="video/*">';
-    h += '<div class="actions" style="justify-content:center"><label class="btn primary" for="rec-in">' + 'Record with phone camera</label><input class="sr" type="file" id="rec-in" accept="video/*" capture="environment"><span class="muted" style="font-size:13px">Opens your phone’s rear camera. Stop recording and the clip goes straight into analysis.</span></div>';
+    h += '<div class="actions" style="justify-content:center"><button class="btn primary" type="button" data-go="camera"><span class="dot" style="width:9px;height:9px;border-radius:50%;background:currentColor"></span>Record with this device’s camera</button><label class="btn" for="rec-in">Record with phone camera</label><input class="sr" type="file" id="rec-in" accept="video/*" capture="environment"><span class="muted" style="font-size:13px">Stop recording and the clip goes straight into analysis.</span></div>';
     h += '<div class="how"><div class="panel"><b>Same camera position</b>Top-down, the whole plate and all parts in frame, same as ' + esc(base ? runName(base) : 'the baseline') + '.</div><div class="panel"><b>One cycle per video</b>Start with the parts laid out and hands out of frame. Stop after the finished assembly is set down.</div><div class="panel"><b>Hands only</b>Keep faces out of the shot. The log describes the work, never the person.</div></div>';
     return h;
   }
@@ -1576,8 +1822,11 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     }
     if (S.draft !== d) return;
     if (v) {
+      await fixDuration(v);
+      if (S.draft !== d) return;
       d.grabVid = v;
-      d.meta = { durationS: r2(v.duration), width: v.videoWidth, height: v.videoHeight };
+      d.meta = { durationS: r2(fin(v.duration) ? v.duration : (file.recordedS || 0)), width: v.videoWidth, height: v.videoHeight };
+      d.fromCamera = !!file.recordedS;
       d.stage = 'loaded';
     } else {
       URL.revokeObjectURL(url);
@@ -1586,6 +1835,29 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
       S.draft = { stage: 'pick', error: firstErr === 'timeout' ? 'The video took too long to load. Try a shorter clip.' : blocked && !S.assets ? 'This view blocks playing uploaded video, and your access level can’t store it. Ask for Editor access, or send the video to the page owner.' : file.size > MAX_ASSET && blocked ? 'This view blocks playing uploaded video directly, and the file is over 20 MB so it can’t go through the app’s storage. Trim it to one cycle and try again.' : 'This browser can’t decode “' + file.name + '”. iPhone videos recorded in High Efficiency (HEVC) often won’t play in Chrome or Edge: open this page in Safari, or set the camera to “Most Compatible” (H.264) and record again.' };
     }
     renderNew();
+    if (S.draft === d && d.stage === 'loaded') maybeAutoAnalyze(d);
+  }
+  // Recordings made in the browser (MediaRecorder WebM) often report an infinite duration until the end is read.
+  function fixDuration(v) {
+    if (fin(v.duration) && v.duration > 0) return Promise.resolve();
+    return new Promise(res => {
+      let done = false;
+      const end = () => { if (done) return; done = true; clearTimeout(to); v.removeEventListener('durationchange', onChange); try { v.currentTime = 0; } catch (e) { /* ignore */ } setTimeout(res, 50); };
+      const onChange = () => { if (fin(v.duration) && v.duration > 0) end(); };
+      const to = setTimeout(end, 4000);
+      v.addEventListener('durationchange', onChange);
+      try { v.currentTime = 1e7; } catch (e) { end(); }
+    });
+  }
+  // Every new video is compared with the baseline (or the chosen run) as soon as it opens, when Claude can run in this page.
+  function maybeAutoAnalyze(d) {
+    if (!d || d.autoTried || d.stage !== 'loaded' || !d.grabVid) return false;
+    if (!(findDone(d.compareTo) || baseline())) return false;
+    if (!sampleReady()) return false;
+    d.autoTried = true;
+    d.autoStarted = true;
+    analyze();
+    return true;
   }
   function diagHtml(open) {
     const yes = t => '<span class="okk">' + esc(t) + '</span>', no = t => '<span class="bad">' + esc(t) + '</span>';
@@ -1609,6 +1881,8 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     const m = d.meta;
     let h = '<div class="head"><div><div class="eyebrow">New run · Run ' + n + '</div><h1>' + esc(d.fileName) + '</h1><p class="sub">' + esc(m.durationS.toFixed(2)) + ' s · ' + m.width + '×' + m.height + ' · ' + (d.fileSize / 1048576).toFixed(1) + ' MB</p></div><div class="actions"><button class="btn" type="button" data-act="replace-file">Choose another video</button></div></div>';
     if (d.error) h += '<div class="notice err">' + esc(d.error) + '</div>';
+    else if (S.sample === undefined && baseline()) h += '<div class="notice">Getting Claude ready to compare this video with ' + esc(runName(findDone(d.compareTo) || baseline())) + '…</div>';
+    else if (!d.autoTried && !sampleReady() && baseline()) h += '<div class="notice">Automatic comparison needs Claude in this page, which this view doesn’t offer. Choose one of the options below.</div>';
     h += '<div class="loaded"><div class="player"><video src="' + esc(d.videoSrc) + '" controls playsinline preload="auto"></video></div><div class="sec">';
     h += '<div class="fields"><div class="row2"><label class="field"><span>Run name</span><input class="in" id="f-label" data-df="label" value="' + esc(d.label) + '" placeholder="e.g. Parts pre-sorted"></label><label class="field"><span>What changed this run</span><input class="in" id="f-cond" data-df="condition" value="' + esc(d.condition) + '" placeholder="e.g. plate turned 90°, parts laid out left to right"></label></div>' + (doneRuns().length ? '<label class="field" style="max-width:360px"><span>Compare with</span><select class="in" id="f-ref" data-df="compareTo">' + refOptions(null, d.compareTo || (baseline() || {}).id) + '</select></label>' : '') + '</div>';
     h += '<div class="choices">';
@@ -1618,7 +1892,7 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
       h += '<div class="panel choice"><span class="eyebrow">Recommended</span><h3>Analyze with Claude Code</h3><p>Stores the video and hands it to a fresh Claude Code session, which reads it frame by frame like the baseline and fills in the run. Usually 1–3 minutes; the run page updates by itself.' + (S.mcp === null ? ' This view can’t start Claude Code directly, so you’ll get a one-line message to paste into Claude Code.' : '') + '</p>' + (S.assets ? '<button class="btn primary" type="button" data-act="cc-analyze">Send to Claude Code</button>' : '<p class="notice">Needs Editor access so the video can be stored.</p>') + '</div>';
     }
     if (sampleReady()) {
-      h += '<div class="panel choice"><span class="eyebrow">Faster, less detailed</span><h3>Analyze in this page</h3><p>Sends frames every quarter second to Claude and fills in the event log for you to review before saving. About a minute.</p><button class="btn" type="button" data-act="analyze">Analyze here</button></div>';
+      h += '<div class="panel choice"><span class="eyebrow">Runs automatically on new videos</span><h3>Analyze in this page</h3><p>Sends frames every quarter second to Claude, compares them with the chosen run and shows the deviation, ready to review before saving. About a minute.</p><button class="btn' + (LOCAL || S.settings.analysisTriggerId ? '' : ' primary') + '" type="button" data-act="analyze">' + (d.autoTried ? 'Analyze again' : 'Analyze here') + '</button></div>';
     }
     h += '<div class="panel choice"><h3>Time it by hand</h3><p>Starts from the baseline’s elements. Scrub the video and set each start and end with one click.</p><button class="btn" type="button" data-act="manual">Time by hand</button></div>';
     h += '</div>';
@@ -1633,7 +1907,8 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
   const STAGES = [['read', 'Reading the video'], ['frames', 'Pulling frames'], ['sheets', 'Laying out contact sheets'], ['wait', 'Waiting for Claude (often 30–90 s)'], ['write', 'Claude is writing the event log'], ['check', 'Checking the answer']];
   function analyzingHtml(d) {
     const a = d.an || {};
-    let h = '<div class="head"><div><div class="eyebrow">New run · analyzing</div><h1>' + esc(d.fileName) + '</h1><p class="sub">Claude reads the frames like a camera on the station: hands and parts only, compared with the baseline.</p></div><div class="actions"><button class="btn" type="button" data-act="stop">Stop</button></div></div>';
+    const cmpRun = findDone(d.comparedToRunId) || baseline();
+    let h = '<div class="head"><div><div class="eyebrow">New run · ' + (d.autoStarted ? 'analyzing automatically' : 'analyzing') + '</div><h1>' + esc(d.fileName) + '</h1><p class="sub">Claude reads the frames like a camera on the station, hands and parts only, and compares them with ' + esc(cmpRun ? runName(cmpRun) : 'the baseline') + '. The result opens here when it’s done, usually in about a minute.</p></div><div class="actions"><button class="btn" type="button" data-act="stop">Stop</button></div></div>';
     h += '<div class="loaded"><div class="player"><video src="' + esc(d.videoSrc) + '" muted playsinline preload="metadata"></video></div><div class="panel pad sec"><ul class="prog" id="prog">';
     const idx = STAGES.findIndex(s => s[0] === a.stage);
     STAGES.forEach((s, i) => {
@@ -1663,11 +1938,17 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     if (base.finalState && base.finalState.note) lines.push('Baseline finished state: ' + base.finalState.note);
     return lines.join('\n');
   }
-  function buildPrompt(dt, durS, sheets, base) {
+  function buildPrompt(dt, durS, sheets, base, extra) {
+    const ex = extra || { ref: 0, end: false, endT: null };
+    const imgLines = [];
+    let k = sheets;
+    if (ex.ref) { imgLines.push('Image' + (ex.ref > 1 ? 's ' + (k + 1) + '–' + (k + ex.ref) : ' ' + (k + 1)) + ': the REFERENCE finished build (' + runName(base) + '), for comparing where each part sits. It may be filmed from a different angle or end.'); k += ex.ref; }
+    if (ex.end) imgLines.push('Image ' + (k + 1) + ': THIS run’s frame at t=' + ex.endT.toFixed(2) + ' s at full resolution, to read exactly where each part ended up.');
     return [
       'You are acting as a computer-vision system observing a simulated manual assembly station: a small LEGO build that stands in for one manual manufacturing step. The goal is to turn ordinary video into structured process data without the operator entering anything.',
       '',
-      'The ' + sheets + ' attached image' + (sheets > 1 ? 's are contact sheets' : ' is a contact sheet') + ' of ONE video, read left to right, top to bottom, sheet by sheet. Every frame is labeled with its timestamp t in seconds. Frames are ' + dt.toFixed(2) + ' s apart; the video is ' + durS.toFixed(2) + ' s long, so any boundary you report is approximate to about ±' + dt.toFixed(2) + ' s.',
+      'The first ' + sheets + ' attached image' + (sheets > 1 ? 's are contact sheets' : ' is a contact sheet') + ' of ONE video, read left to right, top to bottom, sheet by sheet. Every frame is labeled with its timestamp t in seconds. Frames are ' + dt.toFixed(2) + ' s apart; the video is ' + durS.toFixed(2) + ' s long, so any boundary you report is approximate to about ±' + dt.toFixed(2) + ' s.',
+      ...imgLines,
       '',
       'Rules:',
       '- Report only what is visibly observable. Describe hands and parts, never the person: do not identify, describe or evaluate who is working.',
@@ -1683,12 +1964,29 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
       '2. Break the visible work into elements in time order, timed only from these frames. Reuse a baseline key only when it is the same action done the same way; a step done differently keeps its key but gets flagType "deviation". If a reference step does not happen, leave it out (do not add a row for it). Use key "other" for anything new: a repeated action, a re-grip, a dropped part, an extra press, an interruption. A repeated element gets its own row. A pause inside the cycle is kind "idle" with key "other" and label "Pause". Include idle_pre and idle_post rows when the video shows time before or after the cycle. Elements may overlap when two hands work at once (like hold_plate in the baseline).',
       '3. Give times in seconds with 2 decimals, read from the frame labels.',
       '4. Compare with the reference: missing, extra, repeated or reordered elements, elements done a clearly different way, and the finished state seen in the last frames.',
-      '5. Status: POSSIBLE_DEVIATION when something visibly differs from the reference (an element missing, added, repeated or reordered; an element done a clearly different way, such as a part held in the air instead of on the table; or a different finished state). Give each element behind it flagType "deviation" with the reason in "flag". INSUFFICIENT_INFORMATION when the video does not show enough to judge the sequence or finished state. NORMAL otherwise; speed differences alone are not deviations. A difference you suspect but cannot confirm is flagged "unclear" and does not make a deviation by itself. statusNote opens with the main reason.',
+      '5. PLACEMENT CHECK, one part at a time. A step can look normal in motion and still put a part in the wrong place, so check every part separately using the last frames' + (ex.end ? ', the full-resolution final image' : '') + (ex.ref ? ', the reference finished-build image' + (ex.ref > 1 ? 's' : '') : '') + ' and the reference finished-state note. For the pink 1×6 brick and the light-blue 2×2 slope, say: whether it is fully on the plate, overhanging an edge, or off the plate on the table; whether it runs lengthwise along the plate’s long side or across its short side; which edge, end, rows or stud columns it covers; which part it sits next to; and which way the slope faces. Then decide matchesBaseline for that part. Never write that a part matches unless you can see that it does; when it is too small or hidden, use "unclear".',
+      '6. Each part that does not match is its own deviation: give the element that put it there (place_pink or seat_pink for the pink brick; carry_blue, orient_blue or seat_blue for the blue slope) flagType "deviation", with where it went versus the reference in "flag". Two wrong parts are two deviations on two elements: never merge them into one, and never let one obvious mistake hide a second one.',
+      '7. Status: POSSIBLE_DEVIATION when something visibly differs from the reference (an element missing, added, repeated or reordered; an element done a clearly different way, such as a part held in the air instead of on the table; a part placed in a different position or orientation; or a different finished state). Give each element behind it flagType "deviation" with the reason in "flag". INSUFFICIENT_INFORMATION when the video does not show enough to judge the sequence or finished state. NORMAL otherwise; speed differences alone are not deviations. A difference you suspect but cannot confirm is flagged "unclear" and does not make a deviation by itself. statusNote opens with the main reason and names every deviation found.',
       '',
       'Reply with only one JSON object in exactly this shape (example values):',
-      '{"cycle":{"start":0.25,"end":6.0},"status":"NORMAL","statusNote":"One or two sentences on why.","elements":[{"key":"pick_pink","label":"Reach and grasp pink 1×6 brick","kind":"reach","start":0.25,"end":0.75,"observed":"What is visibly seen in these frames.","flagType":"none","flag":"","method":{"hand":"right","offTable":"no"}}],"finalState":{"matchesBaseline":"yes","note":"What the finished assembly looks like versus the baseline."},"processData":["Data points this video could generate automatically."],"limitations":["What cannot be determined from this video."],"differences":["One short line per concrete difference from the reference, with times or positions; mark unconfirmed ones (unconfirmed)."]}',
+      '{"cycle":{"start":0.25,"end":6.0},"status":"NORMAL","statusNote":"One or two sentences on why.","elements":[{"key":"pick_pink","label":"Reach and grasp pink 1×6 brick","kind":"reach","start":0.25,"end":0.75,"observed":"What is visibly seen in these frames.","flagType":"none","flag":"","method":{"hand":"right","offTable":"no"}}],"finalState":{"matchesBaseline":"yes","note":"What the finished assembly looks like versus the baseline."},"parts":[{"part":"pink 1×6 brick","step":"place_pink","matchesBaseline":"yes","where":"Where it is in this run: on/off the plate, lengthwise or across, which edge or columns.","reference":"Where it is in the reference."},{"part":"light-blue 2×2 slope","step":"seat_blue","matchesBaseline":"yes","where":"…","reference":"…"}],"processData":["Data points this video could generate automatically."],"limitations":["What cannot be determined from this video."],"differences":["One short line per concrete difference from the reference, with times or positions; mark unconfirmed ones (unconfirmed)."]}',
       'status is one of NORMAL, POSSIBLE_DEVIATION, INSUFFICIENT_INFORMATION. kind is one of reach, position, press, release, hold, idle, other. flagType is one of none, note, unclear, deviation. method.hand (which hand does the step) is one of left, right, both, unclear; method.offTable (does the part or plate being worked leave the table) is one of yes, no, unclear. matchesBaseline is one of yes, no, unclear. Keep "observed" under 200 characters and "flag" under 120.'
     ].join('\n');
+  }
+  // The reference run's saved finished-build pictures (close-up first), so Claude can compare where each part sits.
+  async function refFinishImages(base) {
+    const fs = (base && base.finalState) || {};
+    const out = [];
+    for (const id of [fs.closeupAssetId, fs.frameAssetId]) {
+      if (!id) continue;
+      try {
+        const res = await fetch(blob(id));
+        if (!res.ok) continue;
+        const b = await res.blob();
+        if (b && b.size && /^image\//.test(b.type || 'image/jpeg')) out.push(b);
+      } catch (e) { /* skip a picture that can't be read */ }
+    }
+    return out;
   }
   async function analyze() {
     const d = S.draft;
@@ -1702,8 +2000,13 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     renderNew();
     const v = d.grabVid;
     try {
-      const durS = v.duration;
-      const maxCount = Math.max(1, Math.min(6, (S.sampleLimits.images && S.sampleLimits.images.maxCount) || 4));
+      const durS = fin(v.duration) ? v.duration : d.meta.durationS;
+      // Image budget: contact sheets, then up to two reference finished-build images, then this run's last frame at full size.
+      const limit = Math.max(1, (S.sampleLimits.images && S.sampleLimits.images.maxCount) || 4);
+      let refImgs = await refFinishImages(base);
+      let wantEnd = limit >= 2;
+      while (refImgs.length && limit - refImgs.length - (wantEnd ? 1 : 0) < 2) refImgs.pop();
+      const maxCount = Math.max(1, Math.min(6, limit - refImgs.length - (wantEnd ? 1 : 0)));
       const perSheet = 12;
       let dt = Math.max(0.25, durS / 47);
       let n = Math.floor(durS / dt) + 1;
@@ -1742,10 +2045,18 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
       setStage('sheets', sheetCount + ' sheet' + (sheetCount > 1 ? 's' : ''));
       const blobs = [];
       for (const c of sheets) blobs.push(await new Promise(r => c.toBlob(r, 'image/jpeg', 0.85)));
+      const sheetN = blobs.length;
+      for (const b of refImgs) blobs.push(b);
+      let endT = null;
+      if (wantEnd) {
+        endT = r2(Math.max(0, durS - 0.12));
+        const eb = await grabBlob(v, endT, 1280, 0.9);
+        if (eb) blobs.push(eb); else { wantEnd = false; endT = null; }
+      }
       const shBox = $('#sheets');
-      if (shBox) for (const b of blobs) { const im = document.createElement('img'); im.src = URL.createObjectURL(b); im.alt = 'Contact sheet sent to Claude'; shBox.appendChild(im); }
+      if (shBox) for (const b of blobs) { const im = document.createElement('img'); im.src = URL.createObjectURL(b); im.alt = 'Image sent to Claude'; shBox.appendChild(im); }
       setStage('wait', '');
-      const prompt = buildPrompt(dt, durS, blobs.length, base);
+      const prompt = buildPrompt(dt, durS, sheetN, base, { ref: refImgs.length, end: wantEnd, endT });
       let started = false;
       const tier = 'complex';
       const result = await S.sample.json(prompt, {
@@ -1810,7 +2121,33 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     d.processData = (Array.isArray(r && r.processData) ? r.processData : []).map(String).join('\n');
     d.limitations = (Array.isArray(r && r.limitations) ? r.limitations : []).map(String).join('\n');
     d.differences = (Array.isArray(r && r.differences) ? r.differences : []).map(x => String(x).slice(0, 240)).slice(0, 12);
+    applyParts(d, r && r.parts);
     d.source = { method: 'claude-page', note: 'Claude in page, contact sheets of frames every ' + dt.toFixed(2) + ' s, reviewed before saving', frameIntervalS: dt, analyzedAt: new Date().toISOString() };
+  }
+  // Every part placed differently from the reference becomes a deviation on the step that put it there,
+  // so two wrong parts always show as two issues, even if Claude flagged only one of them in its event log.
+  const PART_STEPS = [[/pink/i, ['place_pink', 'seat_pink']], [/blue|slope/i, ['seat_blue', 'orient_blue', 'carry_blue']]];
+  function applyParts(d, raw) {
+    const parts = (Array.isArray(raw) ? raw : []).slice(0, 6).map(p => ({
+      part: String((p && p.part) || '').slice(0, 60), step: String((p && p.step) || ''),
+      matchesBaseline: MATCH[p && p.matchesBaseline] ? p.matchesBaseline : 'unclear',
+      where: String((p && p.where) || '').slice(0, 240), reference: String((p && p.reference) || '').slice(0, 240)
+    })).filter(p => p.part);
+    d.parts = parts;
+    let wrong = 0;
+    for (const p of parts) {
+      if (p.matchesBaseline !== 'no') continue;
+      wrong++;
+      const keys = [p.step].concat(((PART_STEPS.find(x => x[0].test(p.part)) || [null, []])[1]));
+      const el = keys.map(k => d.elements.find(e => e.key === k && e.kind !== 'idle')).find(Boolean);
+      const why = 'Placed differently from the standard: ' + (p.where || p.part) + (p.reference ? ' (standard: ' + p.reference + ')' : '');
+      if (el && el.flagType !== 'deviation') { el.flagType = 'deviation'; el.flag = why.slice(0, 240); }
+      if (!d.differences.some(x => x.toLowerCase().includes(p.part.toLowerCase().split(' ')[0]))) d.differences.push((p.part + ': ' + (p.where || 'placed differently')).slice(0, 240));
+    }
+    if (wrong) {
+      d.finalState.matchesBaseline = 'no';
+      if (d.status === 'NORMAL') d.status = 'POSSIBLE_DEVIATION';
+    }
   }
   // The standard's steps with blank times: every time must be read from this video.
   function templateElements() {
@@ -1858,7 +2195,8 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
         processData: (run.processData || []).join('\n'), limitations: hasEls ? (run.limitations || []).join('\n') : 'Times set by hand from the video, about ±0.1 s.',
         source: hasEls ? clone(run.source || {}) : { method: 'manual', note: 'Timed by hand from the video', analyzedAt: new Date().toISOString() },
         manualHint: !hasEls, dirty: !hasEls,
-        compareTo: run.compareToRunId || '', comparedToRunId: run.comparedToRunId || '', differences: Array.isArray(run.differences) ? run.differences.slice() : null
+        compareTo: run.compareToRunId || '', comparedToRunId: run.comparedToRunId || '', differences: Array.isArray(run.differences) ? run.differences.slice() : null,
+        parts: Array.isArray(run.parts) ? clone(run.parts) : null
       };
       if (v.assetId) loadVideo(blob(v.assetId)).then(gv => { if (S.draft && S.draft.runId === id) S.draft.grabVid = gv; }, () => {});
     }
@@ -1869,12 +2207,13 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     const V = $('#view');
     const cat = catalog();
     const isNew = d.mode === 'new';
-    let h = '<div class="head"><div><div class="eyebrow">' + (isNew ? 'New run · Run ' + nextNumber() + ' · review' : 'Editing Run ' + esc(String(d.number))) + '</div><h1>' + (isNew ? 'Check the event log' : 'Edit times') + '</h1><p class="sub">' + (d.source && d.source.method === 'claude-page' && isNew ? 'Claude’s reading of the video is below. Play it back, fix any boundary with the Set buttons, and save when it matches what you see.' : d.manualHint ? 'The standard’s steps are listed with blank times. Scrub to each boundary and press the Set button next to that field. Remove any step that wasn’t done, and add any step that was done extra.' : 'Adjust any boundary, flag or note, then save.') + '</p></div></div>';
+    let h = '<div class="head"><div><div class="eyebrow">' + (isNew ? 'New run · Run ' + nextNumber() + ' · review' : 'Editing Run ' + esc(String(d.number))) + '</div><h1>' + (isNew ? (d.source && d.source.method === 'claude-page' ? 'Analysis result' : 'Check the event log') : 'Edit times') + '</h1><p class="sub">' + (d.source && d.source.method === 'claude-page' && isNew ? 'Claude compared this video with ' + esc(runName(draftRef(d) || { number: '?' })) + '. The result is below, followed by the event log it read from the video. Fix any boundary with the Set buttons, then save the run.' : d.manualHint ? 'The standard’s steps are listed with blank times. Scrub to each boundary and press the Set button next to that field. Remove any step that wasn’t done, and add any step that was done extra.' : 'Adjust any boundary, flag or note, then save.') + '</p></div></div>';
     h += '<div class="editor"><div class="ed-left">';
     h += d.videoSrc ? '<div class="player"><video id="ed-video" src="' + esc(d.videoSrc) + '" controls playsinline preload="auto"></video></div>' : '<div class="vid-missing">No video stored for this run, so times can be typed but not set from playback.</div>';
     if (d.videoSrc) h += '<div class="ctrls"><button class="btn sm" type="button" data-act="nudge" data-d="-0.1">−0.1 s</button><button class="btn sm" type="button" data-act="nudge" data-d="-0.0333">−1 fr</button><span class="tnow" id="t-now" style="min-width:64px;text-align:center">0.00 s</span><button class="btn sm" type="button" data-act="nudge" data-d="0.0333">+1 fr</button><button class="btn sm" type="button" data-act="nudge" data-d="0.1">+0.1 s</button><button class="btn sm" type="button" data-act="speed" id="speed-btn">0.5×</button></div>';
     h += '<div class="panel" style="padding:2px 12px 10px"><div class="strip-box" id="ed-strip"></div></div>';
     h += '</div><div class="ed-right">';
+    h += '<section class="sec" id="ed-dev" hidden></section>';
     h += '<section class="panel pad sec"><div class="row2"><label class="field"><span>Run name</span><input class="in" id="e-label" data-df="label" value="' + esc(d.label) + '" placeholder="e.g. Parts pre-sorted"></label><label class="field"><span>What changed this run</span><input class="in" id="e-cond" data-df="condition" value="' + esc(d.condition) + '" placeholder="Leave blank if nothing changed"></label></div>';
     h += '<div class="cyc"><span class="eyebrow" style="width:100%">Cycle</span>' + timeInput('cyc', 'start', 'Start', d.cycle.start) + timeInput('cyc', 'end', 'End', d.cycle.end) + '<span class="ct" id="cyc-time"></span></div></section>';
     h += '<section class="sec"><div class="sec-h"><h2>Work elements</h2><span class="note">Seconds into the video</span></div><div class="panel pad"><div class="els" id="els"></div><div style="margin-top:12px"><button class="btn sm" type="button" data-act="add-el">' + ICON.plus + 'Add element</button></div></div></section>';
@@ -1928,6 +2267,29 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
       st.innerHTML = stripHtml(d.elements.filter(e => fin(e.start) && fin(e.end)), { span, seekable: !!d.videoSrc, tall: true, playhead: !!d.videoSrc, id: 'ed-track', baseMap: durByKey(base), markers: fin(d.cycle.start) && fin(d.cycle.end) ? [{ t: d.cycle.start, label: 'START' }, { t: d.cycle.end, label: 'END' }] : [] }) + axisHtml(span);
       updateEdPlayhead();
     }
+    renderDraftDeviation();
+  }
+  // The result for the run being reviewed: the same deviation picture the run page shows, live as times change.
+  function draftRef(d) {
+    if (d.mode === 'new') return findDone(d.compareTo) || baseline();
+    const editing = S.runs.find(r => r.id === d.runId);
+    return editing ? refFor(editing) : null;
+  }
+  function renderDraftDeviation() {
+    const d = S.draft, box = $('#ed-dev');
+    if (!d || !box) return;
+    const ref = draftRef(d);
+    if (!ref || ref.id === d.runId) { box.hidden = true; return; }
+    const els = d.elements.filter(e => fin(e.start) && fin(e.end));
+    const ready = els.length && fin(d.cycle.start) && fin(d.cycle.end) && d.cycle.end > d.cycle.start;
+    const title = (d.mode === 'new' ? 'Result · deviation from ' : 'Deviation from ') + runName(ref);
+    let inner = '';
+    if (ready) {
+      const asRun = { id: d.runId || '', number: d.mode === 'new' ? null : d.number, elements: els, cycle: d.cycle, status: d.status, finalState: d.finalState, parts: d.parts || [] };
+      inner = deviationInner(asRun, ref, { videos: false });
+    }
+    box.hidden = false;
+    box.innerHTML = '<div class="sec-h"><h2>' + esc(title) + '</h2><span class="note">' + (ready ? 'Updates as you change times · saved with the run' : '') + '</span></div><div class="panel pad dev">' + (inner || '<p class="ink2">Set the cycle start, cycle end and the step times from the video to see how far this run is from ' + esc(runName(ref)) + '.</p>') + '</div>';
   }
   function updateEdPlayhead() {
     const v = $('#ed-video'), ph = $('#ph'), tn = $('#t-now');
@@ -2065,6 +2427,7 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     if (cmpTo) doc.compareToRunId = cmpTo;
     if (d.comparedToRunId) doc.comparedToRunId = d.comparedToRunId;
     if (Array.isArray(d.differences)) doc.differences = d.differences;
+    if (Array.isArray(d.parts) && d.parts.length) doc.parts = d.parts;
     say('Saving the run…');
     try {
       await S.db.collection('runs').doc(id).set(doc);
@@ -2081,8 +2444,8 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     go('run', id, true);
   }
 
-  // ---------- live camera test (standalone; touches no analysis code) ----------
-  const CAM = { stream: null, busy: false, error: '', info: '', devices: [], deviceId: '' };
+  // ---------- live camera: preview, record, then straight into a new run ----------
+  const CAM = { stream: null, busy: false, error: '', info: '', devices: [], deviceId: '', rec: null, chunks: [], recT0: 0, recS: 0, recTimer: 0, discard: false };
   function camEnv() {
     const lines = [];
     lines.push('Secure context: ' + (window.isSecureContext ? 'yes' : 'no'));
@@ -2098,24 +2461,30 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
   }
   function renderCamera() {
     const V = $('#view');
-    const on = !!CAM.stream;
+    const on = !!CAM.stream, recording = !!CAM.rec;
+    const base = baseline();
     let h = '<div><button class="back" type="button" data-go="runs">← All runs</button></div>';
-    h += '<div class="head"><div><div class="eyebrow">Live camera · test only</div><h1>Camera test</h1><p class="sub">Checks whether this page can open your camera (rear camera preferred). Nothing is recorded, saved or sent anywhere.</p></div><div class="actions">';
-    h += on ? '<button class="btn" type="button" data-act="cam-stop">Stop camera</button>' : '<button class="btn primary" type="button" data-act="cam-start"' + (CAM.busy ? ' disabled' : '') + '>' + (CAM.busy ? 'Opening camera…' : 'Start camera') + '</button>';
-    if (CAM.devices.length) h += '<label class="cmp-pick"><span>Camera</span><select class="in" id="cam-select">' + CAM.devices.map((d, i) => '<option value="' + esc(d.deviceId) + '"' + (d.deviceId === CAM.deviceId ? ' selected' : '') + '>' + esc(d.label || 'Camera ' + (i + 1)) + '</option>').join('') + '</select></label>';
+    h += '<div class="head"><div><div class="eyebrow">Live camera · new run</div><h1>Record a run</h1><p class="sub">Film one assembly cycle from above with this device’s camera. When you stop, the clip opens as a new run and is compared with ' + esc(base ? runName(base) + ' (the baseline)' : 'the baseline') + ' automatically. Nothing is saved until you save the run.</p></div><div class="actions">';
+    if (recording) h += '<button class="btn rec" type="button" data-act="rec-stop"><span class="dot"></span>Stop and analyze</button><button class="btn" type="button" data-act="rec-discard">Discard</button>';
+    else if (on) h += '<button class="btn rec" type="button" data-act="rec-start"><span class="dot"></span>Start recording</button><button class="btn" type="button" data-act="cam-stop">Stop camera</button>';
+    else h += '<button class="btn primary" type="button" data-act="cam-start"' + (CAM.busy ? ' disabled' : '') + '>' + (CAM.busy ? 'Opening camera…' : 'Start camera') + '</button>';
+    if (CAM.devices.length && !recording) h += '<label class="cmp-pick"><span>Camera</span><select class="in" id="cam-select">' + CAM.devices.map((d, i) => '<option value="' + esc(d.deviceId) + '"' + (d.deviceId === CAM.deviceId ? ' selected' : '') + '>' + esc(d.label || 'Camera ' + (i + 1)) + '</option>').join('') + '</select></label>';
     h += '</div></div>';
-    h += '<div class="panel pad sec"><video id="cam-video" class="cam-view" autoplay muted playsinline' + (on ? '' : ' hidden') + '></video>';
-    if (!on && !CAM.error) h += '<p class="ink2">Press Start camera. Your browser should ask for camera permission.</p>';
+    h += '<div class="panel pad sec"><div class="cam-wrap"><video id="cam-video" class="cam-view" autoplay muted playsinline' + (on ? '' : ' hidden') + '></video>' + (recording ? '<span class="rec-pill" role="status"><i></i>REC <span id="rec-clock">' + recClock() + '</span></span>' : '') + '</div>';
+    if (on && !recording) h += '<p class="ink2">Frame the whole plate and all parts from above, hands out of frame. Press Start recording, do one cycle, then Stop and analyze.</p>';
+    if (!on && !CAM.error) h += '<p class="ink2">Press Start camera. Your browser asks for camera permission the first time.</p>';
     if (CAM.info) h += '<p class="cam-err ink2">' + esc(CAM.info) + '</p>';
     if (CAM.error) {
       h += '<div class="notice err cam-err">' + esc(CAM.error) + '</div>';
-      h += '<div class="sec"><p class="ink2">Live preview isn’t available here. You can still record a cycle with the phone’s camera and analyze it right away:</p><div><label class="btn primary" for="cam-rec">Record with phone camera</label><input class="sr" type="file" id="cam-rec" accept="video/*" capture="environment"></div></div>';
+      h += '<div class="sec"><p class="ink2">' + (LOCAL ? 'The camera didn’t open. Check that no other app is using it and that the browser has camera permission for this page.' : 'Pages opened on claude.ai can’t use the camera directly. To record from this computer’s camera, run the app locally from the repo folder (npm start, then open the address it prints), or record the cycle with any camera app and upload the file. A phone can also record and send the clip straight into analysis:') + '</p><div class="actions"><label class="btn primary" for="cam-rec">Record with phone camera</label><input class="sr" type="file" id="cam-rec" accept="video/*" capture="environment"><label class="btn" for="cam-up">Upload a video</label><input class="sr" type="file" id="cam-up" accept="video/*"></div></div>';
     }
     h += '</div>';
     h += '<details class="panel diag"' + (CAM.error ? ' open' : '') + '><summary>Browser details</summary><div class="pad cam-err ink2">' + esc(camEnv()) + '</div></details>';
     V.innerHTML = h;
-    const cr = $('#cam-rec');
-    if (cr) cr.addEventListener('change', () => { const f = cr.files && cr.files[0]; if (f) { go('new'); loadFile(f); } });
+    for (const id of ['#cam-rec', '#cam-up']) {
+      const cr = $(id);
+      if (cr) cr.addEventListener('change', () => { const f = cr.files && cr.files[0]; if (f) { go('new'); loadFile(f); } });
+    }
     const v = $('#cam-video');
     if (v && CAM.stream) { v.srcObject = CAM.stream; v.play().catch(() => {}); }
   }
@@ -2146,9 +2515,64 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     if (S.route.view === 'camera') renderCamera();
   }
   function camStop() {
+    if (CAM.rec) recStop(true);
     if (CAM.stream) { CAM.stream.getTracks().forEach(t => { try { t.stop(); } catch (e) { /* ignore */ } }); }
     CAM.stream = null;
     const v = $('#cam-video'); if (v) v.srcObject = null;
+  }
+  function recClock() {
+    const s = CAM.rec ? (performance.now() - CAM.recT0) / 1000 : 0;
+    return Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+  }
+  function recMime() {
+    if (typeof MediaRecorder === 'undefined') return null;
+    for (const m of ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']) {
+      try { if (MediaRecorder.isTypeSupported(m)) return m; } catch (e) { /* try the next */ }
+    }
+    return '';
+  }
+  function recStart() {
+    if (!CAM.stream || CAM.rec) return;
+    const mime = recMime();
+    if (mime === null) { CAM.error = 'This browser can’t record from the camera (no MediaRecorder). Record with another camera app and upload the file instead.'; renderCamera(); return; }
+    let rec;
+    try { rec = mime ? new MediaRecorder(CAM.stream, { mimeType: mime, videoBitsPerSecond: 4000000 }) : new MediaRecorder(CAM.stream); }
+    catch (e) { CAM.error = 'Recording didn’t start\n' + ((e && e.name) || 'Error') + ': ' + ((e && e.message) || String(e)); renderCamera(); return; }
+    CAM.chunks = []; CAM.discard = false; CAM.error = '';
+    rec.ondataavailable = e => { if (e.data && e.data.size) CAM.chunks.push(e.data); };
+    rec.onstop = () => recFinish(rec);
+    CAM.rec = rec;
+    CAM.recT0 = performance.now();
+    rec.start(500);
+    clearInterval(CAM.recTimer);
+    CAM.recTimer = setInterval(() => { const el = $('#rec-clock'); if (el) el.textContent = recClock(); }, 250);
+    renderCamera();
+  }
+  function recStop(discard) {
+    const rec = CAM.rec;
+    if (!rec) return;
+    CAM.discard = !!discard;
+    CAM.recS = (performance.now() - CAM.recT0) / 1000;
+    clearInterval(CAM.recTimer);
+    try { if (rec.state !== 'inactive') rec.stop(); else recFinish(rec); } catch (e) { recFinish(rec); }
+  }
+  function recFinish(rec) {
+    if (CAM.rec !== rec) return;
+    CAM.rec = null;
+    clearInterval(CAM.recTimer);
+    const chunks = CAM.chunks;
+    CAM.chunks = [];
+    if (CAM.discard) { if (S.route.view === 'camera') renderCamera(); return; }
+    if (!chunks.length) { CAM.error = 'The recording came out empty. Try again, and record for at least a second.'; if (S.route.view === 'camera') renderCamera(); return; }
+    const type = String(rec.mimeType || chunks[0].type || 'video/webm').split(';')[0] || 'video/webm';
+    const d = new Date(), p = n => String(n).padStart(2, '0');
+    const name = 'camera-run-' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()) + (/mp4/.test(type) ? '.mp4' : '.webm');
+    const file = new File(chunks, name, { type });
+    try { file.recordedS = r2(CAM.recS); } catch (e) { /* duration comes from the video then */ }
+    camStop();
+    CAM.info = '';
+    go('new', null, true);
+    loadFile(file);
   }
 
   // ---------- leave confirm ----------
@@ -2227,6 +2651,10 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
       case 'export': exportCsv(); break;
       case 'cam-start': camStart(); break;
       case 'cam-stop': camStop(); CAM.info = ''; renderCamera(); break;
+      case 'rec-start': recStart(); break;
+      case 'rec-stop': recStop(false); break;
+      case 'rec-discard': recStop(true); renderCamera(); break;
+      case 'sbs-play': case 'sbs-pause': case 'sbs-speed': sbsAct(a, el); break;
       case 'copy-csv': {
         const ta = $('#csv-out');
         if (!ta) break;
