@@ -197,7 +197,7 @@ commands.sheets = ({ pos, opt }) => {
   const dir = path.join(WORK, id); fs.mkdirSync(dir, { recursive: true });
   for (const f of fs.readdirSync(dir)) if (f.startsWith('sheet_')) fs.unlinkSync(path.join(dir, f));
   const pre = opt.from ? ['-ss', String(opt.from)] : [];
-  const lim = opt.to ? ['-to', String(Number(opt.to) - (Number(opt.from) || 0))] : [];
+  const lim = opt.to ? ['-t', String(Number(opt.to) - (Number(opt.from) || 0))] : [];
   const fsz = Math.max(12, Math.round(width / 11));
   const vf = `fps=1/${step},scale=${width}:-2,drawtext=${fontOpt()}text='%{pts\\:hms}':x=3:y=3:fontsize=${fsz}:fontcolor=yellow:box=1:boxcolor=black@0.65,tile=${cols}x${rows}:padding=2:color=black`;
   // -copyts keeps the real video time on each label when --from is used.

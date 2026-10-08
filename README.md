@@ -65,6 +65,20 @@ Open http://localhost:4173. Nothing to install with npm; the app has no dependen
 iPhone videos in High Efficiency (HEVC) format are fine: every stored video is converted to
 H.264 so it plays in any browser and stays small.
 
+## Analyze on the shared link with your own Claude
+
+Teammates can analyze a new run on their own time, no setup:
+
+1. Sign in to claude.ai and open the shared link.
+2. Press **New run** and drop the video.
+3. Press **Analyze with your Claude**. It runs on your own claude.ai plan and asks permission
+   the first time.
+4. Check the event log it fills in, then save it to the shared log.
+
+Saving the video and step frames needs Editor access on the artifact. Without it only the
+timings save (the page says so). If the button is missing, the page tells you how to turn
+Claude on for it.
+
 ## Compare runs
 
 - Each run page has a **Compare with** menu. Pick any run to see both timelines, step-by-step

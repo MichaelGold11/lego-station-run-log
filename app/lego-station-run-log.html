@@ -423,7 +423,7 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
 
   // ---------- state ----------
   const S = {
-    db: null, assets: null, sample: undefined, sampleLimits: null, sampleOff: false, downloads: null, user: null,
+    db: null, assets: null, sample: undefined, isOwner: null, sampleLimits: null, sampleOff: false, downloads: null, user: null,
     diag: { csp: [], lastError: '', limitsErr: '' },
     mcp: undefined, ccErr: {}, ccErrMsg: {}, ccSession: {}, localRef: {},
     canWrite: null, readOnly: false, dbUnavailable: false, dbError: null,
@@ -594,6 +594,8 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     c.use('user').then(async u => {
       S.user = u;
       if (u) { try { S.canWrite = await u.can('data.write'); } catch (e) { S.canWrite = null; } }
+      if (u && typeof u.isOwner === 'function') { try { S.isOwner = !!(await u.isOwner()); } catch (e) { S.isOwner = null; } }
+      if (S.route.view === 'run') S.renderedKey = null;
       render();
     }, () => {});
   }
@@ -882,11 +884,15 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
       h += '<span class="eyebrow">Queued</span><h2>Waiting for your agent</h2><p>Queued at ' + esc(fmtClock(a.requestedAt)) + '. In a terminal in this repo folder, ask your coding agent to analyze it. In Claude Code type <b>/analyze-runs</b>; in Codex or any other agent, paste the line below. It reads the video frame by frame, compares it with the reference run and fills in this page, which updates by itself.</p>';
       h += '<div class="ccmsg" id="cc-msg">' + esc(ccMessage(run.id)) + '</div><div class="actions"><button class="btn sm" type="button" data-act="copy-cc">Copy message</button>' + (writable() ? '<button class="btn sm" type="button" data-act="cc-manual">Time it by hand instead</button>' : '') + '</div>';
     } else {
+      if (S.isOwner !== true) {
+        h += '<span class="eyebrow">Queued</span><h2>Waiting for the owner’s Claude Code</h2><p>Queued at ' + esc(fmtClock(a.requestedAt)) + '. The page owner’s Claude Code picks it up and fills in this page, which updates by itself. To analyze a video yourself, start a new run and choose Analyze with your Claude.</p>' + (writable() ? '<div class="actions"><button class="btn" type="button" data-act="cc-manual">Time it by hand</button></div>' : '');
+      } else {
       h += '<span class="eyebrow">Queued</span><h2>Waiting for Claude Code</h2><p>Sent at ' + esc(fmtClock(a.requestedAt)) + '. A fresh Claude Code session picks it up, reads the video frame by frame like the baseline, and fills in this page. The whole analysis usually takes 1–3 minutes.</p>' + sessionLink(run.id);
       const err = S.ccErr[run.id];
       if (err) h += '<div class="notice err">' + esc(ccErrorCopy(err, S.ccErrMsg[run.id])) + '</div>';
       if (writable()) h += '<div class="actions"><button class="btn' + (err || (age != null && age > 5) ? ' primary' : '') + '" type="button" data-act="cc-retry">Start again</button><button class="btn" type="button" data-act="cc-manual">Time it by hand</button></div>';
       if (err || !S.mcp || (age != null && age > 5)) h += '<p>If it doesn’t start from here, paste this into any Claude Code session:</p><div class="ccmsg" id="cc-msg">' + esc(ccMessage(run.id)) + '</div><div><button class="btn sm" type="button" data-act="copy-cc">Copy message</button></div>';
+      }
     }
     h += '</div></div>';
     V.innerHTML = h;
@@ -935,7 +941,7 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
   function comparisonHtml(run, ref) {
     const a = run.analysis || {};
     const busy = isRechecking(run);
-    const canCC = writable() && (LOCAL || !!S.settings.analysisTriggerId) && !!(run.video && run.video.assetId);
+    const canCC = writable() && (LOCAL || (!!S.settings.analysisTriggerId && S.isOwner === true)) && !!(run.video && run.video.assetId);
     const who = LOCAL ? 'your agent' : 'Claude Code';
     const opts = refOptions(run, ref && ref.id);
     let h = '<section class="sec" id="cmp"><div class="sec-h"><h2>Comparison</h2>';
@@ -1396,11 +1402,16 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
     h += '<div class="choices">';
     if (LOCAL) {
       h += '<div class="panel choice"><span class="eyebrow">Recommended</span><h3>Analyze with your agent</h3><p>Stores the video in this folder and adds the run as Queued. Then ask your coding agent (Claude Code, Codex) in this repo to analyze it. It reads the video frame by frame like the baseline and fills in the run; this page updates by itself.</p><button class="btn primary" type="button" data-act="cc-analyze">Queue for my agent</button></div>';
-    } else if (S.settings.analysisTriggerId) {
-      h += '<div class="panel choice"><span class="eyebrow">Recommended</span><h3>Analyze with Claude Code</h3><p>Stores the video and hands it to a fresh Claude Code session, which reads it frame by frame like the baseline and fills in the run. Usually 1–3 minutes; the run page updates by itself.' + (S.mcp === null ? ' This view can’t start Claude Code directly, so you’ll get a one-line message to paste into Claude Code.' : '') + '</p>' + (S.assets ? '<button class="btn primary" type="button" data-act="cc-analyze">Send to Claude Code</button>' : '<p class="notice">Needs Editor access so the video can be stored.</p>') + '</div>';
-    }
-    if (sampleReady()) {
-      h += '<div class="panel choice"><span class="eyebrow">Faster, less detailed</span><h3>Analyze in this page</h3><p>Sends frames every quarter second to Claude and fills in the event log for you to review before saving. About a minute.</p><button class="btn" type="button" data-act="analyze">Analyze here</button></div>';
+    } else {
+      const ownerCC = !!S.settings.analysisTriggerId && S.isOwner === true;
+      if (ownerCC) {
+        h += '<div class="panel choice"><span class="eyebrow">Recommended</span><h3>Analyze with Claude Code</h3><p>Stores the video and hands it to a fresh Claude Code session, which reads it frame by frame like the baseline and fills in the run. Usually 1–3 minutes; the run page updates by itself.' + (S.mcp === null ? ' This view can’t start Claude Code directly, so you’ll get a one-line message to paste into Claude Code.' : '') + '</p>' + (S.assets ? '<button class="btn primary" type="button" data-act="cc-analyze">Send to Claude Code</button>' : '<p class="notice">Needs Editor access so the video can be stored.</p>') + '</div>';
+      }
+      if (sampleReady()) {
+        h += '<div class="panel choice">' + (ownerCC ? '' : '<span class="eyebrow">Recommended</span>') + '<h3>Analyze with your Claude</h3><p>Sends frames from this video to Claude on your own claude.ai plan (it asks permission the first time). You check the event log, then save it to the shared log. About a minute.</p><button class="btn' + (ownerCC ? '' : ' primary') + '" type="button" data-act="analyze">Analyze with my Claude</button></div>';
+      } else if (S.sample !== undefined) {
+        h += '<p class="notice">To analyze with your own Claude, open this link in claude.ai while signed in, and allow Claude for this page when it asks (or turn it on in the page’s permissions). You can still time the run by hand below.</p>';
+      }
     }
     h += '<div class="panel choice"><h3>Time it by hand</h3><p>Starts from the baseline’s elements. Scrub the video and set each start and end with one click.</p><button class="btn" type="button" data-act="manual">Time by hand</button></div>';
     h += '</div>';
@@ -1487,7 +1498,8 @@ textarea.in { resize: vertical; min-height: 38px; line-height: 1.4; }
       const durS = v.duration;
       const maxCount = Math.max(1, Math.min(6, (S.sampleLimits.images && S.sampleLimits.images.maxCount) || 4));
       const perSheet = 12;
-      let dt = Math.max(0.25, durS / 47);
+      const fineSheets = Math.min(maxCount, 5);
+      let dt = Math.max(0.15, durS / (fineSheets * perSheet - 1));
       let n = Math.floor(durS / dt) + 1;
       if (n > maxCount * perSheet) { dt = durS / (maxCount * perSheet - 1); n = maxCount * perSheet; }
       dt = Math.ceil(dt * 100) / 100;

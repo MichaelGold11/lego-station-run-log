@@ -1,0 +1,195 @@
+{
+  "number": 5,
+  "label": "",
+  "condition": "",
+  "createdAt": "2026-10-08T18:06:48Z",
+  "video": {
+    "assetId": "1d13523ed2a73be9d53e750599a5a68b",
+    "fileName": "IMG_8195.MOV",
+    "durationS": 11.58,
+    "width": 720,
+    "height": 1280,
+    "fps": 30
+  },
+  "status": "NORMAL",
+  "statusNote": "Compared with Run 1: same elements in the same order and the same finished layout; the cycle is much slower (9.7 s vs 5.5 s), mostly from a long pink-brick press/hold (about 4 s) and a long blue-slope press (about 3 s).",
+  "elements": [
+    {
+      "key": "idle_pre",
+      "label": "Idle before cycle",
+      "kind": "idle",
+      "start": 0,
+      "end": 1,
+      "observed": "Pink brick, white plate and blue slope lie apart on the table. A hand rests still at the bottom right corner; no part moves.",
+      "flagType": "none",
+      "flag": "",
+      "frameAssetId": "cde77e55e543a76d6fdfe2e70c3f6046",
+      "frameT": 0.5
+    },
+    {
+      "key": "pick_pink",
+      "label": "Reach and grasp pink 1×6 brick",
+      "kind": "reach",
+      "start": 1,
+      "end": 1.6,
+      "observed": "One hand enters from the top right, closes on the pink brick on the table and lifts it.",
+      "flagType": "none",
+      "flag": "",
+      "frameAssetId": "ddb2c3cf3da766a305813e67a0d28887",
+      "frameT": 1.3
+    },
+    {
+      "key": "place_pink",
+      "label": "Place pink brick on plate",
+      "kind": "position",
+      "start": 1.6,
+      "end": 1.9,
+      "observed": "The hand carries the pink brick to the white plate and lowers it onto the plate, held lengthwise.",
+      "flagType": "none",
+      "flag": "",
+      "frameAssetId": "e86430874962f617fd15629d6cc6227f",
+      "frameT": 1.75
+    },
+    {
+      "key": "hold_plate",
+      "label": "Hold the base plate",
+      "kind": "hold",
+      "start": 1.8,
+      "end": 6,
+      "observed": "Second hand enters from the bottom right and grips the plate edge; the plate stays near its table position while the other hand presses.",
+      "flagType": "unclear",
+      "flag": "Hands hide whether the plate stays flat on the table",
+      "frameAssetId": "db72ef8bf9df7f10bac8b3fd7e79fa93",
+      "frameT": 3.9
+    },
+    {
+      "key": "seat_pink",
+      "label": "Press pink brick down",
+      "kind": "press",
+      "start": 1.9,
+      "end": 6,
+      "observed": "Fingers of the upper hand stay on the pink brick and press along it; little changes in frame from about 2.0 s to 6.0 s. Blue slope remains on the table.",
+      "flagType": "unclear",
+      "flag": "Long press, about 4 s; hands hide the brick, so any re-pressing cannot be confirmed",
+      "frameAssetId": "47001ea246e773d85f3e309a4c03ce52",
+      "frameT": 3.95
+    },
+    {
+      "key": "pick_blue",
+      "label": "Reach and grasp blue 2×2 slope",
+      "kind": "reach",
+      "start": 6,
+      "end": 6.6,
+      "observed": "The lower hand leaves the plate, moves to the blue slope on the table and picks it up between fingertips.",
+      "flagType": "none",
+      "flag": "",
+      "frameAssetId": "e4cae3438a1e7fef329273762b84a08b",
+      "frameT": 6.3
+    },
+    {
+      "key": "carry_blue",
+      "label": "Carry blue slope",
+      "kind": "position",
+      "start": 6.6,
+      "end": 6.9,
+      "observed": "Blue slope carried back to the half-built piece in the lower hand.",
+      "flagType": "none",
+      "flag": "",
+      "frameAssetId": "d3f50490243202a63b4f8dbed285a0e0",
+      "frameT": 6.75
+    },
+    {
+      "key": "orient_blue",
+      "label": "Position and orient blue slope",
+      "kind": "position",
+      "start": 6.9,
+      "end": 7.4,
+      "observed": "Slope held against the side of the pink brick near the plate's right side; fingers adjust it before it goes down.",
+      "flagType": "unclear",
+      "flag": "Boundary with the press is hidden by the fingers",
+      "frameAssetId": "6038ed97e0f557dbf73ae093ec6580c3",
+      "frameT": 7.15
+    },
+    {
+      "key": "seat_blue",
+      "label": "Press blue slope down",
+      "kind": "press",
+      "start": 7.4,
+      "end": 10.4,
+      "observed": "Both hands stay on the assembly with the blue slope beside the pink brick; mostly hidden. Long, nearly static stretch.",
+      "flagType": "unclear",
+      "flag": "Long press, about 3 s; hands hide the pressing and any re-pressing",
+      "frameAssetId": "d8502e562423ed9ec906a6810530d102",
+      "frameT": 8.9
+    },
+    {
+      "key": "release",
+      "label": "Release and set down",
+      "kind": "release",
+      "start": 10.4,
+      "end": 10.7,
+      "observed": "Hands let go of the assembly and withdraw: one toward the top, the other to the bottom right. The assembly is left on the table.",
+      "flagType": "none",
+      "flag": "",
+      "frameAssetId": "1c543ab9af1378792335fd56ae5c4d5d",
+      "frameT": 10.55
+    },
+    {
+      "key": "idle_post",
+      "label": "Idle after cycle",
+      "kind": "idle",
+      "start": 10.7,
+      "end": 11.58,
+      "observed": "Finished assembly alone on the table; one hand rests still at the bottom right and a hand edge sits at the top edge.",
+      "flagType": "none",
+      "flag": "",
+      "frameAssetId": "c97b465073f0f8fd8947fb31d1a26ece",
+      "frameT": 11.14
+    }
+  ],
+  "processData": [
+    "Cycle start and end times",
+    "Duration of each work element",
+    "Count of presses and re-grips visible",
+    "Idle time before and after the cycle",
+    "Finished-state check against the baseline layout"
+  ],
+  "limitations": [
+    "Hands hide the pressing, so press duration and any re-pressing cannot be confirmed",
+    "Parts are small in frame, so exact stud rows are hard to confirm",
+    "Whether the plate is lifted or stays flat during the long press is not clear"
+  ],
+  "source": {
+    "method": "claude-code",
+    "agent": "Claude Code",
+    "note": "Claude Code, frame by frame at 0.1 s steps",
+    "frameIntervalS": 0.1,
+    "analyzedAt": "2026-10-08T18:08:38Z"
+  },
+  "analysis": {
+    "state": "done",
+    "mode": "full",
+    "requestedAt": "2026-10-08T18:06:48Z",
+    "startedAt": "2026-10-08T18:07:32Z",
+    "finishedAt": "2026-10-08T18:08:38Z"
+  },
+  "compareToRunId": "run-001",
+  "differences": [
+    "Pink brick pressed and held by both hands for about 4.0 s (2.00-6.00 s); Run 1 presses for 1.4 s.",
+    "Blue slope stays untouched on the table until about 6.1 s; Run 1 picks it at 2.4 s right after the pink press.",
+    "Blue slope press lasts about 3.0 s (7.40-10.40 s); Run 1 presses for 1.0 s.",
+    "Cycle 9.7 s vs 5.5 s; parts start far apart and the video has about 1.0 s of idle before and 0.9 s after."
+  ],
+  "comparedToRunId": "run-001",
+  "cycle": {
+    "start": 1,
+    "end": 10.7
+  },
+  "finalState": {
+    "matchesBaseline": "yes",
+    "note": "Pink 1×6 brick on the plate's second stud column; blue 2×2 slope next to it over the third and fourth columns, slope facing outward, one white column free, same as Run 1.",
+    "frameAssetId": "37ebfd07c2d385fa2e317a541819b600",
+    "frameT": 10.9,
+    "closeupAssetId": "35f5829853c59e8bcec78544e117be1b"
+  }
+}
