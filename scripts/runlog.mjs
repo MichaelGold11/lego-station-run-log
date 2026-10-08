@@ -8,9 +8,11 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { StandardCheck } from './standard-check.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const DATA = path.join(ROOT, 'data');
+// RUNLOG_DATA points the helper at another data folder (the tests use a temporary copy).
+const DATA = process.env.RUNLOG_DATA ? path.resolve(process.env.RUNLOG_DATA) : path.join(ROOT, 'data');
 const RUNS = path.join(DATA, 'runs');
 const ASSETS = path.join(DATA, 'assets');
 const SETTINGS = path.join(DATA, 'meta', 'settings.json');
@@ -20,6 +22,7 @@ const KINDS = ['reach', 'position', 'press', 'release', 'hold', 'idle', 'other']
 const FLAGS = ['none', 'note', 'unclear', 'deviation'];
 const STATUSES = ['NORMAL', 'POSSIBLE_DEVIATION', 'INSUFFICIENT_INFORMATION'];
 const MATCHES = ['yes', 'no', 'unclear'];
+const sha256File = f => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
 
 // ---------- small helpers ----------
 const die = msg => { console.error('Error: ' + msg); process.exit(1); };
@@ -93,6 +96,10 @@ function referenceFor(id, explicit) {
   const self = fs.existsSync(runFile(id)) ? readJson(runFile(id)) : {};
   return pick(explicit) || pick(self.compareToRunId) || pick(settings().baselineRunId) || runs[0] || null;
 }
+// A finished run (the reference included) with exactly these steps and times but another recording.
+function copiedFrom(run) {
+  return StandardCheck.findCopy(run, allRuns().filter(r => r.id !== run.id && hasEls(r)));
+}
 function videoPath(run) {
   const f = run.video && assetFile(run.video.assetId);
   if (!f) die('This run has no stored video in data/assets.');
@@ -146,6 +153,9 @@ commands.add = ({ pos, opt }) => {
   const src = pos[0];
   if (!src || !fs.existsSync(src)) die('Give the path to a video file.');
   if (opt['compare-to'] && !allRuns().some(r => r.id === opt['compare-to'] && hasEls(r))) die(`--compare-to "${opt['compare-to']}" is not a finished run.`);
+  const sha256 = sha256File(src);
+  const same = allRuns().find(r => r.video && r.video.sha256 === sha256);
+  if (same && !opt.force) die(`This exact video is already ${same.id} (Run ${same.number}). Record a new cycle, or use --force to add it again.`);
   fs.mkdirSync(ASSETS, { recursive: true });
   const assetId = newAssetId();
   const out = path.join(ASSETS, assetId + '.mp4');
@@ -158,7 +168,7 @@ commands.add = ({ pos, opt }) => {
   const t = now();
   saveRun(id, {
     number, label: String(opt.label === true ? '' : opt.label || ''), condition: String(opt.condition === true ? '' : opt.condition || ''), createdAt: t,
-    video: { assetId, fileName: path.basename(src), ...meta },
+    video: { assetId, fileName: path.basename(src), sha256, ...meta },
     status: 'INSUFFICIENT_INFORMATION', statusNote: '', elements: [], processData: [], limitations: [],
     source: { method: 'agent' }, analysis: { state: 'queued', mode: 'full', requestedAt: t },
     compareToRunId: opt['compare-to'] || (referenceFor(id) || {}).id || ''
@@ -277,6 +287,14 @@ function checkResult(res, run, ref, mode) {
     if (!inRange(e.start) || !inRange(e.end) || e.end < e.start) errs.push(`${at} needs 0 <= start <= end <= ${dur}`);
     if (typeof e.observed !== 'string' || !e.observed.trim()) errs.push(`${at}.observed must say what is visibly seen`);
     if (e.observed && e.observed.length > 240) warn.push(`${at}.observed is long (${e.observed.length} chars, aim for under 200)`);
+    if (e.method !== undefined) {
+      if (!e.method || typeof e.method !== 'object') errs.push(`${at}.method must be an object like {"hand": "right", "offTable": "no"}`);
+      else for (const [f, v] of Object.entries(e.method)) {
+        const def = StandardCheck.METHOD[f];
+        if (!def) errs.push(`${at}.method.${f} is not a known field (${Object.keys(StandardCheck.METHOD).join(', ')})`);
+        else if (![...def.values, 'unclear'].includes(v)) errs.push(`${at}.method.${f} must be one of ${[...def.values, 'unclear'].join(', ')}`);
+      }
+    }
     if (e.frameAssetId && !assetFile(e.frameAssetId)) errs.push(`${at}.frameAssetId ${e.frameAssetId} is not in data/assets (leave it out and finish saves one)`);
     const re = refEls.get(e.key);
     if (e.key !== 'other' && ref && !re) warn.push(`${at}.key "${e.key}" is not in the reference; use "other" for new elements`);
@@ -302,6 +320,8 @@ commands.finish = ({ pos, opt }) => {
   const { errs, warn } = checkResult(res, run, ref, compare ? 'compare' : 'full');
   warn.forEach(w => console.log('Warning: ' + w));
   if (errs.length) { console.error('Not written. Fix these and run finish again:\n- ' + errs.join('\n- ')); process.exit(1); }
+  const copy = copiedFrom(Object.assign({}, run, { id, elements: compare ? run.elements : res.elements }));
+  if (copy) die(`Not written: every step and time is exactly the same as in ${copy.id} (Run ${copy.number}), a different recording. Time this video from its own frames.`);
   const t = now();
   const agent = typeof opt.agent === 'string' ? opt.agent : 'Claude Code';
   const out = Object.assign({}, run);
@@ -337,6 +357,15 @@ commands.finish = ({ pos, opt }) => {
     out.analysis = Object.assign({}, run.analysis, { state: 'done', mode: 'full', finishedAt: t });
   }
   if (out.analysis.note) delete out.analysis.note;
+  if (ref) {
+    const chk = StandardCheck.compare(out, ref);
+    out.status = chk.status;
+    if (chk.raised) out.statusNote = 'Standard check: ' + chk.issues.join('; ') + '. ' + out.statusNote;
+    out.check = { against: ref.id, status: chk.status, issues: chk.issues, timing: chk.timing, checkedAt: t };
+    if (chk.raised) console.log(`Standard check changed the status from ${chk.reported} to ${chk.status}.`);
+    chk.issues.forEach(x => console.log('Issue: ' + x));
+    chk.timing.forEach(x => console.log('Timing: ' + x + (chk.timingCounts ? '' : ' (listed, not a deviation)')));
+  }
   saveRun(id, out);
   console.log(`Wrote ${id}: ${out.status}, cycle ${cycleTime(out)} s, compared with ${out.comparedToRunId || 'nothing'}.`);
 };
@@ -387,6 +416,12 @@ commands.validate = ({ pos }) => {
     const res = Object.assign({ differences: [] }, r);
     const { errs, warn } = checkResult(res, r, ref, 'full');
     if (!fs.existsSync(path.join(ASSETS)) || !assetFile(r.video && r.video.assetId)) errs.push('video file missing from data/assets');
+    const copy = copiedFrom(Object.assign({ id }, r));
+    if (copy) errs.push(`steps and times are an exact copy of ${copy.id}, a different recording`);
+    if (ref && id !== settings().baselineRunId) {
+      const chk = StandardCheck.compare(r, ref);
+      if (chk.status !== r.status) errs.push(`status is ${r.status} but the standard check against ${ref.id} gives ${chk.status}${chk.issues.length ? ' (' + chk.issues.join('; ') + ')' : ''}`);
+    }
     if (errs.length) bad++;
     console.log(`${id}: ${errs.length ? 'PROBLEMS' : 'ok'}${warn.length ? ` (${warn.length} warning${warn.length > 1 ? 's' : ''})` : ''}`);
     errs.forEach(e => console.log('  - ' + e));
