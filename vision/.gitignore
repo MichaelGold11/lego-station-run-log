@@ -4,3 +4,5 @@ videos/*
 frames/
 logs/*
 !logs/.gitkeep
+__pycache__/
+frames.zip
