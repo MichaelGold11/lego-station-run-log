@@ -1,0 +1,6 @@
+# Raw videos and extracted frames are large; keep them off GitHub.
+videos/*
+!videos/.gitkeep
+frames/
+logs/*
+!logs/.gitkeep
