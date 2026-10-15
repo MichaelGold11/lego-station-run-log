@@ -115,6 +115,8 @@ async function handle(req, res) {
     const html = HEAD + fs.readFileSync(APP_FILE, 'utf8') + '\n</body></html>';
     return send(res, 200, html, 'text/html; charset=utf-8');
   }
+  if (p === '/live') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'live-mock.html')), 'text/html; charset=utf-8');
+  if (p === '/live-engine.js') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'live-engine.js')), 'text/javascript; charset=utf-8');
   if (p === '/local-runtime.js') return send(res, 200, fs.readFileSync(RUNTIME_FILE), 'text/javascript; charset=utf-8');
   if (p === '/api/info') return send(res, 200, { ffmpeg: hasFfmpeg, root: ROOT });
 

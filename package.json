@@ -8,6 +8,7 @@
   "scripts": {
     "start": "node server.mjs",
     "runlog": "node scripts/runlog.mjs",
-    "check": "node scripts/runlog.mjs validate"
+    "check": "node scripts/runlog.mjs validate",
+    "test:live": "node scripts/test-live-engine.mjs"
   }
 }

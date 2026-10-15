@@ -1,0 +1,840 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live station (mock)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Saira:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #eef0ee; --surface: #fcfcfb; --surface-2: #f3f4f2; --sunk: #e4e7e4;
+  --ink: #15181b; --ink-2: #4a4f56; --muted: #767b83; --line: #dcdfdc; --line-2: #c5c9c5;
+  --accent: #a3522a; --accent-2: #8a4321; --on-accent: #ffffff; --accent-wash: rgba(163, 82, 42, .09);
+  --good: #0ca30c; --good-ink: #006300; --warn: #fab219; --warn-ink: #7a5200; --crit: #d03b3b; --crit-ink: #b02e2e;
+  --shadow: 0 1px 2px rgba(21, 24, 27, .06);
+  --f-ui: "Saira", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101214; --surface: #181a1d; --surface-2: #1f2225; --sunk: #0c0d0f;
+    --ink: #eff1ef; --ink-2: #bfc3c8; --muted: #8a8f96; --line: #2a2e33; --line-2: #3a3f45;
+    --accent: #dc8b55; --accent-2: #e9a273; --on-accent: #15181b; --accent-wash: rgba(220, 139, 85, .14);
+    --good-ink: #3fbf3f; --warn-ink: #fab219; --crit-ink: #e66767;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .35);
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { color-scheme: light; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-ui); font-size: 15px; line-height: 1.45; }
+h1, h2, h3 { margin: 0; font-weight: 600; }
+p { margin: 0; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.eyebrow { font-size: 11.5px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 13px; border-radius: 6px; border: 1px solid var(--line-2); background: var(--surface); cursor: pointer; font-weight: 500; font-size: 14px; }
+.btn:hover { border-color: var(--ink-2); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
+.btn.sm { padding: 3px 9px; font-size: 13px; }
+.btn.on { background: var(--accent-wash); border-color: var(--accent); color: var(--accent-2); }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); }
+.pad { padding: 14px 16px; }
+
+.wrap { max-width: 1480px; margin: 0 auto; padding: 18px 20px 48px; display: grid; gap: 16px; }
+header h1 { font-size: 26px; line-height: 1.15; }
+header .note { color: var(--ink-2); margin-top: 3px; max-width: 90ch; }
+.pipe { display: flex; gap: 0; margin-top: 12px; flex-wrap: wrap; }
+.stage-chip { flex: 1 1 200px; min-width: 190px; padding: 8px 12px; border: 1px solid var(--line); background: var(--surface); position: relative; }
+.stage-chip:first-child { border-radius: 8px 0 0 8px; }
+.stage-chip:last-child { border-radius: 0 8px 8px 0; }
+.stage-chip + .stage-chip { border-left: 0; }
+.stage-chip .nm { display: flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+.stage-chip .val { font-size: 13.5px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line-2); flex: none; }
+.dot.live { background: var(--good); box-shadow: 0 0 0 3px rgba(12, 163, 12, .18); }
+.dot.warn { background: var(--warn); }
+
+.main { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 980px) { .main { grid-template-columns: 1fr; } }
+
+.src-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+.src-row select { flex: 1 1 240px; min-width: 0; padding: 6px 8px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--surface); }
+.stagebox { background: var(--sunk); border-radius: 6px; display: grid; place-items: center; padding: 6px; }
+.stage { position: relative; height: min(66vh, 720px); max-width: 100%; aspect-ratio: 9 / 16; background: #000; border-radius: 4px; overflow: hidden; }
+.stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.stage.setup canvas { cursor: crosshair; touch-action: none; }
+.vid-meta { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-top: 8px; font-size: 13px; color: var(--ink-2); }
+.setup-panel { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; display: grid; gap: 8px; font-size: 13.5px; }
+.tools { display: flex; gap: 6px; flex-wrap: wrap; }
+.sw { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--line-2); display: inline-block; vertical-align: -2px; }
+.sliders { display: flex; gap: 14px; flex-wrap: wrap; }
+.sliders label { display: flex; gap: 6px; align-items: center; }
+.sliders input[type=range] { width: 110px; }
+
+.timer-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 18px; border-left: 6px solid var(--line-2); transition: border-color .2s, background .2s; }
+.timer-card .big { font-family: var(--f-mono); font-size: 54px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.timer-card .state { font-size: 18px; font-weight: 600; }
+.timer-card .sub { color: var(--ink-2); font-size: 13.5px; margin-top: 2px; }
+.timer-card.amber { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, var(--surface)); }
+.timer-card.red { border-left-color: var(--crit); background: color-mix(in srgb, var(--crit) 12%, var(--surface)); }
+.timer-card.amber .big { color: var(--warn-ink); }
+.timer-card.red .big { color: var(--crit-ink); }
+.timer-card.incycle { border-left-color: var(--accent); }
+.timer-card.done { border-left-color: var(--good); }
+.flagrow { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.chip { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 4px; border: 1px solid var(--line-2); color: var(--ink-2); white-space: nowrap; }
+.chip.warn { color: var(--warn-ink); border-color: color-mix(in srgb, var(--warn) 70%, transparent); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.chip.crit { color: var(--crit-ink); border-color: color-mix(in srgb, var(--crit) 50%, transparent); background: color-mix(in srgb, var(--crit) 8%, transparent); }
+
+.sop { margin-top: 12px; }
+.sop-head, .sop-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) 62px 104px 62px; gap: 8px; align-items: center; }
+.sop-head { padding: 0 14px 6px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.sop-head span:nth-child(n+3) { text-align: right; }
+.sop-group { border-top: 1px solid var(--line); }
+.sop-title { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 14px 2px; font-weight: 700; font-size: 15px; }
+.sop-title .st { font-size: 12px; font-weight: 600; color: var(--muted); }
+.sop-title.is-done .st { color: var(--good-ink); }
+.sop-row { padding: 5px 14px; font-size: 14px; border-left: 4px solid transparent; }
+.sop-row.now { background: var(--accent-wash); border-left-color: var(--accent); font-weight: 600; }
+.sop-row.done .nm { text-decoration: line-through; text-decoration-color: var(--muted); color: var(--ink-2); }
+.sop-row.off { opacity: .5; }
+.sop-row .ic { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line-2); display: grid; place-items: center; font-size: 11px; line-height: 1; color: var(--on-accent); }
+.sop-row.now .ic { border-color: var(--accent); background: var(--accent); animation: pulse 1.1s ease-in-out infinite; }
+.sop-row.done .ic { border-color: var(--good); background: var(--good); }
+.sop-row.off .ic { border-style: dashed; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 5px rgba(163, 82, 42, .18); } }
+.sop-row .nm small { display: block; font-weight: 400; font-size: 11.5px; color: var(--muted); line-height: 1.2; }
+.sop-row .num { text-align: right; font-family: var(--f-mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+.sop-row .std { color: var(--muted); }
+.conf { display: flex; align-items: center; gap: 6px; justify-content: flex-end; font-family: var(--f-mono); font-size: 12.5px; }
+.conf .bar { width: 44px; height: 6px; background: var(--sunk); border-radius: 3px; overflow: hidden; }
+.conf .bar i { display: block; height: 100%; background: var(--good); }
+.conf .bar i.mid { background: var(--warn); }
+.conf .bar i.low { background: var(--crit); }
+.sop-row.idle { color: var(--muted); font-size: 13px; }
+
+.keys { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 10px 14px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-2); }
+kbd { font-family: var(--f-mono); font-size: 12px; background: var(--surface-2); border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 4px; padding: 0 6px; margin-right: 3px; }
+.seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: var(--surface); padding: 4px 11px; cursor: pointer; font-size: 13px; font-weight: 500; }
+.seg button + button { border-left: 1px solid var(--line-2); }
+.seg button.on { background: var(--accent); color: var(--on-accent); }
+
+.dash h2 { font-size: 18px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; margin-top: 10px; }
+.tile { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; background: var(--surface-2); }
+.tile .lb { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.tile .v { font-family: var(--f-mono); font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dash-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 16px; margin-top: 14px; }
+@media (max-width: 980px) { .dash-grid { grid-template-columns: 1fr; } }
+.tl-row { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 8px; align-items: center; margin-top: 8px; font-size: 13px; }
+.tl-bar { position: relative; height: 26px; background: var(--sunk); border-radius: 4px; overflow: hidden; }
+.tl-seg { position: absolute; top: 0; bottom: 0; border-right: 1px solid var(--surface); display: grid; align-items: center; font-size: 11px; color: #fff; padding-left: 4px; overflow: hidden; white-space: nowrap; }
+.tl-axis { position: relative; height: 16px; margin-left: 82px; font-size: 11px; color: var(--muted); font-family: var(--f-mono); }
+.tl-axis span { position: absolute; transform: translateX(-50%); }
+.legend { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--ink-2); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th { text-align: right; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--line); font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+th:first-child, td:first-child { text-align: left; }
+th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
+.tbl-wrap { max-height: 240px; overflow: auto; }
+.empty { color: var(--muted); padding: 12px 0; font-size: 13.5px; }
+.row-actions { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Live station (mock)</h1>
+    <p class="note">No AI model yet: this mock tracks colors and motion. A trained model replaces the detector later.</p>
+    <div class="pipe" id="pipe">
+      <div class="stage-chip"><div class="nm"><span class="dot" id="dCam"></span>Camera</div><div class="val" id="pCam">No source yet</div></div>
+      <div class="stage-chip"><div class="nm"><span class="dot" id="dDet"></span>Detector (color + motion)</div><div class="val" id="pDet">Waiting for frames</div></div>
+      <div class="stage-chip"><div class="nm"><span class="dot" id="dRul"></span>Rules</div><div class="val" id="pRul">Not armed</div></div>
+      <div class="stage-chip"><div class="nm"><span class="dot" id="dDash"></span>Dashboard</div><div class="val" id="pDash">0 cycles</div></div>
+    </div>
+  </header>
+
+  <div class="main">
+    <section class="panel pad" aria-label="Video">
+      <div class="src-row">
+        <select id="source" aria-label="Video source"></select>
+        <button class="btn" id="btnPlay" type="button">Pause</button>
+        <button class="btn primary" id="btnArm" type="button">Arm</button>
+        <button class="btn" id="btnSetup" type="button">Setup</button>
+      </div>
+      <div class="stagebox">
+        <div class="stage" id="stage">
+          <video id="vid" muted playsinline></video>
+          <canvas id="ov"></canvas>
+        </div>
+      </div>
+      <div class="vid-meta">
+        <label><input type="checkbox" id="chkHl" checked> Show matched pixels</label>
+        <span id="camNote" class="muted"></span>
+      </div>
+      <div class="setup-panel" id="setupPanel" hidden>
+        <div class="muted">Arm records the start spots with the parts in place. Pick a tool, then drag on the video (zones) or click a part (colors).</div>
+        <div class="tools" id="tools"></div>
+        <div class="sliders">
+          <label>Pink tolerance <input type="range" id="tolPink" min="40" max="220" value="100"><span class="mono" id="tolPinkV">100%</span></label>
+          <label>Blue tolerance <input type="range" id="tolBlue" min="40" max="220" value="100"><span class="mono" id="tolBlueV">100%</span></label>
+        </div>
+        <div>Pink <span class="sw" id="swPink"></span> <span class="mono muted" id="hsvPink"></span> &nbsp; Blue <span class="sw" id="swBlue"></span> <span class="mono muted" id="hsvBlue"></span>
+          &nbsp; <button class="btn sm" id="btnResetSetup" type="button">Reset setup</button></div>
+      </div>
+    </section>
+
+    <section aria-label="Checklist">
+      <div class="panel timer-card" id="timerCard">
+        <div>
+          <div class="state" id="tState">Waiting for start</div>
+          <div class="sub" id="tSub">Press Arm with the parts in place</div>
+        </div>
+        <div style="text-align:right">
+          <div class="big" id="tBig">0.0 s</div>
+          <div class="muted" style="font-size:13px" id="tStd">Standard: --</div>
+        </div>
+      </div>
+      <div class="panel sop">
+        <div style="padding:10px 14px 8px"><span class="eyebrow">SOP checklist</span><div class="flagrow" id="flagRow" style="justify-content:flex-start;margin-top:4px;min-height:22px"></div></div>
+        <div class="sop-head"><span></span><span>Step</span><span>Time</span><span style="text-align:right">Confidence</span><span>Run 1</span></div>
+        <div id="sop"></div>
+        <div class="keys">
+          <span class="seg" id="modeSeg"><button type="button" data-mode="auto" class="on">Auto</button><button type="button" data-mode="manual">Manual</button></span>
+          <span class="muted">Mode</span>
+          <span><kbd>Space</kbd>mark step done</span><span><kbd>Z</kbd>undo</span><span><kbd>R</kbd>reset cycle</span><span><kbd>A</kbd>arm</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel pad dash" aria-label="Dashboard">
+    <div class="row-actions"><h2>Live dashboard</h2>
+      <span><button class="btn sm" id="btnClear" type="button">Clear cycles</button> <button class="btn sm" id="btnCsv" type="button">Export CSV</button></span></div>
+    <div class="tiles" id="tiles"></div>
+    <div class="dash-grid">
+      <div>
+        <div class="eyebrow" style="margin-top:2px">Current cycle against Run 1</div>
+        <div class="tl-row"><span>Run 1</span><div class="tl-bar" id="tlBase"></div></div>
+        <div class="tl-row"><span>This cycle</span><div class="tl-bar" id="tlNow"></div></div>
+        <div class="tl-axis" id="tlAxis"></div>
+        <div class="legend" id="legend"></div>
+      </div>
+      <div>
+        <div class="eyebrow">Cycles</div>
+        <div class="tbl-wrap" id="cycTbl"></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="/live-engine.js"></script>
+<script>
+(() => {
+  'use strict';
+  const LE = window.LiveEngine;
+  const $ = id => document.getElementById(id);
+  const RUN_ASSETS = ['4081cb727cb16f26e1c0f010874db7b4', '3221282329e75c4599ee172058486ac4', '89efddd29e67dd1ad8ed366a81c6ae0a', 'f9f682a87d758689b9d9a76f9648d7e5', '1d13523ed2a73be9d53e750599a5a68b', 'dc7f6749ee1d8e73e05c65444a2dfe74'];
+  const PROC_W = 320;
+  const ZONE_META = {
+    pinkStart: { label: 'Pink start', color: '#e0457b' },
+    blueStart: { label: 'Blue start', color: '#2a78d6' },
+    build: { label: 'Build', color: '#1baf7a' }
+  };
+  const BASE_TOL = { pink: { h: 14, s: 0.2, v: 0.3 }, blue: { h: 22, s: 0.3, v: 0.3 } };
+  // Starting zones for the six recorded runs (the camera moved a little between runs). Normalized 0..1.
+  const Z = (a, b, c) => ({ pinkStart: a, blueStart: b, build: c });
+  const R = (x, y, w, h) => ({ x, y, w, h });
+  const RUN_PRESETS = {
+    1: { zones: Z(R(.52, .44, .12, .08), R(.32, .47, .14, .10), R(.50, .54, .18, .14)), config: {} },
+    2: { zones: Z(R(.42, .38, .16, .12), R(.45, .60, .12, .08), R(.40, .50, .36, .11)), config: { pinkBuild: .02, blueBuild: .004 } },
+    3: { zones: Z(R(.36, .30, .12, .15), R(.50, .41, .10, .09), R(.48, .52, .20, .15)), config: { pinkBuild: .03, blueBuild: .01 } },
+    4: { zones: Z(R(.35, .28, .12, .14), R(.57, .59, .12, .10), R(.34, .48, .20, .14)), config: { pinkBuild: .03, blueBuild: .01 } },
+    5: { zones: Z(R(.29, .23, .14, .11), R(.64, .70, .11, .09), R(.40, .47, .24, .16)), config: { pinkBuild: .025, blueBuild: .008 } },
+    6: { zones: Z(R(.55, .69, .14, .10), R(.38, .26, .12, .10), R(.39, .47, .20, .15)), config: { pinkBuild: .03, blueBuild: .01 } }
+  };
+  const GENERIC_ZONES = Z(R(.30, .30, .14, .12), R(.56, .56, .14, .10), R(.40, .44, .20, .14));
+
+  // ---------- state ----------
+  const engine = LE.createEngine();
+  const video = $('vid'), ov = $('ov'), octx = ov.getContext('2d'), stage = $('stage');
+  const proc = document.createElement('canvas'), pctx = proc.getContext('2d', { willReadFrequently: true });
+  const hlCanvas = document.createElement('canvas'), hlctx = hlCanvas.getContext('2d');
+  let hlBuf = null, lastImg = null, prevGray = null;
+  let sources = [], curSource = null, camStream = null;
+  let setup = null;                    // { zones, refs, tolMul:{pink,blue} }
+  let cfgPatch = {};
+  let mode = 'auto', setupOn = false, tool = 'pinkStart', drag = null;
+  let signals = { pinkStart: { pink: 0, blue: 0, motion: 0 }, blueStart: { pink: 0, blue: 0, motion: 0 }, build: { pink: 0, blue: 0, motion: 0 } };
+  let curT = 0, lastT = -1, pendingArm = false, vfcId = 0, rafId = 0, loopToken = 0;
+  let frames = 0, fpsT0 = performance.now(), fps = 0;
+  let std = { total: 5.5, subs: {}, segs: [] };      // Run 1 standard times (seconds)
+  let st = engine.getState();
+  const cycleSource = {};
+  let uiT = 0, uiSig = '';
+  let cameraAllowed = null;
+
+  const fmt = ms => (ms / 1000).toFixed(1) + ' s';
+  const fmtS = s => s.toFixed(1) + ' s';
+  const store = {
+    get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage blocked */ } }
+  };
+  const clone = o => JSON.parse(JSON.stringify(o));
+
+  // ---------- Run 1 standard ----------
+  async function loadStandard() {
+    try {
+      const res = await fetch('/api/db/runs/run-001', { cache: 'no-store' });
+      const j = await res.json();
+      const els = (j.data && j.data.elements) || [];
+      if (!els.length) return;
+      const subs = {};
+      for (const e of els) if (e.key !== 'other') subs[e.key] = (subs[e.key] || 0) + (e.end - e.start);
+      const work = els.filter(e => e.key !== 'idle_pre' && e.key !== 'idle_post' && e.key !== 'other' && e.key !== 'hold_plate').sort((a, b) => a.start - b.start);
+      const rel = els.find(e => e.key === 'release');
+      const first = Math.min(...els.filter(e => e.key !== 'idle_pre' && e.key !== 'idle_post' && e.key !== 'other').map(e => e.start));
+      std.total = rel ? rel.end - first : std.total;
+      std.subs = subs; std.segs = work.map(e => ({ key: e.key, start: e.start - first, end: e.end - first }));
+      engine.setConfig({ standardCycleS: std.total });
+      $('tStd').textContent = 'Standard: ' + fmtS(std.total) + ' (Run 1)';
+      buildSop();
+      renderAll(true);
+    } catch (e) { $('tStd').textContent = 'Standard: not loaded'; }
+  }
+
+  // ---------- sources ----------
+  async function listSources(withCams) {
+    const out = [];
+    let devices = [];
+    if (withCams) try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        try {
+          const tmp = await navigator.mediaDevices.getUserMedia({ video: true });
+          tmp.getTracks().forEach(t => t.stop());
+          cameraAllowed = true;
+        } catch (e) { cameraAllowed = false; $('camNote').textContent = 'Camera permission not granted. Recorded runs still work.'; }
+        devices = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+      } else $('camNote').textContent = 'This browser has no camera access here. Recorded runs still work.';
+    } catch (e) { /* no devices */ }
+    const pref = d => /camo|iriun|iphone/i.test(d.label) ? 0 : 1;
+    devices.sort((a, b) => pref(a) - pref(b));
+    devices.forEach((d, i) => out.push({ key: 'cam:' + (d.label || d.deviceId || i), type: 'cam', deviceId: d.deviceId, label: d.label || ('Camera ' + (i + 1)), phone: pref(d) === 0 }));
+    for (let i = 1; i <= 6; i++) out.push({ key: 'run:' + i, type: 'run', run: i, label: 'Recorded Run ' + i });
+    sources = out;
+    const sel = $('source'), keep = sel.value; sel.innerHTML = '';
+    const g1 = document.createElement('optgroup'); g1.label = 'Cameras';
+    const g2 = document.createElement('optgroup'); g2.label = 'Recorded runs';
+    out.forEach(s => { const o = document.createElement('option'); o.value = s.key; o.textContent = (s.phone ? 'Phone: ' : '') + s.label; (s.type === 'cam' ? g1 : g2).appendChild(o); });
+    if (g1.children.length) sel.appendChild(g1);
+    sel.appendChild(g2);
+    if (keep) sel.value = keep;
+    return out;
+  }
+
+  function stopCurrent() {
+    loopToken++;
+    if (vfcId && video.cancelVideoFrameCallback) try { video.cancelVideoFrameCallback(vfcId); } catch (e) { /* ignore */ }
+    if (rafId) cancelAnimationFrame(rafId);
+    vfcId = 0; rafId = 0;
+    if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+    video.pause(); video.removeAttribute('src'); video.srcObject = null; video.load();
+  }
+
+  async function selectSource(key) {
+    const s = sources.find(x => x.key === key) || sources[sources.length - 6];
+    stopCurrent();
+    curSource = s; $('source').value = s.key;
+    store.set('lego-live:last-source', s.key);
+    prevGray = null; lastT = -1; curT = 0; pendingArm = false;
+    loadSetup();
+    engine.setConfig(Object.assign({}, LE.DEFAULT_CONFIG, { standardCycleS: std.total }, cfgPatch));
+    st = engine.unarm();
+    $('btnPlay').hidden = s.type !== 'run';
+    video.loop = s.type === 'run';
+    try {
+      if (s.type === 'cam') {
+        camStream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: s.deviceId ? { exact: s.deviceId } : undefined, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+        video.srcObject = camStream;
+        $('camNote').textContent = '';
+      } else {
+        video.src = '/_blob/' + RUN_ASSETS[s.run - 1];
+        pendingArm = true;
+      }
+      await video.play().catch(() => {});
+      $('btnPlay').textContent = 'Pause';
+    } catch (e) {
+      $('camNote').textContent = 'Could not open this camera (' + (e && e.name ? e.name : 'error') + '). Pick another source.';
+      setDot('dCam', 'warn');
+    }
+    startLoop();
+    renderAll(true);
+  }
+
+  function onMeta() {
+    const vw = video.videoWidth, vh = video.videoHeight;
+    if (vw && vh) { stage.style.aspectRatio = vw + ' / ' + vh; sizeOverlay(); }
+  }
+  video.addEventListener('loadedmetadata', onMeta);
+  video.addEventListener('resize', onMeta);
+
+  // ---------- setup (zones, colors) ----------
+  function defaultSetup(s) {
+    if (s.type === 'run') {
+      const p = RUN_PRESETS[s.run];
+      cfgPatch = clone(p.config);
+      return { zones: clone(p.zones), refs: clone(LE.DEFAULT_REFS), tolMul: { pink: 1, blue: 1 } };
+    }
+    cfgPatch = {};
+    return { zones: clone(GENERIC_ZONES), refs: clone(LE.DEFAULT_REFS), tolMul: { pink: 1, blue: 1 } };
+  }
+  function loadSetup() {
+    const saved = store.get('lego-live:setup:' + curSource.key);
+    setup = defaultSetup(curSource);
+    if (saved && saved.zones && saved.refs) setup = Object.assign(setup, saved);
+    syncSetupUi();
+  }
+  function saveSetup() { if (curSource) store.set('lego-live:setup:' + curSource.key, setup); }
+  const tolNow = () => ({
+    pink: { h: BASE_TOL.pink.h * setup.tolMul.pink, s: BASE_TOL.pink.s * setup.tolMul.pink, v: BASE_TOL.pink.v * setup.tolMul.pink },
+    blue: { h: BASE_TOL.blue.h * setup.tolMul.blue, s: BASE_TOL.blue.s * setup.tolMul.blue, v: BASE_TOL.blue.v * setup.tolMul.blue }
+  });
+  const hsvCss = c => `hsl(${Math.round(c.h)} ${Math.round(c.s * 100)}% ${Math.round(c.v * (1 - c.s / 2) * 100)}%)`;
+  function syncSetupUi() {
+    $('tolPink').value = Math.round(setup.tolMul.pink * 100); $('tolPinkV').textContent = Math.round(setup.tolMul.pink * 100) + '%';
+    $('tolBlue').value = Math.round(setup.tolMul.blue * 100); $('tolBlueV').textContent = Math.round(setup.tolMul.blue * 100) + '%';
+    for (const k of ['pink', 'blue']) {
+      const c = setup.refs[k];
+      $('sw' + (k === 'pink' ? 'Pink' : 'Blue')).style.background = hsvCss(c);
+      $('hsv' + (k === 'pink' ? 'Pink' : 'Blue')).textContent = `H${Math.round(c.h)} S${Math.round(c.s * 100)} V${Math.round(c.v * 100)}`;
+    }
+  }
+  const TOOLS = [['pinkStart', 'Draw pink start'], ['blueStart', 'Draw blue start'], ['build', 'Draw build zone'], ['samplePink', 'Pick pink color'], ['sampleBlue', 'Pick blue color']];
+  function buildTools() {
+    const el = $('tools'); el.innerHTML = '';
+    TOOLS.forEach(([k, label]) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'btn sm' + (k === tool ? ' on' : ''); b.textContent = label; b.dataset.tool = k;
+      b.onclick = () => { tool = k; buildTools(); };
+      el.appendChild(b);
+    });
+  }
+  function pt(ev) {
+    const r = ov.getBoundingClientRect();
+    return { x: Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (ev.clientY - r.top) / r.height)) };
+  }
+  ov.addEventListener('pointerdown', ev => {
+    if (!setupOn) return;
+    const p = pt(ev);
+    if (tool === 'samplePink' || tool === 'sampleBlue') { sampleColor(tool === 'samplePink' ? 'pink' : 'blue', p); return; }
+    drag = { key: tool, x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+    ov.setPointerCapture(ev.pointerId);
+  });
+  ov.addEventListener('pointermove', ev => { if (drag) { const p = pt(ev); drag.x1 = p.x; drag.y1 = p.y; redrawStill(); } });
+  ov.addEventListener('pointerup', ev => {
+    if (!drag) return;
+    const p = pt(ev); drag.x1 = p.x; drag.y1 = p.y;
+    const x = Math.min(drag.x0, drag.x1), y = Math.min(drag.y0, drag.y1), w = Math.abs(drag.x1 - drag.x0), h = Math.abs(drag.y1 - drag.y0);
+    if (w > 0.015 && h > 0.015) { setup.zones[drag.key] = { x, y, w, h }; saveSetup(); }
+    drag = null; redrawStill();
+  });
+  function sampleColor(which, p) {
+    if (!lastImg) return;
+    const W = proc.width, H = proc.height, cx = Math.round(p.x * W), cy = Math.round(p.y * H);
+    let r = 0, g = 0, b = 0, n = 0;
+    for (let y = cy - 2; y <= cy + 2; y++) for (let x = cx - 2; x <= cx + 2; x++) {
+      if (x < 0 || y < 0 || x >= W || y >= H) continue;
+      const i = (y * W + x) * 4; r += lastImg[i]; g += lastImg[i + 1]; b += lastImg[i + 2]; n++;
+    }
+    if (!n) return;
+    setup.refs[which] = LE.rgbToHsv(r / n, g / n, b / n);
+    syncSetupUi(); saveSetup(); redrawStill();
+  }
+  $('tolPink').oninput = e => { setup.tolMul.pink = e.target.value / 100; syncSetupUi(); saveSetup(); redrawStill(); };
+  $('tolBlue').oninput = e => { setup.tolMul.blue = e.target.value / 100; syncSetupUi(); saveSetup(); redrawStill(); };
+  $('btnResetSetup').onclick = () => { setup = defaultSetup(curSource); saveSetup(); syncSetupUi(); redrawStill(); };
+  $('btnSetup').onclick = () => {
+    setupOn = !setupOn;
+    $('setupPanel').hidden = !setupOn; $('btnSetup').classList.toggle('on', setupOn); stage.classList.toggle('setup', setupOn);
+    if (setupOn && curSource && curSource.type === 'run') { video.pause(); $('btnPlay').textContent = 'Play'; }
+    buildTools(); redrawStill();
+  };
+  $('chkHl').onchange = () => redrawStill();
+  $('btnPlay').onclick = () => {
+    if (video.paused) { video.play(); $('btnPlay').textContent = 'Pause'; } else { video.pause(); $('btnPlay').textContent = 'Play'; }
+  };
+
+  // ---------- frame loop ----------
+  function startLoop() {
+    const token = ++loopToken;
+    const useVfc = typeof video.requestVideoFrameCallback === 'function';
+    const cb = (now, meta) => {
+      if (token !== loopToken) return;
+      try { processFrame(now, meta); } catch (e) { console.error(e); }
+      schedule();
+    };
+    function schedule() {
+      if (token !== loopToken) return;
+      if (useVfc) vfcId = video.requestVideoFrameCallback(cb);
+      else rafId = requestAnimationFrame(now => cb(now, null));
+    }
+    schedule();
+  }
+
+  function processFrame(now, meta) {
+    const vw = video.videoWidth, vh = video.videoHeight;
+    if (!vw || !vh || video.readyState < 2) return;
+    const W = PROC_W, H = Math.round(PROC_W * vh / vw);
+    if (proc.width !== W || proc.height !== H) { proc.width = W; proc.height = H; hlCanvas.width = W; hlCanvas.height = H; hlBuf = new Uint8ClampedArray(W * H * 4); prevGray = null; }
+    pctx.drawImage(video, 0, 0, W, H);
+    const img = pctx.getImageData(0, 0, W, H);
+    lastImg = img.data;
+    const isRun = curSource && curSource.type === 'run';
+    const tMs = isRun ? ((meta && meta.mediaTime != null ? meta.mediaTime : video.currentTime) * 1000) : now;
+    if (isRun && lastT >= 0 && tMs < lastT - 300) {       // the video looped: start the next pass
+      prevGray = null; engine.reset(tMs);
+    }
+    const showHl = $('chkHl').checked;
+    const r = LE.computeSignals(lastImg, W, H, prevGray, setup.zones, setup.refs, tolNow(), showHl ? hlBuf : null);
+    prevGray = r.gray; signals = r.signals;
+    if (pendingArm && (!isRun || tMs < 250)) { st = engine.arm(signals, tMs); pendingArm = false; }
+    lastT = tMs; curT = tMs;
+    st = mode === 'auto' ? engine.update(signals, tMs) : engine.tick(tMs);
+    // FPS
+    frames++;
+    const pn = performance.now();
+    if (pn - fpsT0 >= 1000) { fps = frames * 1000 / (pn - fpsT0); frames = 0; fpsT0 = pn; }
+    // remember which source a cycle came from
+    if (st.cycles.length && !cycleSource[st.cycles[st.cycles.length - 1].n + ':' + st.cycles.length]) cycleSource[st.cycles[st.cycles.length - 1].n + ':' + st.cycles.length] = curSource ? curSource.label : '';
+    drawOverlay(showHl);
+    renderAll(false);
+  }
+
+  function redrawStill() {
+    // Recompute signals on the last frame (no motion) so setup changes show at once, even while paused.
+    if (lastImg && proc.width) {
+      const showHl = $('chkHl').checked;
+      const r = LE.computeSignals(lastImg, proc.width, proc.height, null, setup.zones, setup.refs, tolNow(), showHl ? hlBuf : null);
+      if (video.paused) signals = r.signals;
+      drawOverlay(showHl);
+    } else drawOverlay(false);
+  }
+
+  // ---------- overlay ----------
+  function sizeOverlay() {
+    const r = stage.getBoundingClientRect(), d = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.max(2, Math.round(r.width * d)), h = Math.max(2, Math.round(r.height * d));
+    if (ov.width !== w || ov.height !== h) { ov.width = w; ov.height = h; }
+  }
+  window.addEventListener('resize', () => { sizeOverlay(); redrawStill(); });
+  if (window.ResizeObserver) new ResizeObserver(() => { sizeOverlay(); }).observe(stage);
+
+  function drawOverlay(showHl) {
+    sizeOverlay();
+    const w = ov.width, h = ov.height, k = w / 440;
+    octx.clearRect(0, 0, w, h);
+    if (showHl && hlBuf && proc.width) {
+      hlctx.putImageData(new ImageData(hlBuf, proc.width, proc.height), 0, 0);
+      octx.imageSmoothingEnabled = false;
+      octx.drawImage(hlCanvas, 0, 0, w, h);
+    }
+    const zones = Object.assign({}, setup.zones);
+    if (drag) zones[drag.key] = { x: Math.min(drag.x0, drag.x1), y: Math.min(drag.y0, drag.y1), w: Math.abs(drag.x1 - drag.x0), h: Math.abs(drag.y1 - drag.y0) };
+    for (const key of LE.ZONE_KEYS) {
+      const z = zones[key], meta = ZONE_META[key], s = signals[key];
+      const x = z.x * w, y = z.y * h, zw = z.w * w, zh = z.h * h;
+      octx.lineWidth = Math.max(1.5, 2 * k); octx.strokeStyle = meta.color; octx.strokeRect(x, y, zw, zh);
+      // label and bars
+      const fs = Math.max(10, 12 * k); octx.font = `600 ${fs}px Saira, sans-serif`;
+      const bw = Math.max(70 * k, zw), bh = fs * 3.9;
+      let by = y - bh - 2; if (by < 0) by = Math.min(h - bh, y + zh + 2);
+      let bx = Math.min(x, w - bw); if (bx < 0) bx = 0;
+      octx.fillStyle = 'rgba(15,17,19,.78)'; octx.fillRect(bx, by, bw, bh);
+      octx.fillStyle = meta.color; octx.fillRect(bx, by, 3 * k, bh);
+      octx.fillStyle = '#fff'; octx.textBaseline = 'top'; octx.fillText(meta.label, bx + 7 * k, by + 2 * k);
+      const rows = [['P', s.pink, Math.min(1, s.pink / 0.25), '#ff5fa8', Math.round(s.pink * 100) + '%'], ['B', s.blue, Math.min(1, s.blue / 0.25), '#4aa3ff', Math.round(s.blue * 100) + '%'], ['M', s.motion, s.motion, '#f0b429', Math.round(s.motion * 100) + '%']];
+      const ry0 = by + fs + 3 * k, rh = (bh - fs - 5 * k) / 3, lab = Math.max(8, 10 * k);
+      octx.font = `500 ${lab}px IBM Plex Mono, monospace`;
+      rows.forEach((r, i) => {
+        const yy = ry0 + i * rh;
+        octx.fillStyle = '#cfd3d8'; octx.fillText(r[0], bx + 7 * k, yy);
+        const tx = bx + 18 * k, tw = bw - 18 * k - 34 * k;
+        octx.fillStyle = 'rgba(255,255,255,.18)'; octx.fillRect(tx, yy + 1, tw, rh - 3);
+        octx.fillStyle = r[3]; octx.fillRect(tx, yy + 1, tw * r[2], rh - 3);
+        octx.fillStyle = '#fff'; octx.fillText(r[4], tx + tw + 4 * k, yy);
+      });
+    }
+  }
+
+  // ---------- SOP checklist ----------
+  const rowEls = {};
+  function buildSop() {
+    const el = $('sop'); el.innerHTML = ''; for (const k of Object.keys(rowEls)) delete rowEls[k];
+    const addRow = (parent, key, opts) => {
+      const row = document.createElement('div'); row.className = 'sop-row' + (opts.cls ? ' ' + opts.cls : '');
+      const stdS = std.subs[key];
+      const sub = opts.sub ? `<small>${opts.sub}</small>` : '';
+      row.innerHTML = `<span class="ic"></span><span class="nm">${LE.LABELS[key]}${sub}</span><span class="num t">${opts.off ? '' : '--'}</span><span class="conf"></span><span class="num std">${stdS != null && !opts.noStd ? fmtS(stdS) : ''}</span>`;
+      parent.appendChild(row); rowEls[key] = row;
+    };
+    const idle = document.createElement('div'); idle.className = 'sop-group';
+    addRow(idle, 'idle_pre', { cls: 'idle', noStd: true }); el.appendChild(idle);
+    LE.SOP_STEPS.forEach(step => {
+      const g = document.createElement('div'); g.className = 'sop-group';
+      const stdSum = step.substeps.reduce((a, k) => a + (std.subs[k] || 0), 0);
+      const t = document.createElement('div'); t.className = 'sop-title'; t.dataset.step = step.id;
+      t.innerHTML = `<span>${step.title}</span><span class="st mono">Run 1: ${fmtS(stdSum)}</span>`;
+      g.appendChild(t);
+      step.substeps.forEach(k => {
+        addRow(g, k, { sub: LE.ESTIMATED[k] ? 'estimated' : '' });
+        if (k === 'pick_pink') addRow(g, 'hold_plate', { off: true, cls: 'off', sub: LE.NOT_DETECTED.hold_plate, noStd: true });
+      });
+      el.appendChild(g);
+    });
+    const post = document.createElement('div'); post.className = 'sop-group';
+    addRow(post, 'idle_post', { cls: 'idle', noStd: true }); el.appendChild(post);
+    rowEls.hold_plate.querySelector('.conf').textContent = '';
+  }
+
+  function confCell(cell, conf, manual) {
+    if (manual) { cell.innerHTML = '<span>manual</span>'; return; }
+    if (conf == null) { cell.innerHTML = '<span class="muted">--</span>'; return; }
+    const cls = conf < 60 ? 'low' : conf < 80 ? 'mid' : '';
+    cell.innerHTML = `<span class="bar"><i class="${cls}" style="width:${conf}%"></i></span><span>${conf}%</span>`;
+  }
+
+  function renderSop() {
+    const doneMap = {}; st.done.forEach(d => { doneMap[d.key] = d; });
+    for (const key of Object.keys(rowEls)) {
+      if (key === 'hold_plate') continue;
+      const row = rowEls[key], tEl = row.querySelector('.t'), cEl = row.querySelector('.conf');
+      let cls = 'sop-row' + (key.startsWith('idle') ? ' idle' : '');
+      const d = doneMap[key];
+      if (key === 'idle_post') {
+        const now = st.status === 'complete';
+        if (now) cls += ' now'; row.className = cls;
+        row.querySelector('.ic').textContent = '';
+        tEl.textContent = now ? '' : ''; cEl.innerHTML = '';
+        continue;
+      }
+      if (d) {
+        cls += ' done'; row.className = cls;
+        row.querySelector('.ic').textContent = '✓';
+        tEl.textContent = d.skipped ? 'skipped' : fmt(d.dur);
+        confCell(cEl, d.conf, d.manual);
+      } else if (st.current === key) {
+        cls += ' now'; row.className = cls; row.querySelector('.ic').textContent = '';
+        const since = st.currentStartMs != null ? Math.max(0, curT - st.currentStartMs) : 0;
+        tEl.textContent = key === 'idle_pre' ? '' : fmt(since);
+        cEl.innerHTML = '<span class="muted">now</span>';
+      } else {
+        row.className = cls; row.querySelector('.ic').textContent = '';
+        tEl.textContent = key.startsWith('idle') ? '' : '--'; cEl.innerHTML = '';
+      }
+    }
+    // step titles
+    const stepStatus = { pink: [1, 4], blue: [4, 8], release: [8, 9] };
+    document.querySelectorAll('.sop-title').forEach(t => {
+      const id = t.dataset.step, [a, b] = stepStatus[id];
+      const doneAll = st.phase >= b || st.status === 'complete';
+      t.classList.toggle('is-done', doneAll);
+    });
+  }
+
+  // ---------- timer, flags ----------
+  function renderTimer() {
+    const card = $('timerCard'), el = $('tBig');
+    const stdMs = std.total * 1000;
+    const running = st.status === 'running', complete = st.status === 'complete';
+    const e = running ? Math.max(0, curT - st.cycleStartMs) : (complete ? st.elapsedMs : 0);
+    el.textContent = (e / 1000).toFixed(1) + ' s';
+    let cls = 'panel timer-card';
+    if (running) cls += e >= 1.5 * stdMs ? ' red' : e > stdMs ? ' amber' : ' incycle';
+    else if (complete) cls += e >= 1.5 * stdMs ? ' red' : e > stdMs ? ' amber' : ' done';
+    card.className = cls;
+    $('tState').textContent = st.status === 'running' ? 'In cycle' : st.status === 'complete' ? 'Cycle complete' : 'Waiting for start';
+    $('tSub').textContent = st.status === 'running' ? (st.current ? LE.LABELS[st.current] : '') : st.status === 'complete' ? 'Over standard by ' + Math.max(0, (e - stdMs) / 1000).toFixed(1) + ' s' : st.waitingFor;
+    if (st.status === 'complete' && e <= stdMs) $('tSub').textContent = 'Within standard';
+    const f = st.flags, chips = [];
+    if (f.overStandard) chips.push('<span class="chip warn">Over standard</span>');
+    if (f.outOfOrder) chips.push('<span class="chip crit">Out of order</span>');
+    if (f.rework) chips.push(`<span class="chip crit">Rework ${f.rework}</span>`);
+    if (f.lowConfidence) chips.push(`<span class="chip warn">Low confidence ${f.lowConfidence}</span>`);
+    $('flagRow').innerHTML = chips.join('') || '<span class="muted" style="font-size:13px">No flags</span>';
+  }
+
+  // ---------- dashboard ----------
+  function stats() {
+    const cs = st.cycles, ts = cs.map(c => c.totalMs / 1000), n = ts.length;
+    const avg = n ? ts.reduce((a, b) => a + b, 0) / n : 0;
+    const sd = n > 1 ? Math.sqrt(ts.reduce((a, b) => a + (b - avg) * (b - avg), 0) / n) : 0;
+    return {
+      n, avg, sd, min: n ? Math.min(...ts) : 0, max: n ? Math.max(...ts) : 0, uph: avg ? 3600 / avg : 0,
+      rework: cs.reduce((a, c) => a + c.flags.rework, 0) + (st.status === 'running' ? st.flags.rework : 0),
+      ooo: cs.filter(c => c.flags.outOfOrder).length + (st.status === 'running' && st.flags.outOfOrder ? 1 : 0),
+      low: cs.reduce((a, c) => a + c.flags.lowConfidence, 0) + (st.status === 'running' ? st.flags.lowConfidence : 0)
+    };
+  }
+  function renderTiles() {
+    const s = stats(), v = x => (s.n ? x : '--');
+    const tiles = [
+      ['Cycles completed', s.n], ['Average', v(fmtS(s.avg))], ['Fastest', v(fmtS(s.min))], ['Slowest', v(fmtS(s.max))],
+      ['Variation (std dev)', s.n > 1 ? fmtS(s.sd) : '--'], ['Units per hour', v(s.uph.toFixed(0))],
+      ['Rework', s.rework], ['Out of order', s.ooo], ['Low confidence', s.low]
+    ];
+    $('tiles').innerHTML = tiles.map(t => `<div class="tile"><div class="lb">${t[0]}</div><div class="v">${t[1]}</div></div>`).join('');
+  }
+  function seg(parent, key, a, b, scale) {
+    const d = document.createElement('div'); d.className = 'tl-seg';
+    d.style.left = (a / scale * 100) + '%'; d.style.width = Math.max(0.4, (b - a) / scale * 100) + '%';
+    d.style.background = LE.COLORS[key]; d.title = LE.LABELS[key] + ': ' + fmtS(b - a);
+    if ((b - a) / scale > 0.09) d.textContent = LE.LABELS[key].split(' ')[0];
+    parent.appendChild(d);
+  }
+  function renderTimeline() {
+    const base = $('tlBase'), now = $('tlNow'); base.innerHTML = ''; now.innerHTML = '';
+    let curTotal = 0; const segs = [];
+    if (st.cycleStartMs != null) {
+      const t0 = st.cycleStartMs;
+      st.done.forEach(d => { if (d.key !== 'idle_pre' && !d.skipped) segs.push({ key: d.key, a: (d.start - t0) / 1000, b: (d.end - t0) / 1000 }); });
+      if (st.status === 'running' && st.current && st.current !== 'idle_pre') segs.push({ key: st.current, a: (st.currentStartMs - t0) / 1000, b: Math.max((st.currentStartMs - t0) / 1000, (curT - t0) / 1000) });
+      curTotal = segs.length ? segs[segs.length - 1].b : 0;
+    }
+    const scale = Math.max(std.total, curTotal, 1) * 1.04;
+    std.segs.forEach(s => seg(base, s.key, s.start, s.end, scale));
+    segs.forEach(s => seg(now, s.key, s.a, s.b, scale));
+    const ax = $('tlAxis'); ax.innerHTML = '';
+    const step = scale > 14 ? 2 : 1;
+    for (let t = 0; t <= scale; t += step) { const sp = document.createElement('span'); sp.style.left = (t / scale * 100) + '%'; sp.textContent = t + 's'; ax.appendChild(sp); }
+  }
+  function renderLegend() {
+    const keys = ['pick_pink', 'place_pink', 'seat_pink', 'pick_blue', 'carry_blue', 'orient_blue', 'seat_blue', 'release'];
+    $('legend').innerHTML = keys.map(k => `<span><i style="background:${LE.COLORS[k]}"></i>${LE.LABELS[k]}</span>`).join('');
+  }
+  function renderCycles() {
+    const cs = st.cycles;
+    if (!cs.length) { $('cycTbl').innerHTML = '<div class="empty">No finished cycles yet.</div>'; return; }
+    const rows = cs.slice().reverse().map(c => {
+      const f = c.flags, chips = [];
+      if (f.overStandard) chips.push('<span class="chip warn">Over standard</span>');
+      if (f.outOfOrder) chips.push('<span class="chip crit">Out of order</span>');
+      if (f.rework) chips.push(`<span class="chip crit">Rework ${f.rework}</span>`);
+      if (f.lowConfidence) chips.push(`<span class="chip warn">Low conf ${f.lowConfidence}</span>`);
+      return `<tr><td>#${c.n}</td><td>${fmtS(c.totalMs / 1000)}</td><td>${fmtS(c.steps.pink / 1000)}</td><td>${fmtS(c.steps.blue / 1000)}</td><td>${fmtS(c.steps.release / 1000)}</td><td>${chips.join(' ') || '<span class="muted">none</span>'}</td></tr>`;
+    }).join('');
+    $('cycTbl').innerHTML = `<table><thead><tr><th>Cycle</th><th>Total</th><th>1. Pink</th><th>2. Blue</th><th>3. Release</th><th>Flags</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  function exportCsv() {
+    const head = ['cycle', 'source', 'total_s', 'step1_pink_s', 'step2_blue_s', 'step3_release_s', 'pick_pink_s', 'place_pink_s', 'seat_pink_s', 'pick_blue_s', 'carry_blue_s', 'orient_blue_s', 'seat_blue_s', 'release_s', 'over_standard', 'rework', 'out_of_order', 'low_confidence'];
+    const lines = [head.join(',')];
+    st.cycles.forEach((c, i) => {
+      const sub = {}; c.substeps.forEach(s => { sub[s.key] = (s.dur / 1000).toFixed(2); });
+      const src = (cycleSource[c.n + ':' + (i + 1)] || '').replace(/,/g, ' ');
+      lines.push([c.n, src, (c.totalMs / 1000).toFixed(2), (c.steps.pink / 1000).toFixed(2), (c.steps.blue / 1000).toFixed(2), (c.steps.release / 1000).toFixed(2),
+        sub.pick_pink, sub.place_pink, sub.seat_pink, sub.pick_blue, sub.carry_blue, sub.orient_blue, sub.seat_blue, sub.release,
+        c.flags.overStandard ? 1 : 0, c.flags.rework, c.flags.outOfOrder ? 1 : 0, c.flags.lowConfidence].join(','));
+    });
+    const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/csv' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'station-cycles.csv';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+  $('btnCsv').onclick = exportCsv;
+  $('btnClear').onclick = () => { engine.clearCycles(); st = engine.getState(); renderAll(true); };
+
+  // ---------- pipeline strip ----------
+  function setDot(id, cls) { $(id).className = 'dot' + (cls ? ' ' + cls : ''); }
+  function renderPipe() {
+    const live = !!curSource && video.videoWidth > 0 && !video.paused;
+    $('pCam').textContent = curSource ? `${curSource.label} | ${live ? fps.toFixed(0) : 0} fps` : 'No source yet';
+    setDot('dCam', live ? 'live' : (curSource ? 'warn' : ''));
+    const p = signals.build, a = signals.pinkStart, b = signals.blueStart;
+    $('pDet').textContent = `Pink ${Math.round(Math.max(a.pink, p.pink) * 100)}% | Blue ${Math.round(Math.max(b.blue, p.blue) * 100)}% | Motion ${Math.round(Math.max(a.motion, b.motion, p.motion) * 100)}%`;
+    setDot('dDet', live ? 'live' : '');
+    $('pRul').textContent = mode === 'manual' ? 'Manual mode: keys only' : st.waitingFor;
+    setDot('dRul', st.status === 'running' ? 'live' : st.status === 'unarmed' ? '' : 'warn');
+    $('pDash').textContent = `${st.cycles.length} cycle${st.cycles.length === 1 ? '' : 's'}`;
+    setDot('dDash', st.cycles.length ? 'live' : '');
+  }
+
+  // Throttled DOM updates (about 10 per second), forced when an event changes.
+  function renderAll(force) {
+    const now = performance.now();
+    const sig = st.phase + '|' + st.done.length + '|' + st.cycles.length + '|' + st.flags.rework + st.flags.lowConfidence + st.flags.outOfOrder + '|' + st.events.length + '|' + mode;
+    if (!force && sig === uiSig && now - uiT < 100) return;
+    const heavy = force || sig !== uiSig;
+    uiSig = sig; uiT = now;
+    renderPipe(); renderTimer(); renderSop();
+    if (heavy) { renderTiles(); renderCycles(); renderLegend(); }
+    renderTimeline();
+  }
+
+  // ---------- controls ----------
+  function arm() {
+    if (curSource && curSource.type === 'run') { pendingArm = true; prevGray = null; try { video.currentTime = 0; } catch (e) { /* ignore */ } video.play().catch(() => {}); $('btnPlay').textContent = 'Pause'; }
+    else { st = engine.arm(signals, curT || performance.now()); }
+    renderAll(true);
+  }
+  function setMode(m) {
+    mode = m;
+    document.querySelectorAll('#modeSeg button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+    renderAll(true);
+  }
+  function doManual() { st = engine.manualAdvance(curT); renderAll(true); }
+  function doUndo() { st = engine.undo(); renderAll(true); }
+  function doReset() { st = engine.reset(curT); renderAll(true); }
+  $('btnArm').onclick = arm;
+  $('modeSeg').onclick = e => { const b = e.target.closest('button'); if (b) setMode(b.dataset.mode); };
+  $('source').onchange = e => selectSource(e.target.value);
+  window.addEventListener('keydown', e => {
+    if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) && e.target.type !== 'checkbox' && e.target.type !== 'range') return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.code === 'Space') { e.preventDefault(); doManual(); }
+    else if (e.key === 'z' || e.key === 'Z') doUndo();
+    else if (e.key === 'r' || e.key === 'R') doReset();
+    else if (e.key === 'a' || e.key === 'A') arm();
+  });
+  setInterval(() => { if (video.paused) renderAll(false); }, 250);
+
+  // ---------- debug hook ----------
+  window.__live = {
+    engine, LE,
+    get state() { return st; }, get signals() { return signals; }, get setup() { return setup; }, get fps() { return fps; }, get t() { return curT; },
+    get sources() { return sources.map(s => s.key); },
+    selectSource, arm, setMode, doManual, doUndo, doReset,
+    setZones(z) { Object.assign(setup.zones, z); saveSetup(); redrawStill(); },
+    setRefs(r) { Object.assign(setup.refs, r); syncSetupUi(); saveSetup(); redrawStill(); },
+    setTol(p, b) { if (p != null) setup.tolMul.pink = p; if (b != null) setup.tolMul.blue = b; syncSetupUi(); saveSetup(); },
+    setConfig(p) { engine.setConfig(p); },
+    seek(s) { try { video.currentTime = s; } catch (e) { /* ignore */ } },
+    // Test aid: process frames from a timer (a background tab throttles requestAnimationFrame).
+    pump(hz) { loopToken++; return setInterval(() => { try { processFrame(performance.now(), null); } catch (e) { console.error(e); } }, 1000 / (hz || 30)); },
+    video
+  };
+
+  // ---------- start ----------
+  (async function init() {
+    buildSop(); renderLegend(); buildTools(); setup = defaultSetup({ type: 'run', run: 1, key: 'run:1' }); syncSetupUi(); sizeOverlay();
+    await loadStandard();
+    await listSources(false);
+    await selectSource('run:1');
+    // Ask for the camera after the page is usable: the permission prompt can sit open for a while.
+    await listSources(true);
+    const last = store.get('lego-live:last-source');
+    const want = sources.find(s => s.key === last && s.type === 'cam' && cameraAllowed);
+    if (want) await selectSource(want.key);
+  })();
+})();
+</script>
+</body>
+</html>
