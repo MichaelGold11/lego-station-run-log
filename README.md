@@ -26,10 +26,11 @@ Then:
 ```bash
 git clone https://github.com/MichaelGold11/lego-station-run-log.git
 cd lego-station-run-log
+npm install
 npm start
 ```
 
-Open http://localhost:4173. Nothing to install with npm; the app has no dependencies.
+Open http://localhost:4173. `npm install` fetches two browser libraries for the live page (onnxruntime-web and MediaPipe). The main app needs nothing; the live page at http://localhost:4173/live falls back to the same pinned libraries on the jsdelivr CDN if `node_modules` is missing.
 
 **Or let your agent do it.** Paste this into Claude Code or Codex:
 
@@ -107,6 +108,7 @@ Times are approximate to about ±0.1 s.
 |---|---|
 | `app/` | The web app. `lego-station-run-log.html` is the same page that runs as a claude.ai artifact. |
 | `server.mjs` | Local server (`npm start`). |
+| `app/live-detect.js`, `app/models/` | Live page: YOLO pre and post processing, signal mapping, build check, and the models (see `app/models/README.md`). |
 | `scripts/runlog.mjs` | Command-line helper: `npm run runlog -- help`. |
 | `data/runs/` | One JSON file per run. |
 | `data/assets/` | Videos and step frames. |

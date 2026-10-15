@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Live station (mock)</title>
+<title>Live station</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Saira:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -149,17 +149,33 @@ th:first-child, td:first-child { text-align: left; }
 th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
 .tbl-wrap { max-height: 240px; overflow: auto; }
 .empty { color: var(--muted); padding: 12px 0; font-size: 13.5px; }
+.colorOnly.off { display: none !important; }
+.verdict { margin-top: 12px; padding: 10px 14px; border-left: 6px solid var(--line-2); }
+.v-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.v-title { font-size: 20px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; margin-top: 4px; }
+.v-msg { color: var(--ink-2); font-size: 14px; min-height: 20px; }
+.verdict[data-kind="verified"], .verdict[data-kind="complete"] { border-left-color: var(--good); background: color-mix(in srgb, var(--good) 8%, var(--surface)); }
+.verdict[data-kind="verified"] .v-title, .verdict[data-kind="complete"] .v-title { color: var(--good-ink); }
+.verdict[data-kind="error"] { border-left-color: var(--crit); background: color-mix(in srgb, var(--crit) 10%, var(--surface)); }
+.verdict[data-kind="error"] .v-title { color: var(--crit-ink); }
+.verdict[data-kind="review"] { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, var(--surface)); }
+.verdict[data-kind="review"] .v-title { color: var(--warn-ink); }
+.v-steps { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.v-steps .chip.ok { color: var(--good-ink); border-color: color-mix(in srgb, var(--good) 60%, transparent); }
+.v-log { margin-top: 8px; font-size: 12.5px; color: var(--ink-2); display: grid; gap: 2px; font-family: var(--f-mono); }
+.v-log .k-error { color: var(--crit-ink); } .v-log .k-review { color: var(--warn-ink); } .v-log .k-verified, .v-log .k-complete { color: var(--good-ink); }
 .row-actions { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <h1>Live station (mock)</h1>
-    <p class="note">No AI model yet: this mock tracks colors and motion. A trained model replaces the detector later.</p>
+    <h1>Live station</h1>
+    <p class="note" id="hdrNote">The team YOLO model finds the plate, the pink brick and the blue slope. Color + motion stays as a fallback.</p>
     <div class="pipe" id="pipe">
       <div class="stage-chip"><div class="nm"><span class="dot" id="dCam"></span>Camera</div><div class="val" id="pCam">No source yet</div></div>
-      <div class="stage-chip"><div class="nm"><span class="dot" id="dDet"></span>Detector (color + motion)</div><div class="val" id="pDet">Waiting for frames</div></div>
+      <div class="stage-chip"><div class="nm"><span class="dot" id="dDet"></span><span id="nDet">Detector</span></div><div class="val" id="pDet">Waiting for frames</div></div>
+      <div class="stage-chip"><div class="nm"><span class="dot" id="dHand"></span>Hands</div><div class="val" id="pHand">Not started</div></div>
       <div class="stage-chip"><div class="nm"><span class="dot" id="dRul"></span>Rules</div><div class="val" id="pRul">Not armed</div></div>
       <div class="stage-chip"><div class="nm"><span class="dot" id="dDash"></span>Dashboard</div><div class="val" id="pDash">0 cycles</div></div>
     </div>
@@ -169,6 +185,7 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
     <section class="panel pad" aria-label="Video">
       <div class="src-row">
         <select id="source" aria-label="Video source"></select>
+        <select id="detector" aria-label="Detector" title="Detector"><option value="yolo">Detector: YOLO model (team)</option><option value="color">Detector: Color + motion (mock)</option></select>
         <button class="btn" id="btnPlay" type="button">Pause</button>
         <button class="btn primary" id="btnArm" type="button">Arm</button>
         <button class="btn" id="btnSetup" type="button">Setup</button>
@@ -180,17 +197,17 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
         </div>
       </div>
       <div class="vid-meta">
-        <label><input type="checkbox" id="chkHl" checked> Show matched pixels</label>
+        <label class="colorOnly"><input type="checkbox" id="chkHl" checked> Show matched pixels</label>
         <span id="camNote" class="muted"></span>
       </div>
       <div class="setup-panel" id="setupPanel" hidden>
-        <div class="muted">Arm records the start spots with the parts in place. Pick a tool, then drag on the video (zones) or click a part (colors).</div>
+        <div class="muted" id="setupHelp">Arm records the start spots with the parts in place. Pick a tool, then drag on the video (zones) or click a part (colors).</div>
         <div class="tools" id="tools"></div>
-        <div class="sliders">
+        <div class="sliders colorOnly">
           <label>Pink tolerance <input type="range" id="tolPink" min="40" max="220" value="100"><span class="mono" id="tolPinkV">100%</span></label>
           <label>Blue tolerance <input type="range" id="tolBlue" min="40" max="220" value="100"><span class="mono" id="tolBlueV">100%</span></label>
         </div>
-        <div>Pink <span class="sw" id="swPink"></span> <span class="mono muted" id="hsvPink"></span> &nbsp; Blue <span class="sw" id="swBlue"></span> <span class="mono muted" id="hsvBlue"></span>
+        <div class="colorOnly">Pink <span class="sw" id="swPink"></span> <span class="mono muted" id="hsvPink"></span> &nbsp; Blue <span class="sw" id="swBlue"></span> <span class="mono muted" id="hsvBlue"></span>
           &nbsp; <button class="btn sm" id="btnResetSetup" type="button">Reset setup</button></div>
       </div>
     </section>
@@ -205,6 +222,18 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
           <div class="big" id="tBig">0.0 s</div>
           <div class="muted" style="font-size:13px" id="tStd">Standard: --</div>
         </div>
+      </div>
+      <div class="panel verdict" id="verdictCard" data-kind="waiting">
+        <div class="v-top">
+          <span class="eyebrow">Quality check</span>
+          <span class="v-btns"><button class="btn sm" id="btnSaveRef" type="button">Save correct build</button> <button class="btn sm" id="btnClearRef" type="button">Forget it</button></span>
+        </div>
+        <div class="v-main">
+          <div class="v-title" id="vTitle">Waiting for clear view</div>
+          <div class="v-msg" id="vMsg"></div>
+        </div>
+        <div class="v-steps" id="vSteps"></div>
+        <div class="v-log" id="vLog"></div>
       </div>
       <div class="panel sop">
         <div style="padding:10px 14px 8px"><span class="eyebrow">SOP checklist</span><div class="flagrow" id="flagRow" style="justify-content:flex-start;margin-top:4px;min-height:22px"></div></div>
@@ -240,10 +269,11 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
 </div>
 
 <script src="/live-engine.js"></script>
+<script src="/live-detect.js"></script>
 <script>
 (() => {
   'use strict';
-  const LE = window.LiveEngine;
+  const LE = window.LiveEngine, LD = window.LiveDetect;
   const $ = id => document.getElementById(id);
   const RUN_ASSETS = ['4081cb727cb16f26e1c0f010874db7b4', '3221282329e75c4599ee172058486ac4', '89efddd29e67dd1ad8ed366a81c6ae0a', 'f9f682a87d758689b9d9a76f9648d7e5', '1d13523ed2a73be9d53e750599a5a68b', 'dc7f6749ee1d8e73e05c65444a2dfe74'];
   const PROC_W = 320;
@@ -265,6 +295,17 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
     6: { zones: Z(R(.55, .69, .14, .10), R(.38, .26, .12, .10), R(.39, .47, .20, .15)), config: { pinkBuild: .03, blueBuild: .01 } }
   };
   const GENERIC_ZONES = Z(R(.30, .30, .14, .12), R(.56, .56, .14, .10), R(.40, .44, .20, .14));
+  // Engine settings per detector. Color signals are pixel shares; YOLO signals are box confidences (0.35 to 1), so the
+  // "part is in the build zone" thresholds sit just under the lowest confidence we keep. YOLO runs at about 8 to 15
+  // results a second, so an event confirms after 3 results.
+  const PRESETS = {
+    color: {},
+    yolo: { confirmFrames: 3, pinkBuild: 0.3, blueBuild: 0.3, minBaseline: 0.2 }
+  };
+  const YOLO_MAP = { handMotion: LD.TUNING.handMotion };
+  const HOLD_MS = 400;
+  const lastSeen = {};
+  const MIN_RAW = 0.25;                 // raw box floor; the checker and engine use 0.35
 
   // ---------- state ----------
   const engine = LE.createEngine();
@@ -284,6 +325,17 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
   const cycleSource = {};
   let uiT = 0, uiSig = '';
   let cameraAllowed = null;
+  // detector state
+  let detectorKind = 'yolo';
+  const Y = { status: 'idle', backend: '', size: 640, session: null, ort: null, inName: 'images', outName: 'output0', buf: null, canvas: null, ctx: null,
+    busy: false, running: false, epoch: 0, fps: 0, ms: 0, count: 0, fpsT: performance.now(), best: {}, raw: [], errs: 0, error: '', loading: null };
+  const H = { status: 'idle', lm: null, hands: [], lastTs: 0, error: '', lastRun: 0, every: 600, delegate: '' };
+  const checker = LD.createChecker();
+  let refSaved = null, note = { text: '', until: 0 };
+  let prevGlobal = null, globalMot = 0, armToken = 0;
+  const motionAcc = { pinkStart: 0, blueStart: 0, build: 0 };
+  let recentSig = [], recentBest = [];
+  const verdictLog = [];               // every verdict: { t (s), kind, message, reason, step, source }
 
   const fmt = ms => (ms / 1000).toFixed(1) + ' s';
   const fmtS = s => s.toFixed(1) + ' s';
@@ -358,8 +410,9 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
     curSource = s; $('source').value = s.key;
     store.set('lego-live:last-source', s.key);
     prevGray = null; lastT = -1; curT = 0; pendingArm = false;
-    loadSetup();
-    engine.setConfig(Object.assign({}, LE.DEFAULT_CONFIG, { standardCycleS: std.total }, cfgPatch));
+    loadSetup(); loadRef();
+    applyConfig();
+    Y.epoch++; prevGlobal = null; recentSig = []; recentBest = []; for (const k of Object.keys(lastSeen)) delete lastSeen[k]; for (const k of LE.ZONE_KEYS) motionAcc[k] = 0;
     st = engine.unarm();
     $('btnPlay').hidden = s.type !== 'run';
     video.loop = s.type === 'run';
@@ -370,7 +423,10 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
         $('camNote').textContent = '';
       } else {
         video.src = '/_blob/' + RUN_ASSETS[s.run - 1];
-        pendingArm = true;
+        // The detector manages about 5 to 8 results a second, so a recorded run plays at half speed in YOLO mode.
+        // Times still come from the video clock, so they are real seconds of the run.
+        video.defaultPlaybackRate = video.playbackRate = detectorKind === 'yolo' ? 0.5 : 1;
+        pendingArm = detectorKind === 'color';
       }
       await video.play().catch(() => {});
       $('btnPlay').textContent = 'Pause';
@@ -379,6 +435,7 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
       setDot('dCam', 'warn');
     }
     startLoop();
+    if (s.type === 'run' && detectorKind === 'yolo') armRunYolo();
     renderAll(true);
   }
 
@@ -423,7 +480,7 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
   const TOOLS = [['pinkStart', 'Draw pink start'], ['blueStart', 'Draw blue start'], ['build', 'Draw build zone'], ['samplePink', 'Pick pink color'], ['sampleBlue', 'Pick blue color']];
   function buildTools() {
     const el = $('tools'); el.innerHTML = '';
-    TOOLS.forEach(([k, label]) => {
+    TOOLS.filter(([k]) => detectorKind === 'color' || !k.startsWith('sample')).forEach(([k, label]) => {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'btn sm' + (k === tool ? ' on' : ''); b.textContent = label; b.dataset.tool = k;
       b.onclick = () => { tool = k; buildTools(); };
       el.appendChild(b);
@@ -474,6 +531,263 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
     if (video.paused) { video.play(); $('btnPlay').textContent = 'Pause'; } else { video.pause(); $('btnPlay').textContent = 'Play'; }
   };
 
+  // ---------- detector: YOLO in the browser (onnxruntime-web) and hands (MediaPipe) ----------
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  function applyConfig() {
+    const base = Object.assign({}, LE.DEFAULT_CONFIG, { standardCycleS: std.total });
+    engine.setConfig(Object.assign(base, detectorKind === 'yolo' ? PRESETS.yolo : cfgPatch));
+  }
+
+  function loadYolo() {
+    if (Y.loading) return Y.loading;
+    Y.status = 'loading';
+    Y.loading = (async () => {
+      try {
+        const mod = await import('/vendor/ort/ort.webgpu.min.mjs');
+        const ort = mod.InferenceSession ? mod : mod.default;
+        ort.env.wasm.wasmPaths = '/vendor/ort/';
+        const threads = self.crossOriginIsolated ? Math.max(1, Math.min(4, navigator.hardwareConcurrency || 2)) : 1;
+        ort.env.wasm.numThreads = threads;
+        const res = await fetch('/models/lego-parts.onnx', { cache: 'reload' });
+        if (!res.ok) throw new Error('model file missing (' + res.status + ')');
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        let session = null, backend = '';
+        if (navigator.gpu && !/[?&]wasm\b/.test(location.search)) {
+          try {
+            const ad = await navigator.gpu.requestAdapter();
+            if (ad) { session = await ort.InferenceSession.create(bytes, { executionProviders: ['webgpu'] }); backend = 'WebGPU'; }
+          } catch (e) { console.warn('WebGPU unavailable, using WASM', e); session = null; }
+        }
+        if (!session) { session = await ort.InferenceSession.create(bytes, { executionProviders: ['wasm'] }); backend = 'WASM x' + threads; }
+        Y.ort = ort; Y.session = session; Y.backend = backend;
+        Y.inName = session.inputNames[0]; Y.outName = session.outputNames[0];
+        try { const m = session.inputMetadata; const sh = Array.isArray(m) ? m[0].shape : m[Y.inName].shape; if (sh && sh[2] > 0) Y.size = sh[2]; } catch (e) { /* keep 640 */ }
+        Y.canvas = document.createElement('canvas'); Y.canvas.width = Y.canvas.height = Y.size;
+        Y.ctx = Y.canvas.getContext('2d', { willReadFrequently: true });
+        Y.buf = new Float32Array(3 * Y.size * Y.size);
+        // one empty run so the first real frame is not slow (shader compile on WebGPU)
+        await session.run({ [Y.inName]: new ort.Tensor('float32', Y.buf, [1, 3, Y.size, Y.size]) });
+        Y.status = 'ready';
+      } catch (e) {
+        console.error('YOLO load failed', e);
+        Y.status = 'failed'; Y.error = String(e && e.message || e);
+        if (detectorKind === 'yolo') failYolo(Y.error);
+      }
+      renderAll(true);
+    })();
+    return Y.loading;
+  }
+  function failYolo(msg) {
+    Y.status = 'failed'; Y.error = msg;
+    $('camNote').textContent = 'The YOLO model could not run (' + msg + '). Using color + motion instead.';
+    setDetector('color');
+  }
+
+  function loadHands() {
+    if (H.status !== 'idle') return;
+    H.status = 'loading';
+    (async () => {
+      try {
+        const mp = await import('/vendor/mediapipe/vision_bundle.mjs');
+        const files = await mp.FilesetResolver.forVisionTasks('/vendor/mediapipe/wasm');
+        const make = delegate => mp.HandLandmarker.createFromOptions(files, {
+          baseOptions: { modelAssetPath: '/models/hand_landmarker.task', delegate },
+          runningMode: 'VIDEO', numHands: 2, minHandDetectionConfidence: 0.4, minHandPresenceConfidence: 0.4
+        });
+        // CPU on purpose: the MediaPipe GPU delegate and the WebGPU model fought over the GPU and froze the page.
+        H.lm = await make('CPU'); H.delegate = 'CPU';
+        H.status = 'ready';
+      } catch (e) {
+        console.warn('Hand landmarker failed to load', e);
+        H.status = 'failed'; H.error = String(e && e.message || e);
+      }
+      renderAll(true);
+    })();
+  }
+  function detectHands() {
+    try {
+      const ts = Math.max(H.lastTs + 1, Math.round(performance.now()));
+      H.lastTs = ts;
+      const r = H.lm.detectForVideo(video, ts);
+      H.hands = (r && r.landmarks) || [];
+    } catch (e) { console.warn('hand detect failed', e); H.hands = []; H.status = 'failed'; H.error = String(e && e.message || e); }
+  }
+
+  // Letterbox the source to the model size, run the model, return boxes in source pixels.
+  async function inferFrame(src, sw, sh) {
+    Y.running = true;
+    try {
+      const S = Y.size, lb = LD.letterbox(sw, sh, S), ctx = Y.ctx;
+      ctx.fillStyle = 'rgb(114,114,114)'; ctx.fillRect(0, 0, S, S);
+      ctx.drawImage(src, 0, 0, sw, sh, lb.padX, lb.padY, lb.nw, lb.nh);
+      const img = ctx.getImageData(0, 0, S, S);
+      LD.fillTensor(img.data, S, Y.buf);
+      const out = await Y.session.run({ [Y.inName]: new Y.ort.Tensor('float32', Y.buf, [1, 3, S, S]) });
+      const o = out[Y.outName], dets = LD.decode(o.data, o.dims[2], lb, sw, sh, MIN_RAW);
+      return { dets, pix: img.data, lb };
+    } finally { Y.running = false; }
+  }
+  function bestOf(res) {
+    const S = Y.size, lb = res.lb;
+    const plateOk = d => LD.medianV(res.pix, S, S, [d.box[0] * lb.scale + lb.padX, d.box[1] * lb.scale + lb.padY, d.box[2] * lb.scale + lb.padX, d.box[3] * lb.scale + lb.padY]) > LD.TUNING.whiteV;
+    return LD.bestPerClass(res.dets, LD.TUNING.detectConf, plateOk);
+  }
+
+  function yoloFrame(tMs) {
+    lastT = tMs; curT = tMs;
+    st = engine.tick(tMs);
+    if (Y.status !== 'ready' || Y.busy) return;
+    Y.busy = true;
+    const epoch = Y.epoch, t0 = performance.now(), vw = video.videoWidth, vh = video.videoHeight;
+    let p;
+    try { p = inferFrame(video, vw, vh); } catch (e) { Y.busy = false; throw e; }
+    if (H.status === 'ready' && performance.now() - H.lastRun >= H.every) { H.lastRun = performance.now(); detectHands(); }
+    p.then(res => { Y.errs = 0; if (epoch === Y.epoch) onDetections(res, tMs, t0); })
+      .catch(e => { console.error(e); if (++Y.errs > 5) failYolo(String(e && e.message || e)); })
+      .finally(() => { Y.busy = false; });
+  }
+
+  function onDetections(res, tMs, t0) {
+    const now = performance.now();
+    Y.ms = now - t0; Y.count++;
+    if (now - Y.fpsT >= 1000) { Y.fps = Y.count * 1000 / (now - Y.fpsT); Y.count = 0; Y.fpsT = now; }
+    const best = bestOf(res);
+    Y.best = best; Y.raw = res.dets;
+    const motion = {}; for (const k of LE.ZONE_KEYS) { motion[k] = motionAcc[k]; motionAcc[k] = 0; }
+    const hands = H.status === 'ready' ? H.hands : null;
+    // A box that drops out for one or two results (a hand in front of it) is kept for 0.4 s so the rules do not flicker.
+    const held = {};
+    for (const n of Object.keys(LD.PART_NAME)) {
+      if (best[n]) { held[n] = best[n]; lastSeen[n] = { det: best[n], t: tMs }; }
+      else if (lastSeen[n] && tMs - lastSeen[n].t >= 0 && tMs - lastSeen[n].t < HOLD_MS) held[n] = Object.assign({}, lastSeen[n].det, { conf: lastSeen[n].det.conf * 0.9 });
+    }
+    signals = LD.mapSignals(held, setup.zones, motion, hands, YOLO_MAP, res.dets.concat(Object.values(held)));
+    recentSig.push(signals); if (recentSig.length > 6) recentSig.shift();
+    recentBest.push(best); if (recentBest.length > 10) recentBest.shift();
+    st = mode === 'auto' ? engine.update(signals, tMs) : engine.tick(tMs);
+    const ev = checker.step(best, { hands: !!(hands && hands.length), still: globalMot < LD.TUNING.motionLimit }, tMs / 1000, performance.now() / 1000);
+    if (ev) onVerdict(ev);
+    drawOverlay(false);
+    renderAll(false);
+  }
+
+  // Start values for a run in YOLO mode: park on frame 0, read the start spots twice, arm at t = 0, then play.
+  function seekTo(t) {
+    return new Promise(res => {
+      if (Math.abs(video.currentTime - t) < 0.01 && video.readyState >= 2) return res();
+      const done = () => { video.removeEventListener('seeked', done); res(); };
+      video.addEventListener('seeked', done); setTimeout(done, 2000);
+      try { video.currentTime = t; } catch (e) { done(); }
+    });
+  }
+  function baselineFrom(sigs) {
+    const mx = f => sigs.reduce((m, s) => Math.max(m, f(s)), 0);
+    return { pinkStart: { pink: mx(s => s.pinkStart.pink), blue: 0, motion: 0 }, blueStart: { pink: 0, blue: mx(s => s.blueStart.blue), motion: 0 }, build: { pink: mx(s => s.build.pink), blue: mx(s => s.build.blue), motion: 0 } };
+  }
+  async function armRunYolo() {
+    const token = ++armToken;
+    Y.epoch++; Y.busy = true;
+    try {
+      if (Y.status === 'loading') await Y.loading;
+      if (Y.status !== 'ready' || token !== armToken || detectorKind !== 'yolo') return;
+      while (Y.running) await sleep(15);
+      video.pause();
+      await seekTo(0);
+      const sigs = [];
+      for (let i = 0; i < 2; i++) {
+        const res = await inferFrame(video, video.videoWidth, video.videoHeight);
+        sigs.push(LD.mapSignals(bestOf(res), setup.zones, null, null, YOLO_MAP, res.dets));
+      }
+      if (token !== armToken) return;
+      prevGray = null; prevGlobal = null; recentSig = []; recentBest = []; for (const k of Object.keys(lastSeen)) delete lastSeen[k];
+      for (const k of LE.ZONE_KEYS) motionAcc[k] = 0;
+      checker.restart();
+      st = engine.arm(baselineFrom(sigs), 0);
+      curT = 0; lastT = -1;
+      await video.play().catch(() => {});
+      $('btnPlay').textContent = 'Pause';
+    } catch (e) { console.error(e); }
+    finally { if (token === armToken) { Y.busy = false; renderAll(true); } }
+  }
+  function armSignals() { return baselineFrom(recentSig.length ? recentSig : [signals]); }
+
+  function setDetector(kind) {
+    detectorKind = kind;
+    store.set('lego-live:detector', kind);
+    $('detector').value = kind;
+    document.querySelectorAll('.colorOnly').forEach(el => { el.hidden = kind !== 'color'; });
+    $('hdrNote').textContent = kind === 'yolo'
+      ? 'The team YOLO model finds the plate, the pink brick and the blue slope. Color + motion stays as a fallback.'
+      : 'Color + motion fallback: this tracks colors and motion, no model.';
+    $('setupHelp').textContent = kind === 'yolo' ? 'Arm records the start spots with the parts in place. Pick a tool, then drag on the video to draw the start spots and the build zone.' : 'Arm records the start spots with the parts in place. Pick a tool, then drag on the video (zones) or click a part (colors).';
+    if (kind === 'yolo' && (tool === 'samplePink' || tool === 'sampleBlue')) tool = 'pinkStart';
+    buildTools();
+    if (kind === 'yolo') { loadYolo(); loadHands(); }
+    if (curSource) selectSource(curSource.key);
+    renderAll(true);
+  }
+
+  // ---------- quality check (verdict card) ----------
+  function loadRef() {
+    refSaved = store.get('lego-live:ref:' + curSource.key);
+    if (refSaved && !(refSaved.parts && refSaved.parts.pink_brick && refSaved.parts.blue_slope)) refSaved = null;
+    checker.setRef(refSaved); checker.restart();
+  }
+  function say(text) { note = { text, until: performance.now() + 5000 }; renderVerdict(); }
+  function saveRef() {
+    if (detectorKind !== 'yolo' || Y.status !== 'ready') return say('The YOLO detector is not running.');
+    if (!checker.clear) return say('Take your hands out of view and hold still, then try again.');
+    const ref = LD.makeReference(recentBest.slice(-10));
+    if (typeof ref === 'string') return say(ref);
+    refSaved = ref; store.set('lego-live:ref:' + curSource.key, ref);
+    checker.setRef(ref); checker.restart();
+    say('Saved. The correct build is recorded for ' + curSource.label + '.');
+    renderAll(true);
+  }
+  function clearRef() {
+    refSaved = null; try { localStorage.removeItem('lego-live:ref:' + curSource.key); } catch (e) { /* blocked */ }
+    checker.setRef(null); checker.restart(); say('Correct build forgotten for this source.'); renderAll(true);
+  }
+  function onVerdict(ev) {
+    verdictLog.push({ t: ev.t, kind: ev.kind, message: ev.message, reason: ev.reason, step: ev.step, source: curSource ? curSource.label : '' });
+    renderAll(true);
+  }
+  const V_TITLE = { verified: 'Step verified', complete: 'Assembly complete', error: 'Mistake', review: 'Needs review', waiting: 'Waiting for clear view' };
+  function renderVerdict() {
+    const card = $('verdictCard');
+    const live = detectorKind === 'yolo';
+    let kind = 'waiting', title = V_TITLE.waiting, msg = '';
+    const v = checker.verdict;
+    if (!live) { title = 'YOLO detector is off'; msg = 'Pick the YOLO model to check the build.'; }
+    else if (Y.status !== 'ready') { title = 'Loading model'; msg = 'The detector starts when the model is ready.'; }
+    else if (!checker.hasRef()) { title = 'Save the correct build'; msg = 'Build it correctly, take your hands away, then press Save correct build.'; }
+    else if (v && v.kind !== 'idle' && v.kind !== 'waiting') { kind = v.kind; title = V_TITLE[v.kind]; msg = v.message; }
+    else { msg = v ? v.message : (checker.clear ? 'Checking the build...' : 'Checks run when the hands are out of view.'); }
+    if (note.text && performance.now() < note.until) msg = note.text;
+    card.dataset.kind = kind;
+    $('vTitle').textContent = title; $('vMsg').textContent = msg;
+    const done = checker.cycle.done, badStep = v && (v.kind === 'error' || v.kind === 'review') ? v.step : -1;
+    $('vSteps').innerHTML = live && checker.hasRef() ? LD.STEPS.map((s, i) => {
+      const cls = i < done ? 'chip ok' : i === badStep ? (v.kind === 'error' ? 'chip crit' : 'chip warn') : 'chip';
+      return `<span class="${cls}">${i < done ? '✓ ' : ''}${s.text}</span>`;
+    }).join('') : '';
+    const log = checker.events.slice(-4).reverse();
+    $('vLog').innerHTML = log.map(e => `<div class="k-${e.kind}">${e.t.toFixed(1)}s ${V_TITLE[e.kind] || e.kind}: ${e.message}</div>`).join('');
+    $('btnSaveRef').disabled = !live; $('btnClearRef').disabled = !live || !refSaved;
+  }
+  // Which finished cycle each mistake or review belongs to: everything up to 4 s after the cycle ends, not already taken.
+  function cycleChecks() {
+    const out = [], bad = verdictLog.filter(e => e.kind === 'error' || e.kind === 'review');
+    const lastEnd = {};
+    st.cycles.forEach((c, i) => {
+      const src = cycleSource[c.n + ':' + (i + 1)] || '', end = c.endMs / 1000 + 4, from = lastEnd[src] == null ? -Infinity : lastEnd[src];
+      const mine = bad.filter(e => e.source === src && e.t > from && e.t <= end);
+      lastEnd[src] = end;
+      out.push({ errors: mine.filter(e => e.kind === 'error').length, reviews: mine.filter(e => e.kind === 'review').length, msgs: mine.map(e => e.message).join('; ') });
+    });
+    return out;
+  }
+
   // ---------- frame loop ----------
   function startLoop() {
     const token = ++loopToken;
@@ -502,14 +816,21 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
     const isRun = curSource && curSource.type === 'run';
     const tMs = isRun ? ((meta && meta.mediaTime != null ? meta.mediaTime : video.currentTime) * 1000) : now;
     if (isRun && lastT >= 0 && tMs < lastT - 300) {       // the video looped: start the next pass
-      prevGray = null; engine.reset(tMs);
+      prevGray = null; prevGlobal = null; Y.epoch++; checker.restart(); for (const k of Object.keys(lastSeen)) delete lastSeen[k]; engine.reset(tMs);
     }
-    const showHl = $('chkHl').checked;
+    const useY = detectorKind === 'yolo';
+    const showHl = !useY && $('chkHl').checked;
     const r = LE.computeSignals(lastImg, W, H, prevGray, setup.zones, setup.refs, tolNow(), showHl ? hlBuf : null);
-    prevGray = r.gray; signals = r.signals;
-    if (pendingArm && (!isRun || tMs < 250)) { st = engine.arm(signals, tMs); pendingArm = false; }
-    lastT = tMs; curT = tMs;
-    st = mode === 'auto' ? engine.update(signals, tMs) : engine.tick(tMs);
+    prevGray = r.gray;
+    const gm = LD.globalMotion(lastImg, W, H, prevGlobal); prevGlobal = gm.gray; globalMot = gm.mean;
+    for (const k of LE.ZONE_KEYS) motionAcc[k] = Math.max(motionAcc[k], r.signals[k].motion);
+    if (useY) { yoloFrame(tMs); }
+    else {
+      signals = r.signals;
+      if (pendingArm && (!isRun || tMs < 250)) { st = engine.arm(signals, tMs); pendingArm = false; }
+      lastT = tMs; curT = tMs;
+      st = mode === 'auto' ? engine.update(signals, tMs) : engine.tick(tMs);
+    }
     // FPS
     frames++;
     const pn = performance.now();
@@ -522,7 +843,7 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
 
   function redrawStill() {
     // Recompute signals on the last frame (no motion) so setup changes show at once, even while paused.
-    if (lastImg && proc.width) {
+    if (lastImg && proc.width && detectorKind === 'color') {
       const showHl = $('chkHl').checked;
       const r = LE.computeSignals(lastImg, proc.width, proc.height, null, setup.zones, setup.refs, tolNow(), showHl ? hlBuf : null);
       if (video.paused) signals = r.signals;
@@ -573,6 +894,28 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
         octx.fillStyle = r[3]; octx.fillRect(tx, yy + 1, tw * r[2], rh - 3);
         octx.fillStyle = '#fff'; octx.fillText(r[4], tx + tw + 4 * k, yy);
       });
+    }
+    if (detectorKind === 'yolo') drawDetections(w, h, k);
+  }
+
+  const BOX_META = { plate: { color: '#9aa1a8', label: 'plate' }, pink_brick: { color: '#e0457b', label: 'pink' }, blue_slope: { color: '#2a78d6', label: 'blue' } };
+  function drawDetections(w, h, k) {
+    const v = checker.verdict, bad = v && (v.kind === 'error' || v.kind === 'review') ? v.badPart : null;
+    octx.textBaseline = 'top';
+    for (const name of Object.keys(Y.best)) {
+      const d = Y.best[name], m = BOX_META[name], nb = d.nbox;
+      const x = nb[0] * w, y = nb[1] * h, bw = (nb[2] - nb[0]) * w, bh = (nb[3] - nb[1]) * h;
+      const col = bad === name ? (v.kind === 'error' ? '#d03b3b' : '#fab219') : m.color;
+      octx.lineWidth = Math.max(2, (bad === name ? 4 : 2.5) * k); octx.strokeStyle = col; octx.strokeRect(x, y, bw, bh);
+      const fs = Math.max(10, 12 * k); octx.font = '600 ' + fs + 'px Saira, sans-serif';
+      const label = m.label + ' ' + Math.round(d.conf * 100) + '%', tw = octx.measureText(label).width + 8 * k;
+      const ly = y - fs - 5 * k >= 0 ? y - fs - 5 * k : y;
+      octx.fillStyle = col; octx.fillRect(x, ly, tw, fs + 5 * k);
+      octx.fillStyle = '#fff'; octx.fillText(label, x + 4 * k, ly + 2.5 * k);
+    }
+    if (H.status === 'ready') {
+      octx.fillStyle = 'rgba(240,180,41,.9)';
+      for (const hand of H.hands) for (const p of hand) { octx.beginPath(); octx.arc(p.x * w, p.y * h, Math.max(2, 2.5 * k), 0, 6.283); octx.fill(); }
     }
   }
 
@@ -724,33 +1067,36 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
   function renderCycles() {
     const cs = st.cycles;
     if (!cs.length) { $('cycTbl').innerHTML = '<div class="empty">No finished cycles yet.</div>'; return; }
-    const rows = cs.slice().reverse().map(c => {
-      const f = c.flags, chips = [];
+    const chk = cycleChecks();
+    const rows = cs.map((c, i) => ({ c, i })).reverse().map(({ c, i }) => {
+      const f = c.flags, chips = [], k = chk[i];
       if (f.overStandard) chips.push('<span class="chip warn">Over standard</span>');
       if (f.outOfOrder) chips.push('<span class="chip crit">Out of order</span>');
       if (f.rework) chips.push(`<span class="chip crit">Rework ${f.rework}</span>`);
       if (f.lowConfidence) chips.push(`<span class="chip warn">Low conf ${f.lowConfidence}</span>`);
+      if (k && k.errors) chips.push(`<span class="chip crit" title="${k.msgs.replace(/"/g, '')}">Mistake ${k.errors}</span>`);
+      if (k && k.reviews) chips.push(`<span class="chip warn" title="${k.msgs.replace(/"/g, '')}">Review ${k.reviews}</span>`);
       return `<tr><td>#${c.n}</td><td>${fmtS(c.totalMs / 1000)}</td><td>${fmtS(c.steps.pink / 1000)}</td><td>${fmtS(c.steps.blue / 1000)}</td><td>${fmtS(c.steps.release / 1000)}</td><td>${chips.join(' ') || '<span class="muted">none</span>'}</td></tr>`;
     }).join('');
     $('cycTbl').innerHTML = `<table><thead><tr><th>Cycle</th><th>Total</th><th>1. Pink</th><th>2. Blue</th><th>3. Release</th><th>Flags</th></tr></thead><tbody>${rows}</tbody></table>`;
   }
 
   function exportCsv() {
-    const head = ['cycle', 'source', 'total_s', 'step1_pink_s', 'step2_blue_s', 'step3_release_s', 'pick_pink_s', 'place_pink_s', 'seat_pink_s', 'pick_blue_s', 'carry_blue_s', 'orient_blue_s', 'seat_blue_s', 'release_s', 'over_standard', 'rework', 'out_of_order', 'low_confidence'];
-    const lines = [head.join(',')];
+    const head = ['cycle', 'source', 'total_s', 'step1_pink_s', 'step2_blue_s', 'step3_release_s', 'pick_pink_s', 'place_pink_s', 'seat_pink_s', 'pick_blue_s', 'carry_blue_s', 'orient_blue_s', 'seat_blue_s', 'release_s', 'over_standard', 'rework', 'out_of_order', 'low_confidence', 'mistakes', 'reviews'];
+    const lines = [head.join(',')], chk = cycleChecks();
     st.cycles.forEach((c, i) => {
       const sub = {}; c.substeps.forEach(s => { sub[s.key] = (s.dur / 1000).toFixed(2); });
       const src = (cycleSource[c.n + ':' + (i + 1)] || '').replace(/,/g, ' ');
       lines.push([c.n, src, (c.totalMs / 1000).toFixed(2), (c.steps.pink / 1000).toFixed(2), (c.steps.blue / 1000).toFixed(2), (c.steps.release / 1000).toFixed(2),
         sub.pick_pink, sub.place_pink, sub.seat_pink, sub.pick_blue, sub.carry_blue, sub.orient_blue, sub.seat_blue, sub.release,
-        c.flags.overStandard ? 1 : 0, c.flags.rework, c.flags.outOfOrder ? 1 : 0, c.flags.lowConfidence].join(','));
+        c.flags.overStandard ? 1 : 0, c.flags.rework, c.flags.outOfOrder ? 1 : 0, c.flags.lowConfidence, chk[i].errors, chk[i].reviews].join(','));
     });
     const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/csv' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'station-cycles.csv';
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
   $('btnCsv').onclick = exportCsv;
-  $('btnClear').onclick = () => { engine.clearCycles(); st = engine.getState(); renderAll(true); };
+  $('btnClear').onclick = () => { engine.clearCycles(); verdictLog.length = 0; checker.clearEvents(); st = engine.getState(); renderAll(true); };
 
   // ---------- pipeline strip ----------
   function setDot(id, cls) { $(id).className = 'dot' + (cls ? ' ' + cls : ''); }
@@ -759,8 +1105,26 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
     $('pCam').textContent = curSource ? `${curSource.label} | ${live ? fps.toFixed(0) : 0} fps` : 'No source yet';
     setDot('dCam', live ? 'live' : (curSource ? 'warn' : ''));
     const p = signals.build, a = signals.pinkStart, b = signals.blueStart;
-    $('pDet').textContent = `Pink ${Math.round(Math.max(a.pink, p.pink) * 100)}% | Blue ${Math.round(Math.max(b.blue, p.blue) * 100)}% | Motion ${Math.round(Math.max(a.motion, b.motion, p.motion) * 100)}%`;
-    setDot('dDet', live ? 'live' : '');
+    if (detectorKind === 'yolo') {
+      $('nDet').textContent = 'Detector (YOLO' + (Y.backend ? ', ' + Y.backend : '') + ')';
+      const pc = n => Y.best[n] ? Math.round(Y.best[n].conf * 100) + '%' : '--';
+      if (Y.status === 'ready') {
+        $('pDet').textContent = `${Y.fps.toFixed(1)} fps | ${Math.round(Y.ms)} ms | plate ${pc('plate')} | pink ${pc('pink_brick')} | blue ${pc('blue_slope')}`;
+        setDot('dDet', live ? 'live' : '');
+      } else { $('pDet').textContent = Y.status === 'loading' ? 'Loading the model...' : 'Not running'; setDot('dDet', 'warn'); }
+      let hv, hd = '';
+      if (H.status === 'ready') {
+        const inView = H.hands.length > 0;
+        hv = inView ? 'In view (' + H.hands.length + ')' : (checker.clear ? 'Clear' : 'Clear, settling'); hd = inView ? 'warn' : (checker.clear ? 'live' : '');
+      } else if (H.status === 'loading') hv = 'Loading hand model...';
+      else { hv = 'Hand model not loaded, using motion only: ' + (checker.clear ? 'clear' : 'moving'); hd = 'warn'; }
+      $('pHand').textContent = hv; setDot('dHand', hd);
+    } else {
+      $('nDet').textContent = 'Detector (color + motion)';
+      $('pDet').textContent = `Pink ${Math.round(Math.max(a.pink, p.pink) * 100)}% | Blue ${Math.round(Math.max(b.blue, p.blue) * 100)}% | Motion ${Math.round(Math.max(a.motion, b.motion, p.motion) * 100)}%`;
+      setDot('dDet', live ? 'live' : '');
+      $('pHand').textContent = 'Off (color mode)'; setDot('dHand', '');
+    }
     $('pRul').textContent = mode === 'manual' ? 'Manual mode: keys only' : st.waitingFor;
     setDot('dRul', st.status === 'running' ? 'live' : st.status === 'unarmed' ? '' : 'warn');
     $('pDash').textContent = `${st.cycles.length} cycle${st.cycles.length === 1 ? '' : 's'}`;
@@ -770,18 +1134,21 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
   // Throttled DOM updates (about 10 per second), forced when an event changes.
   function renderAll(force) {
     const now = performance.now();
-    const sig = st.phase + '|' + st.done.length + '|' + st.cycles.length + '|' + st.flags.rework + st.flags.lowConfidence + st.flags.outOfOrder + '|' + st.events.length + '|' + mode;
+    const sig = st.phase + '|' + st.done.length + '|' + st.cycles.length + '|' + st.flags.rework + st.flags.lowConfidence + st.flags.outOfOrder + '|' + st.events.length + '|' + mode + '|' + checker.events.length + (checker.clear ? 'c' : 'n') + (H.hands.length ? 'h' : '') + Y.status + H.status;
     if (!force && sig === uiSig && now - uiT < 100) return;
     const heavy = force || sig !== uiSig;
     uiSig = sig; uiT = now;
-    renderPipe(); renderTimer(); renderSop();
+    renderPipe(); renderTimer(); renderSop(); renderVerdict();
     if (heavy) { renderTiles(); renderCycles(); renderLegend(); }
     renderTimeline();
   }
 
   // ---------- controls ----------
   function arm() {
-    if (curSource && curSource.type === 'run') { pendingArm = true; prevGray = null; try { video.currentTime = 0; } catch (e) { /* ignore */ } video.play().catch(() => {}); $('btnPlay').textContent = 'Pause'; }
+    if (detectorKind === 'yolo') {
+      if (curSource && curSource.type === 'run') armRunYolo();
+      else { st = engine.arm(armSignals(), curT || performance.now()); checker.restart(); }
+    } else if (curSource && curSource.type === 'run') { pendingArm = true; prevGray = null; try { video.currentTime = 0; } catch (e) { /* ignore */ } video.play().catch(() => {}); $('btnPlay').textContent = 'Pause'; }
     else { st = engine.arm(signals, curT || performance.now()); }
     renderAll(true);
   }
@@ -792,8 +1159,11 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
   }
   function doManual() { st = engine.manualAdvance(curT); renderAll(true); }
   function doUndo() { st = engine.undo(); renderAll(true); }
-  function doReset() { st = engine.reset(curT); renderAll(true); }
+  function doReset() { st = engine.reset(curT); checker.restart(); renderAll(true); }
   $('btnArm').onclick = arm;
+  $('btnSaveRef').onclick = saveRef;
+  $('btnClearRef').onclick = clearRef;
+  $('detector').onchange = e => setDetector(e.target.value);
   $('modeSeg').onclick = e => { const b = e.target.closest('button'); if (b) setMode(b.dataset.mode); };
   $('source').onchange = e => selectSource(e.target.value);
   window.addEventListener('keydown', e => {
@@ -811,7 +1181,23 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
     engine, LE,
     get state() { return st; }, get signals() { return signals; }, get setup() { return setup; }, get fps() { return fps; }, get t() { return curT; },
     get sources() { return sources.map(s => s.key); },
-    selectSource, arm, setMode, doManual, doUndo, doReset,
+    selectSource, arm, setMode, doManual, doUndo, doReset, setDetector, saveRef, clearRef, checker, Y, H, verdictLog, get detector() { return detectorKind; },
+    // Test aid: run the model on an image (same preprocessing as video frames). Returns raw boxes in image pixels.
+    async detectNow() {
+      Y.epoch++; Y.busy = true;
+      try { while (Y.running) await sleep(15); const res = await inferFrame(video, video.videoWidth, video.videoHeight); const b = bestOf(res); return Object.fromEntries(Object.entries(b).map(([k, d]) => [k, { conf: +d.conf.toFixed(2), c: [(d.nbox[0] + d.nbox[2]) / 2, (d.nbox[1] + d.nbox[3]) / 2].map(v => +v.toFixed(3)), size: [d.nbox[2] - d.nbox[0], d.nbox[3] - d.nbox[1]].map(v => +v.toFixed(3)) }])); }
+      finally { Y.busy = false; }
+    },
+    async detectImage(url) {
+      await loadYolo();
+      const img = new Image(); img.src = url; await img.decode();
+      Y.epoch++; Y.busy = true;
+      try {
+        while (Y.running) await sleep(15);
+        const res = await inferFrame(img, img.naturalWidth, img.naturalHeight);
+        return res.dets.map(d => ({ cls: d.cls, conf: d.conf, box: d.box }));
+      } finally { Y.busy = false; }
+    },
     setZones(z) { Object.assign(setup.zones, z); saveSetup(); redrawStill(); },
     setRefs(r) { Object.assign(setup.refs, r); syncSetupUi(); saveSetup(); redrawStill(); },
     setTol(p, b) { if (p != null) setup.tolMul.pink = p; if (b != null) setup.tolMul.blue = b; syncSetupUi(); saveSetup(); },
@@ -824,6 +1210,11 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
 
   // ---------- start ----------
   (async function init() {
+    const savedDet = store.get('lego-live:detector');
+    detectorKind = savedDet === 'color' ? 'color' : 'yolo';
+    $('detector').value = detectorKind;
+    document.querySelectorAll('.colorOnly').forEach(el => { el.hidden = detectorKind !== 'color'; });
+    if (detectorKind === 'yolo') { loadYolo(); loadHands(); }
     buildSop(); renderLegend(); buildTools(); setup = defaultSetup({ type: 'run', run: 1, key: 'run:1' }); syncSetupUi(); sizeOverlay();
     await loadStandard();
     await listSources(false);

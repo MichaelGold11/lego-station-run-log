@@ -20,6 +20,17 @@ const RUNTIME_FILE = path.join(ROOT, 'app', 'local-runtime.js');
 const PORT = Number(process.env.PORT) || 4173;
 const MAX_UPLOAD = 500 * 1024 * 1024;
 
+// /live runs the YOLO model and the hand model in the browser. WASM threads need cross-origin isolation, so /live and its
+// vendor and model files carry COOP and COEP (credentialless keeps the Google Fonts link working). / is left alone.
+// Libraries come from node_modules (npm install); if that is missing the request is sent on to the pinned jsdelivr copy.
+const ISOLATE = { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'credentialless', 'Cross-Origin-Resource-Policy': 'same-origin' };
+const DEPS = (() => { try { return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).dependencies || {}; } catch (e) { return {}; } })();
+const VENDOR = {
+  '/vendor/ort/': { dir: path.join(ROOT, 'node_modules', 'onnxruntime-web', 'dist'), cdn: 'https://cdn.jsdelivr.net/npm/onnxruntime-web@' + DEPS['onnxruntime-web'] + '/dist/' },
+  '/vendor/mediapipe/': { dir: path.join(ROOT, 'node_modules', '@mediapipe', 'tasks-vision'), cdn: 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@' + DEPS['@mediapipe/tasks-vision'] + '/' }
+};
+const MODELS = path.join(ROOT, 'app', 'models');
+
 // The same minimal page skeleton the claude.ai artifact viewer wraps around the app.
 const HEAD = '<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">'
   + '<style>:root{color-scheme:light;box-sizing:border-box}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]{display:none!important}</style>'
@@ -28,7 +39,8 @@ const HEAD = '<!doctype html><html><head><meta charset=utf8><meta name=viewport 
 const TYPES = {
   '.mp4': 'video/mp4', '.mov': 'video/mp4', '.m4v': 'video/mp4', '.webm': 'video/webm',
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif',
-  '.json': 'application/json', '.csv': 'text/csv', '.txt': 'text/plain'
+  '.json': 'application/json', '.csv': 'text/csv', '.txt': 'text/plain',
+  '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.wasm': 'application/wasm', '.onnx': 'application/octet-stream', '.task': 'application/octet-stream'
 };
 const EXT_FOR_TYPE = { 'video/mp4': '.mp4', 'video/quicktime': '.mov', 'video/webm': '.webm', 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' };
 
@@ -76,9 +88,9 @@ function normalizeVideo(src, id) {
   return out;
 }
 
-function send(res, code, body, type = 'application/json') {
+function send(res, code, body, type = 'application/json', extra) {
   const buf = Buffer.isBuffer(body) ? body : Buffer.from(typeof body === 'string' ? body : JSON.stringify(body));
-  res.writeHead(code, { 'Content-Type': type, 'Content-Length': buf.length, 'Cache-Control': 'no-store' });
+  res.writeHead(code, Object.assign({ 'Content-Type': type, 'Content-Length': buf.length, 'Cache-Control': 'no-store' }, extra));
   res.end(buf);
 }
 const fail = (res, code, err, message) => send(res, code, { code: err, message });
@@ -90,7 +102,7 @@ function readBody(req, limit) {
     req.on('error', reject);
   });
 }
-function serveFile(req, res, file, type) {
+function serveFile(req, res, file, type, extra) {
   const stat = fs.statSync(file);
   const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
   if (range) {
@@ -99,11 +111,11 @@ function serveFile(req, res, file, type) {
     let end = range[1] && range[2] ? Number(range[2]) : stat.size - 1;
     if (start >= stat.size || start > end) { res.writeHead(416, { 'Content-Range': 'bytes */' + stat.size }); return res.end(); }
     end = Math.min(end, stat.size - 1);
-    res.writeHead(206, { 'Content-Type': type, 'Content-Length': end - start + 1, 'Content-Range': `bytes ${start}-${end}/${stat.size}`, 'Accept-Ranges': 'bytes' });
+    res.writeHead(206, Object.assign({ 'Content-Type': type, 'Content-Length': end - start + 1, 'Content-Range': `bytes ${start}-${end}/${stat.size}`, 'Accept-Ranges': 'bytes' }, extra));
     fs.createReadStream(file, { start, end }).pipe(res);
     return;
   }
-  res.writeHead(200, { 'Content-Type': type, 'Content-Length': stat.size, 'Accept-Ranges': 'bytes' });
+  res.writeHead(200, Object.assign({ 'Content-Type': type, 'Content-Length': stat.size, 'Accept-Ranges': 'bytes' }, extra));
   fs.createReadStream(file).pipe(res);
 }
 
@@ -115,8 +127,18 @@ async function handle(req, res) {
     const html = HEAD + fs.readFileSync(APP_FILE, 'utf8') + '\n</body></html>';
     return send(res, 200, html, 'text/html; charset=utf-8');
   }
-  if (p === '/live') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'live-mock.html')), 'text/html; charset=utf-8');
-  if (p === '/live-engine.js') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'live-engine.js')), 'text/javascript; charset=utf-8');
+  if (p === '/live') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'live-mock.html')), 'text/html; charset=utf-8', ISOLATE);
+  if (p === '/live-engine.js') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'live-engine.js')), 'text/javascript; charset=utf-8', ISOLATE);
+  if (p === '/live-detect.js') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'live-detect.js')), 'text/javascript; charset=utf-8', ISOLATE);
+  const vend = Object.keys(VENDOR).find(k => p.startsWith(k));
+  if (vend || p.startsWith('/models/')) {
+    const rel = p.slice(vend ? vend.length : 8);
+    if (!/^[A-Za-z0-9_.-]+(\/[A-Za-z0-9_.-]+)*$/.test(rel) || rel.includes('..')) return fail(res, 400, 'invalid_argument', 'Bad file path.');
+    const f = path.join(vend ? VENDOR[vend].dir : MODELS, rel);
+    if (fs.existsSync(f) && fs.statSync(f).isFile()) return serveFile(req, res, f, TYPES[path.extname(f).toLowerCase()] || 'application/octet-stream', Object.assign({ 'Cache-Control': vend ? 'public, max-age=3600' : 'no-store' }, ISOLATE));
+    if (vend) { res.writeHead(302, { Location: VENDOR[vend].cdn + rel }); return res.end(); }
+    return fail(res, 404, 'not_found', 'No such model file.');
+  }
   if (p === '/local-runtime.js') return send(res, 200, fs.readFileSync(RUNTIME_FILE), 'text/javascript; charset=utf-8');
   if (p === '/api/info') return send(res, 200, { ffmpeg: hasFfmpeg, root: ROOT });
 
