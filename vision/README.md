@@ -26,8 +26,13 @@ Step 3 light-blue 2x2 slope on the plate, left of the pink brick (exact spot com
    `vision/frames.zip`. Open `train_colab.ipynb` in Google Colab (free, T4 GPU), upload
    `frames.zip`, run all cells. It auto-labels the parts with Grounding DINO, trains YOLO and
    downloads `best.pt`; put it in `vision/models/`.
-4. **Live check.** `python vision/live_check.py --calibrate` once (build it correctly), then
-   `python vision/live_check.py`.
+4. **Live check.** Connect the phone as a webcam (iPhone: Iriun Webcam app, free), then:
+   - `python vision/live_check.py --list-cameras` to find the phone's camera number
+   - `python vision/live_check.py --calibrate --camera N` once: build it correctly, move your
+     hands away and press SPACE after each step
+   - `python vision/live_check.py --camera N` for live checking (Q quit, R restart).
+   Add `--rotate 90` if the picture is sideways. Every check is logged to `logs/session_*.csv`
+   (step, verified / error / review, confidence, step time, cycle time).
 5. **Tune and demo.**
 
 ## What counts as a mistake

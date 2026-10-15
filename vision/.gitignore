@@ -6,3 +6,4 @@ logs/*
 !logs/.gitkeep
 __pycache__/
 frames.zip
+models/hand_landmarker.task
