@@ -552,7 +552,8 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
         if (!res.ok) throw new Error('model file missing (' + res.status + ')');
         const bytes = new Uint8Array(await res.arrayBuffer());
         let session = null, backend = '';
-        if (navigator.gpu && !/[?&]wasm\b/.test(location.search)) {
+        // WebGPU is opt-in (?gpu): with the camera and hand tracking running it froze the page on the Iris Xe laptop.
+        if (navigator.gpu && /[?&]gpu\b/.test(location.search)) {
           try {
             const ad = await navigator.gpu.requestAdapter();
             if (ad) { session = await ort.InferenceSession.create(bytes, { executionProviders: ['webgpu'] }); backend = 'WebGPU'; }
