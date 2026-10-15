@@ -585,6 +585,7 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
 
   function loadHands() {
     if (H.status !== 'idle') return;
+    if (/[?&]hands=off\b/.test(location.search)) { H.status = 'failed'; H.error = 'turned off (?hands=off)'; return; }
     H.status = 'loading';
     (async () => {
       try {
@@ -1211,7 +1212,7 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
   // ---------- start ----------
   (async function init() {
     const savedDet = store.get('lego-live:detector');
-    detectorKind = savedDet === 'color' ? 'color' : 'yolo';
+    detectorKind = savedDet === 'color' || /[?&]detector=color\b/.test(location.search) ? 'color' : 'yolo';
     $('detector').value = detectorKind;
     document.querySelectorAll('.colorOnly').forEach(el => { el.hidden = detectorKind !== 'color'; });
     if (detectorKind === 'yolo') { loadYolo(); loadHands(); }
