@@ -49,7 +49,8 @@ PART_NAME = {PLATE: "white plate", PINK: "pink brick", BLUE: "blue slope"}
 DETECT_CONF = 0.35      # boxes below this are ignored
 SURE_CONF = 0.60        # a decision that rests on a box below this becomes "Needs review"
 CLEAR_SECONDS = 0.3     # hands must be gone this long before a check
-POS_TOLERANCE = 0.13    # allowed position error, as a fraction of the plate size (1 stud ~ 0.17-0.25)
+POS_TOLERANCE = 0.14    # allowed position error, as a fraction of the plate size (1 stud ~ 0.17-0.25)
+RECHECK_SECONDS = 1.0   # while the view stays clear after a mistake, look again this often
 MOTION_LIMIT = 4.0      # mean pixel change that still counts as "still" (fallback when no hand model)
 
 # ---- colours (BGR) -----------------------------------------------------------------------
@@ -165,11 +166,16 @@ class ClearView:
 # =========================================================================================
 # Geometry: everything is measured relative to the plate, so moving the whole build is fine
 # =========================================================================================
-def on_plate(part: Det, plate: Det, margin=0.08) -> bool:
+def on_plate(part: Det, plate: Det) -> bool:
+    """A part counts as placed if its centre is on the plate, or a good share of it overlaps the plate
+    (e.g. a brick hanging half off the edge). Parts lying loose next to the plate don't count."""
     x1, y1, x2, y2 = plate.box
-    mx, my = (x2 - x1) * margin, (y2 - y1) * margin
     cx, cy = part.center
-    return x1 - mx <= cx <= x2 + mx and y1 - my <= cy <= y2 + my
+    if x1 <= cx <= x2 and y1 <= cy <= y2:
+        return True
+    a1, b1, a2, b2 = part.box
+    inter = max(0, min(x2, a2) - max(x1, a1)) * max(0, min(y2, b2) - max(y1, b1))
+    return inter / max(1e-6, (a2 - a1) * (b2 - b1)) > 0.35
 
 
 def relative(part: Det, plate: Det) -> dict:
@@ -265,8 +271,17 @@ def check(dets: dict[str, Det], ref: dict, cycle: Cycle) -> Verdict:
 # =========================================================================================
 # Drawing
 # =========================================================================================
-def draw_feed(frame, dets, verdict: Verdict | None, cycle: Cycle):
+def draw_feed(frame, dets, verdict: Verdict | None, cycle: Cycle, ref: dict | None = None):
     out = frame.copy()
+    plate = dets.get(PLATE)
+    if ref and plate:   # --debug: distance from the calibrated spot (must be under POS_TOLERANCE)
+        for k, (name, d) in enumerate((n, d) for n, d in dets.items() if n != PLATE):
+            if name in ref["parts"]:
+                r, want = relative(d, plate), ref["parts"][name]
+                txt = (f"{name}: on_plate={on_plate(d, plate)} dx={r['x'] - want['x']:+.2f} "
+                       f"dy={r['y'] - want['y']:+.2f} (limit {POS_TOLERANCE})")
+                cv2.putText(out, txt, (10, out.shape[0] - 14 - 24 * k), cv2.FONT_HERSHEY_SIMPLEX, 0.55,
+                            (0, 255, 255), 2, cv2.LINE_AA)
     order = [p for p, _ in STEPS]
     for name, d in dets.items():
         x1, y1, x2, y2 = (int(v) for v in d.box)
@@ -341,7 +356,8 @@ def draw_panel(h, cycle: Cycle, verdict: Verdict | None, status: str, mode: str,
     top = y + 4
     cv2.rectangle(p, (20, top), (w - 20, top + 110), bg, -1)
     put(title, (34, top + 32), 0.65, fg, 2)
-    for k, line in enumerate(wrap(verdict.message if verdict and verdict.kind != "waiting" else status, 38)[:3]):
+    msg = verdict.message if verdict and (verdict.kind != "waiting" or "cleared" in verdict.message) else status
+    for k, line in enumerate(wrap(msg, 38)[:3]):
         put(line, (34, top + 60 + 22 * k), 0.5, DARK)
 
     if cycle.done < len(STEPS):
@@ -400,6 +416,39 @@ class Log:
 ROTATE = {90: cv2.ROTATE_90_CLOCKWISE, 180: cv2.ROTATE_180, 270: cv2.ROTATE_90_COUNTERCLOCKWISE}
 
 
+class LatestFrame:
+    """Reads the camera in a background thread and keeps only the newest frame.
+    Without this, frames queue up while the model is busy and the picture lags behind."""
+
+    def __init__(self, cap):
+        self.cap, self.frame, self.ok = cap, None, True
+        self.lock = threading.Lock()
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def _run(self):
+        while self.ok:
+            ok, f = self.cap.read()
+            if not ok:
+                self.ok = False
+                break
+            with self.lock:
+                self.frame = f
+
+    def read(self):
+        for _ in range(300):              # wait up to ~3 s for the first frame
+            with self.lock:
+                f, self.frame = self.frame, None
+            if f is not None or not self.ok:
+                return f is not None, f
+            time.sleep(0.01)
+        return False, None
+
+    def release(self):
+        self.ok = False
+        time.sleep(0.05)
+        self.cap.release()
+
+
 def open_source(args):
     if args.video:
         cap = cv2.VideoCapture(args.video)
@@ -408,10 +457,11 @@ def open_source(args):
         cap = cv2.VideoCapture(args.camera, backend)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     if not cap.isOpened():
         sys.exit(f"Could not open {'video ' + args.video if args.video else 'camera ' + str(args.camera)}. "
                  "Try --list-cameras.")
-    return cap
+    return cap if args.video else LatestFrame(cap)
 
 
 def read(cap, args):
@@ -420,8 +470,8 @@ def read(cap, args):
         return None
     if args.rotate in ROTATE:
         frame = cv2.rotate(frame, ROTATE[args.rotate])
-    if max(frame.shape[:2]) > 1280:
-        s = 1280 / max(frame.shape[:2])
+    if max(frame.shape[:2]) > 960:          # smaller = faster, still plenty for the model
+        s = 960 / max(frame.shape[:2])
         frame = cv2.resize(frame, (0, 0), fx=s, fy=s, interpolation=cv2.INTER_AREA)
     return frame
 
@@ -531,6 +581,7 @@ class Checker:
         self.cycle, self.cycle_no = Cycle(), 1
         self.verdict: Verdict | None = None
         self.checked_this_clear = False
+        self.last_check = -1e9
         self.recent: list[dict] = []
         self.log = Log() if log else None
         self.events: list[tuple[float, Verdict]] = []
@@ -549,9 +600,12 @@ class Checker:
                 self.recent = []
             return
         self.recent = (self.recent + [dets])[-3:]
-        if self.checked_this_clear or len(self.recent) < 3:
+        if len(self.recent) < 3:
             return
-        self.checked_this_clear = True
+        stuck = self.verdict is not None and self.verdict.kind in ("error", "review")
+        if self.checked_this_clear and not (stuck and now - self.last_check >= RECHECK_SECONDS):
+            return
+        self.checked_this_clear, self.last_check = True, now
         votes = [check(d, self.ref, self.cycle) for d in self.recent]
         kinds = [v.kind for v in votes]
         v = max(votes, key=lambda x: kinds.count(x.kind))
@@ -561,8 +615,14 @@ class Checker:
         self.apply(v, now)
 
     def apply(self, v: Verdict, now):
+        old = self.verdict
         if v.kind == "waiting":
+            if old is not None and old.kind in ("error", "review"):   # the problem part was taken away
+                self.verdict = Verdict("waiting", f"Mistake cleared. Continue with step {self.cycle.done + 1}.",
+                                       self.cycle.done)
             return
+        if old is not None and old.kind == v.kind and old.message == v.message and v.kind in ("error", "review"):
+            return  # same problem still there: keep showing it, don't buzz again
         if v.kind == "idle":
             if self.cycle.done == len(STEPS):  # finished build was taken away -> next cycle
                 self.restart()
@@ -610,7 +670,7 @@ def live(args):
         chk.step(frame, dets, now)
         status = "Hands in view - working..." if chk.view.clear_since is None else "Checking..."
         flash = int(now * 4) % 2 == 0
-        view = side_by_side(draw_feed(frame, dets, chk.verdict, chk.cycle),
+        view = side_by_side(draw_feed(frame, dets, chk.verdict, chk.cycle, ref if args.debug else None),
                             draw_panel(max(frame.shape[0], 560), chk.cycle, chk.verdict, status, chk.view.mode, flash))
         cv2.imshow("LEGO station - live check", fit_window(view))
         key = cv2.waitKey(1) & 0xFF
@@ -631,6 +691,7 @@ def main():
     ap.add_argument("--calibrate", action="store_true", help="record the correct build")
     ap.add_argument("--list-cameras", action="store_true")
     ap.add_argument("--no-hands", action="store_true", help="skip MediaPipe; use motion only")
+    ap.add_argument("--debug", action="store_true", help="show position numbers on screen (for tuning)")
     args = ap.parse_args()
     if args.list_cameras:
         list_cameras()
