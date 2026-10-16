@@ -82,22 +82,22 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
 .form .acts { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; }
 @media (max-width: 900px) { .form { grid-template-columns: 1fr; } }
 
-.summary { display: grid; grid-template-columns: repeat(4, minmax(110px, auto)) minmax(0, 1fr) auto; gap: 0; align-items: stretch; }
+.summary { display: grid; grid-template-columns: repeat(4, minmax(110px, auto)) minmax(0, 1fr); gap: 0; align-items: stretch; }
 .sum-tile { padding: 8px 14px; border-right: 1px solid var(--line); }
 .sum-tile .v { font-family: var(--f-mono); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.15; }
 .sum-tile .s { font-size: 11.5px; color: var(--muted); }
-.flow { display: flex; align-items: center; gap: 4px; padding: 8px 14px; flex-wrap: wrap; border-right: 1px solid var(--line); }
-.fl-st { border: 1px solid var(--line-2); border-radius: 6px; padding: 2px 8px; text-align: center; min-width: 74px; background: var(--surface-2); }
-.fl-st b { display: block; font-size: 12px; }
+.flow { grid-column: 1 / -1; display: flex; align-items: center; gap: 4px; padding: 6px 14px; flex-wrap: wrap; border-top: 1px solid var(--line); }
+.fl-st { display: flex; gap: 8px; align-items: baseline; border: 1px solid var(--line-2); border-radius: 6px; padding: 2px 10px; background: var(--surface-2); }
+.fl-st b { font-size: 12.5px; }
 .fl-st span { font-family: var(--f-mono); font-size: 12px; color: var(--ink-2); }
 .fl-st.bottleneck { border-color: var(--crit); background: color-mix(in srgb, var(--crit) 9%, var(--surface)); }
 .fl-st.bottleneck b::after { content: " bottleneck"; font-weight: 600; font-size: 10.5px; color: var(--crit-ink); text-transform: uppercase; letter-spacing: .05em; }
 .fl-st.over { border-color: var(--warn); }
-.fl-ar { display: grid; justify-items: center; font-family: var(--f-mono); font-size: 11.5px; color: var(--ink-2); min-width: 34px; }
-.fl-ar i { font-style: normal; color: var(--muted); font-size: 13px; line-height: 1; }
+.fl-ar { display: flex; align-items: center; gap: 3px; font-family: var(--f-mono); font-size: 12px; color: var(--ink-2); padding: 0 6px; }
+.fl-ar i { font-style: normal; color: var(--muted); font-size: 14px; line-height: 1; }
 .fl-ar.neg { color: var(--crit-ink); }
 .fails { padding: 8px 14px; display: grid; gap: 3px; align-content: center; font-size: 12.5px; }
-@media (max-width: 1200px) { .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .sum-tile, .flow { border-right: 0; border-bottom: 1px solid var(--line); } .flow { grid-column: 1 / -1; } .fails { grid-column: 1 / -1; } }
+@media (max-width: 900px) { .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .sum-tile { border-right: 0; border-bottom: 1px solid var(--line); } .fails { grid-column: 1 / -1; } }
 
 .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); }
 .toolbar .sep { width: 1px; height: 20px; background: var(--line-2); }
@@ -128,6 +128,8 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
 .kv span { display: block; font-family: var(--f-ui); font-size: 10.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
 .kv b { font-weight: 600; white-space: nowrap; }
 .kv b.over { color: var(--warn-ink); }
+.kv small { display: block; font-size: 10.5px; font-weight: 400; color: var(--muted); }
+.kv > div { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .qa { font-size: 12.5px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .check { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
 .check li { display: grid; grid-template-columns: 16px minmax(0, 1fr) 52px; gap: 6px; align-items: center; padding: 3px 4px; border-bottom: 1px solid var(--line); font-size: 12.5px; border-left: 3px solid transparent; }
@@ -197,8 +199,8 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     <div class="sum-tile"><div class="eyebrow">Units per hour</div><div class="v" id="sUph">--</div><div class="s" id="sUphS">since start</div></div>
     <div class="sum-tile"><div class="eyebrow">First-pass yield</div><div class="v" id="sFpy">--</div><div class="s" id="sFpyS">pass / tested</div></div>
     <div class="sum-tile"><div class="eyebrow">Takt</div><div class="v" id="sTakt">--</div><div class="s" id="sTaktS">not set</div></div>
-    <div class="flow" id="sFlow"></div>
     <div class="fails" id="sFails"></div>
+    <div class="flow" id="sFlow"></div>
   </section>
 
   <div class="toolbar">
@@ -244,8 +246,8 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     modelOn: false, handsOn: false, cameras: [], clips: [], camAllowed: false, failPick: null, sending: false, summary: null, sumAt: 0, evSeen: -1,
     qaId: null, saveTimer: null, starting: false, stopping: false
   };
-  const Y = { status: 'off', backend: '', size: 640, session: null, ort: null, inName: '', outName: '', canvas: null, ctx: null, buf: null, classes: [], error: '', loading: null };
-  const H = { status: 'off', lm: null, canvas: null, ctx: null, error: '', loading: null };
+  const Y = { status: 'off', backend: '', size: 640, session: null, ort: null, inName: '', outName: '', canvas: null, ctx: null, classes: [], error: '', loading: null, errs: 0 };
+  const H = { status: 'off', worker: null, wait: null, seq: 0, ms: 0, error: '', loading: null };
   const ST = {};
   let LIST = [];
 
@@ -575,8 +577,11 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
         const mod = await import(GPU ? '/vendor/ort/ort.webgpu.min.mjs' : '/vendor/ort/ort.wasm.min.mjs');
         const ort = mod.InferenceSession ? mod : mod.default;
         ort.env.wasm.wasmPaths = '/vendor/ort/';
-        const threads = self.crossOriginIsolated ? Math.max(1, Math.min(2, navigator.hardwareConcurrency || 2)) : 1;
+        const threads = self.crossOriginIsolated ? Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) >> 1)) : 1;
         ort.env.wasm.numThreads = threads;
+        // WASM runs in onnxruntime's own worker (proxy), so a 0.5 to 1 s inference never freezes the page.
+        // WebGPU needs the main thread, so ?gpu turns the proxy off.
+        ort.env.wasm.proxy = !GPU;
         const res = await fetch(m.file, { cache: 'reload' });
         if (!res.ok) throw new Error('model file ' + m.file + ' not found (' + res.status + ')');
         const bytes = new Uint8Array(await res.arrayBuffer());
@@ -585,15 +590,15 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
           try { if (await navigator.gpu.requestAdapter()) { session = await ort.InferenceSession.create(bytes, { executionProviders: ['webgpu'] }); backend = 'WebGPU'; } }
           catch (e) { console.warn('WebGPU unavailable, using WASM', e); session = null; }
         }
-        if (!session) { session = await ort.InferenceSession.create(bytes, { executionProviders: ['wasm'] }); backend = 'WASM x' + threads; }
+        if (!session) { session = await ort.InferenceSession.create(bytes, { executionProviders: ['wasm'] }); backend = 'WASM x' + threads + (ort.env.wasm.proxy ? ' in a worker' : ''); }
         Y.ort = ort; Y.session = session; Y.backend = backend; Y.classes = (m.classes || []).slice();
         Y.inName = session.inputNames[0]; Y.outName = session.outputNames[0];
         Y.size = m.imgsz || 640;
         try { const md = session.inputMetadata; const sh = Array.isArray(md) ? md[0].shape : md[Y.inName].shape; if (sh && sh[2] > 0) Y.size = sh[2]; } catch (e) { /* keep imgsz */ }
         Y.canvas = document.createElement('canvas'); Y.canvas.width = Y.canvas.height = Y.size;
         Y.ctx = Y.canvas.getContext('2d', { willReadFrequently: true });
-        Y.buf = new Float32Array(3 * Y.size * Y.size);
-        await session.run({ [Y.inName]: new ort.Tensor('float32', Y.buf, [1, 3, Y.size, Y.size]) });
+        // A fresh input array per run: in worker (proxy) mode onnxruntime takes the buffer over.
+        await session.run({ [Y.inName]: new ort.Tensor('float32', new Float32Array(3 * Y.size * Y.size), [1, 3, Y.size, Y.size]) });
         Y.status = 'ready';
       } catch (e) {
         console.error('Model load failed', e);
@@ -606,35 +611,38 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     const S = Y.size, sw = v.videoWidth, sh = v.videoHeight, lb = LD.letterbox(sw, sh, S), ctx = Y.ctx;
     ctx.fillStyle = 'rgb(114,114,114)'; ctx.fillRect(0, 0, S, S);
     ctx.drawImage(v, 0, 0, sw, sh, lb.padX, lb.padY, lb.nw, lb.nh);
-    LD.fillTensor(ctx.getImageData(0, 0, S, S).data, S, Y.buf);
-    const out = await Y.session.run({ [Y.inName]: new Y.ort.Tensor('float32', Y.buf, [1, 3, S, S]) });
+    const input = LD.fillTensor(ctx.getImageData(0, 0, S, S).data, S);
+    const out = await Y.session.run({ [Y.inName]: new Y.ort.Tensor('float32', input, [1, 3, S, S]) });
     const o = out[Y.outName];
     return LD.decodeOutput(o.data, o.dims, lb, sw, sh, MIN_BOX, 0.7, Y.classes);
   }
-  async function loadHands() {
+  // One HandLandmarker (IMAGE mode, CPU) in a worker, shared by all stations: a call takes 100 to 200 ms on this laptop.
+  function loadHands() {
     if (H.loading) return H.loading;
     H.status = 'loading'; H.error = '';
-    H.loading = (async () => {
-      try {
-        const mp = await import('/vendor/mediapipe/vision_bundle.mjs');
-        const files = await mp.FilesetResolver.forVisionTasks('/vendor/mediapipe/wasm');
-        // IMAGE mode, CPU delegate: one landmarker shared by all stations, frames from different cameras in turn.
-        H.lm = await mp.HandLandmarker.createFromOptions(files, {
-          baseOptions: { modelAssetPath: '/models/hand_landmarker.task', delegate: 'CPU' },
-          runningMode: 'IMAGE', numHands: 2, minHandDetectionConfidence: 0.4, minHandPresenceConfidence: 0.4
-        });
-        H.canvas = document.createElement('canvas'); H.ctx = H.canvas.getContext('2d');
-        H.status = 'ready';
-      } catch (e) { console.error('Hand model failed', e); H.status = 'failed'; H.error = String(e && e.message || e); H.loading = null; }
-    })();
+    H.loading = new Promise(resolve => {
+      let w;
+      try { w = new Worker('/line-hands-worker.js'); } catch (e) { H.status = 'failed'; H.error = String(e && e.message || e); H.loading = null; resolve(); return; }
+      w.onmessage = e => {
+        const m = e.data || {};
+        if (m.type === 'ready') { H.worker = w; H.status = 'ready'; resolve(); }
+        else if (m.type === 'error') { H.status = 'failed'; H.error = m.error; H.loading = null; w.terminate(); resolve(); }
+        else if (m.type === 'hands' && H.wait && H.wait.id === m.id) { H.ms = m.ms; const r = H.wait; H.wait = null; r.resolve(m.hands); }
+      };
+      w.onerror = e => { H.status = 'failed'; H.error = (e && e.message) || 'worker error'; H.loading = null; if (H.wait) { H.wait.resolve([]); H.wait = null; } resolve(); };
+      w.postMessage({ type: 'init' });
+    });
     return H.loading;
   }
-  function detectHands(v) {
+  async function detectHands(v) {
     const w = 256, h = Math.max(1, Math.round(256 * v.videoHeight / v.videoWidth));
-    if (H.canvas.width !== w || H.canvas.height !== h) { H.canvas.width = w; H.canvas.height = h; }
-    H.ctx.drawImage(v, 0, 0, w, h);
-    const r = H.lm.detect(H.canvas);
-    return (r && r.landmarks) || [];
+    const bitmap = await createImageBitmap(v, { resizeWidth: w, resizeHeight: h, resizeQuality: 'low' });
+    const id = ++H.seq;
+    return new Promise(resolve => {
+      H.wait = { id, resolve };
+      H.worker.postMessage({ type: 'detect', id, bitmap }, [bitmap]);
+      setTimeout(() => { if (H.wait && H.wait.id === id) { H.wait = null; resolve([]); } }, 3000);
+    });
   }
   let detecting = false;
   async function detectLoop() {
@@ -649,12 +657,17 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
         if (G.modelOn && Y.status === 'ready') {
           try {
             const d = await infer(st.video);
-            st.detsPrev = st.dets; st.dets = d; st.detT = now(); st.modelN++;
-          } catch (e) { console.error(e); }
+            st.detsPrev = st.dets; st.dets = d; st.detT = now(); st.modelN++; Y.errs = 0;
+          } catch (e) {
+            console.error(e);
+            // Back off, and give up after a few failures in a row instead of spinning.
+            if (++Y.errs >= 5) { Y.error = String(e && e.message || e); banner('model', 'The model stopped after repeated errors: ' + esc(Y.error), 'crit'); setModel(false); }
+            await sleep(500);
+          }
           const t = now();
           if (t - st.modelT >= 2000) { st.modelFps = st.modelN * 1000 / (t - st.modelT); st.modelN = 0; st.modelT = t; }
         }
-        if (G.handsOn && H.status === 'ready') { try { st.hands = detectHands(st.video); st.handsT = now(); } catch (e) { console.warn(e); } }
+        if (G.handsOn && H.status === 'ready') { try { st.hands = await detectHands(st.video); st.handsT = now(); } catch (e) { console.warn(e); } }
         await sleep(15);
       }
     } finally { detecting = false; }
@@ -968,8 +981,8 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     const d = ss ? ss.detected : null, m = ss ? ss.manual : null, over = v => (takt && v != null && v > takt ? ' class="over"' : '');
     st.elKv.innerHTML = `<div><span>Cycle</span><b>${s.inCycle ? fmtS((t - s.cycleStart) / 1000) : '--'}</b></div>` +
       `<div><span>Last</span><b${over(d && d.lastSec)}>${fmtS(d && d.lastSec)}</b></div>` +
-      `<div><span>Avg</span><b${over(d && d.avgSec)}>${fmtS(d && d.avgSec)}${d && d.stdSec ? ' ±' + d.stdSec.toFixed(1) : ''}</b></div>` +
-      `<div><span>Done</span><b>${d ? d.cycles : 0} <small class="muted">/ ${m ? m.cycles : 0} manual</small></b></div>`;
+      `<div><span>Avg</span><b${over(d && d.avgSec)}>${fmtS(d && d.avgSec)}<small title="spread (standard deviation)">${d && d.stdSec != null ? '±' + d.stdSec.toFixed(1) + ' s' : '&nbsp;'}</small></b></div>` +
+      `<div><span>Done</span><b>${d ? d.cycles : 0}<small>${m ? m.cycles : 0} manual</small></b></div>`;
     if (st.isQa) {
       const lastQa = [...G.events].reverse().find(e => e.type === 'qa_result' && e.station === st.id);
       const mm = [...G.events].reverse().find(e => e.type === 'flag' && e.station === st.id && e.note === LE.MISMATCH_NOTE);
@@ -992,7 +1005,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       if (s.current === r.id) c += ' now'; else if (counts[r.id]) c += ' done';
       const avg = d && d.substepAvg[r.id];
       const tip = r.rule ? LE.ruleText(r.rule, cfg) : why;
-      return `<li class="${c}" title="${esc(tip)}"><span class="ic"></span><span class="nm">${esc(r.label)}${counts[r.id] > 1 ? ` <span class="rep">x${counts[r.id]}</span>` : ''}${r.kind === 'model' ? ' <span class="tag">model</span>' : ''}${r.closes ? ' <span class="muted" style="font-size:11px">(ends the cycle)</span>' : ''}${why ? `<small>${esc(why)}</small>` : ''}</span><span class="num mono">${avg != null && !r.closes && d.cycles ? fmtS(avg) : ''}</span></li>`;
+      return `<li class="${c}" title="${esc(tip)}"><span class="ic"></span><span class="nm">${esc(r.label)}${counts[r.id] > 1 ? ` <span class="rep">x${counts[r.id]}</span>` : ''}${r.kind === 'model' ? ' <span class="tag">model</span>' : ''}${r.closes ? ' <span class="muted" style="font-size:11px">(ends the cycle)</span>' : ''}${why ? `<small>${esc(why)}</small>` : ''}</span><span class="num mono">${avg != null && !r.closes && d.cycles && (r.kind || avg > 0) ? fmtS(avg) : ''}</span></li>`;
     }).join('');
     if (html !== st.lastCheck) { st.elCheck.innerHTML = html; st.lastCheck = html; }
     const recNow = st.rec ? `<span class="recd">REC ${fmtMB(st.rec.bytes)}</span>` + (st.rec.dropped ? ` (${st.rec.dropped} chunks lost)` : '') : '';
@@ -1019,8 +1032,8 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     ids.forEach((id, i) => {
       const s = sum.stations[id];
       const c = 'fl-st' + (L.bottleneck === id ? ' bottleneck' : '') + (L.overTakt.includes(id) ? ' over' : '');
-      flow += `<div class="${c}" title="${esc(ST[id].cfg.label)}: ${s.cycles} cycles (${s.basis})"><b>${id.toUpperCase()}</b><span>${s.cycles} | ${fmtS(s.avgSec)}</span></div>`;
-      if (i + 1 < ids.length) { const w = L.wip[i]; flow += `<div class="fl-ar${w.n < 0 ? ' neg' : ''}" title="Work in progress between ${id.toUpperCase()} and ${ids[i + 1].toUpperCase()}${i === 0 ? ' (pairs of wires)' : ''}">${w.n}<i>→</i></div>`; }
+      flow += `<div class="${c}" title="${esc(ST[id].cfg.label)}: ${s.cycles} cycles, average cycle (${s.basis})"><b>${id.toUpperCase()}</b><span>${s.cycles} done | ${fmtS(s.avgSec)}</span></div>`;
+      if (i + 1 < ids.length) { const w = L.wip[i]; flow += `<div class="fl-ar${w.n < 0 ? ' neg' : ''}" title="Work in progress between ${id.toUpperCase()} and ${ids[i + 1].toUpperCase()}${i === 0 ? ' (pairs of wires)' : ''}"><i>→</i>WIP ${w.n}<i>→</i></div>`; }
     });
     $('sFlow').innerHTML = '<span class="eyebrow" style="margin-right:6px">Flow</span>' + flow;
     const fc = L.failsByCause, parts = ids.map(id => `${id.toUpperCase()} <b>${fc[id] || 0}</b>`);
@@ -1044,7 +1057,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     const bh = $('btnHands');
     bh.textContent = 'Hands: ' + (H.status === 'loading' ? 'loading...' : G.handsOn ? 'on' : 'off');
     bh.classList.toggle('on', G.handsOn);
-    $('detNote').textContent = (G.modelOn ? Y.backend + (GPU ? '' : ' (add ?gpu for WebGPU)') : '') + (G.handsOn ? (G.modelOn ? ' | ' : '') + 'hands CPU' : '');
+    $('detNote').textContent = (G.modelOn ? Y.backend + (GPU ? '' : ' (add ?gpu for WebGPU)') : '') + (G.handsOn ? (G.modelOn ? ' | ' : '') + 'hands: CPU worker' : '');
     document.querySelectorAll('#basisSeg button').forEach(b => b.classList.toggle('on', b.dataset.b === G.basis));
   }
   function render() {
