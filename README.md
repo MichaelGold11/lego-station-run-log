@@ -32,6 +32,10 @@ npm start
 
 Open http://localhost:4173. `npm install` fetches two browser libraries for the live page (onnxruntime-web and MediaPipe). The main app needs nothing; the live page at http://localhost:4173/live falls back to the same pinned libraries on the jsdelivr CDN if `node_modules` is missing.
 
+The wire line dashboard (four stations, four cameras, one laptop) is at http://localhost:4173/line. It records
+cycle and substep times, QA results and every camera's video for training a model. Process, run-day steps and the
+data it writes: [docs/wire-line-process.md](docs/wire-line-process.md).
+
 **Or let your agent do it.** Paste this into Claude Code or Codex:
 
 > Clone https://github.com/MichaelGold11/lego-station-run-log, install anything its README
@@ -109,6 +113,8 @@ Times are approximate to about ±0.1 s.
 | `app/` | The web app. `lego-station-run-log.html` is the same page that runs as a claude.ai artifact. |
 | `server.mjs` | Local server (`npm start`). |
 | `app/live-detect.js`, `app/models/` | Live page: YOLO pre and post processing, signal mapping, build check, and the models (see `app/models/README.md`). |
+| `app/line.html`, `app/line-engine.js` | Wire line dashboard (`/line`) and its config-driven engine. The process is `data/meta/wire-line.json`. |
+| `data/sessions/` | Wire line sessions: events, CSVs and one video per station. Not committed (about 1 GB per hour). |
 | `scripts/runlog.mjs` | Command-line helper: `npm run runlog -- help`. |
 | `data/runs/` | One JSON file per run. |
 | `data/assets/` | Videos and step frames. |
