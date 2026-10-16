@@ -1,9 +1,11 @@
 // Local server for the LEGO Station Run Log.
 // Serves the app, a small JSON document store (data/<collection>/<id>.json) and the
 // uploaded files (data/assets/<id>.<ext>). No dependencies; Node 18 or newer.
+// Also serves the wire line page (/line) and its session store (data/sessions/<id>/).
 //
-//   npm start            -> http://localhost:4173
-//   PORT=5000 npm start  -> another port
+//   npm start                  -> http://localhost:4173
+//   PORT=5000 npm start        -> another port
+//   DATA_DIR=/tmp/x npm start  -> another data folder (the tests use this)
 
 import http from 'node:http';
 import fs from 'node:fs';
@@ -13,7 +15,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const DATA = path.join(ROOT, 'data');
+const DATA = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(ROOT, 'data');
 const ASSETS = path.join(DATA, 'assets');
 const APP_FILE = path.join(ROOT, 'app', 'lego-station-run-log.html');
 const RUNTIME_FILE = path.join(ROOT, 'app', 'local-runtime.js');
@@ -31,13 +33,21 @@ const VENDOR = {
 };
 const MODELS = path.join(ROOT, 'app', 'models');
 
+// Wire line (/line): config, per-station setup and recorded sessions. The CSV exports use the same engine as the page.
+const SESSIONS = path.join(DATA, 'sessions');
+const SETUP_FILE = path.join(DATA, 'meta', 'wire-line-setup.json');
+const LineEngine = (() => { const mod = { exports: {} }; new Function('module', fs.readFileSync(path.join(ROOT, 'app', 'line-engine.js'), 'utf8'))(mod); return mod.exports; })();
+const SESSION_ID = /^\d{8}-\d{6}-[a-f0-9]{4}$/;
+const STATION_ID = /^[a-z][a-z0-9_]{0,15}$/;
+const VIDEO_EXT = { 'video/mp4': '.mp4', 'video/webm': '.webm', 'video/x-matroska': '.mkv' };
+
 // The same minimal page skeleton the claude.ai artifact viewer wraps around the app.
 const HEAD = '<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">'
   + '<style>:root{color-scheme:light;box-sizing:border-box}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]{display:none!important}</style>'
   + '<script src="/local-runtime.js"></script></head><body>\n';
 
 const TYPES = {
-  '.mp4': 'video/mp4', '.mov': 'video/mp4', '.m4v': 'video/mp4', '.webm': 'video/webm',
+  '.mp4': 'video/mp4', '.mov': 'video/mp4', '.m4v': 'video/mp4', '.webm': 'video/webm', '.mkv': 'video/x-matroska',
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif',
   '.json': 'application/json', '.csv': 'text/csv', '.txt': 'text/plain',
   '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.wasm': 'application/wasm', '.onnx': 'application/octet-stream', '.task': 'application/octet-stream'
@@ -139,6 +149,10 @@ async function handle(req, res) {
     if (vend) { res.writeHead(302, { Location: VENDOR[vend].cdn + rel }); return res.end(); }
     return fail(res, 404, 'not_found', 'No such model file.');
   }
+  if (p === '/line') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'line.html')), 'text/html; charset=utf-8', ISOLATE);
+  if (p === '/line-engine.js') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'line-engine.js')), 'text/javascript; charset=utf-8', ISOLATE);
+  if (p.startsWith('/api/line/')) return lineApi(req, res, p);
+  if (p === '/api/sessions' || p.startsWith('/api/sessions/')) return sessionsApi(req, res, p, url);
   if (p === '/local-runtime.js') return send(res, 200, fs.readFileSync(RUNTIME_FILE), 'text/javascript; charset=utf-8');
   if (p === '/api/info') return send(res, 200, { ffmpeg: hasFfmpeg, root: ROOT });
 
@@ -203,6 +217,272 @@ async function handle(req, res) {
     return fail(res, 405, 'invalid_argument', 'Method not allowed.');
   }
   return fail(res, 404, 'not_found', 'Nothing here.');
+}
+
+// ---------- wire line: config, setup, clips ----------
+function lineConfig() {
+  // DATA_DIR can point somewhere without a config: fall back to the one in the repo.
+  const own = path.join(DATA, 'meta', 'wire-line.json');
+  try { return readJson(fs.existsSync(own) ? own : path.join(ROOT, 'data', 'meta', 'wire-line.json')); } catch (e) { return null; }
+}
+const stationIds = cfg => (cfg && Array.isArray(cfg.stations) ? cfg.stations.map(s => s.id).filter(id => STATION_ID.test(id)) : []);
+const num01 = v => typeof v === 'number' && isFinite(v) && v >= 0 && v <= 1;
+const numIn = (v, lo, hi) => typeof v === 'number' && isFinite(v) && v >= lo && v <= hi;
+const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+
+// Zones and calibration per station. Unknown stations are refused; zones the config no longer has are dropped.
+function cleanSetup(body, cfg) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return { error: 'Body must be a JSON object keyed by station.' };
+  const out = {};
+  for (const [sid, v] of Object.entries(body)) {
+    const st = STATION_ID.test(sid) && cfg.stations.find(s => s.id === sid);
+    if (!st) return { error: 'Unknown station "' + String(sid).slice(0, 40) + '".' };
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return { error: 'Station ' + sid + ' must be an object.' };
+    const zoneIds = (st.zones || []).map(z => z.id), zones = {}, motion = {}, bright = {};
+    for (const [zid, r] of Object.entries(v.zones || {})) {
+      if (!zoneIds.includes(zid)) continue;
+      if (!r || !num01(r.x) || !num01(r.y) || !num01(r.w) || !num01(r.h) || r.w <= 0 || r.h <= 0) return { error: sid + ': zone ' + zid + ' needs x, y, w, h between 0 and 1.' };
+      zones[zid] = { x: r.x, y: r.y, w: r.w, h: r.h };
+    }
+    const c = v.calib && typeof v.calib === 'object' ? v.calib : {};
+    for (const [zid, m] of Object.entries(c.motion || {})) if (zoneIds.includes(zid) && num01(m)) motion[zid] = m;
+    for (const [zid, b] of Object.entries(c.bright || {})) {
+      if (!zoneIds.includes(zid) || !b || typeof b !== 'object') continue;
+      const e = {};
+      if (numIn(b.off, 0, 255)) e.off = b.off;
+      if (numIn(b.on, 0, 255)) e.on = b.on;
+      if (Object.keys(e).length) bright[zid] = e;
+    }
+    out[sid] = { zones, calib: { motion, bright }, updatedAt: text(v.updatedAt, 40) || new Date().toISOString() };
+  }
+  return { setup: out };
+}
+
+// Labels for the recorded LEGO runs, so the clip list says "Run 1" instead of a hash.
+function runLabels() {
+  const out = {}, dir = path.join(DATA, 'runs');
+  if (!fs.existsSync(dir)) return out;
+  for (const n of fs.readdirSync(dir).filter(n => n.endsWith('.json'))) {
+    try { const j = readJson(path.join(dir, n)); if (j.video && j.video.assetId) out[j.video.assetId] = 'Run ' + j.number + (j.label ? ': ' + j.label : ''); } catch (e) { /* skip */ }
+  }
+  return out;
+}
+
+async function lineApi(req, res, p) {
+  if (p === '/api/line/config') {
+    if (req.method !== 'GET') return fail(res, 405, 'invalid_argument', 'Method not allowed.');
+    const cfg = lineConfig();
+    if (!cfg) return fail(res, 500, 'unavailable', 'data/meta/wire-line.json is missing or is not valid JSON.');
+    return send(res, 200, cfg);
+  }
+  if (p === '/api/line/setup') {
+    if (req.method === 'GET') { try { return send(res, 200, fs.existsSync(SETUP_FILE) ? readJson(SETUP_FILE) : {}); } catch (e) { return send(res, 200, {}); } }
+    if (req.method !== 'PUT') return fail(res, 405, 'invalid_argument', 'Method not allowed.');
+    const cfg = lineConfig();
+    if (!cfg) return fail(res, 500, 'unavailable', 'data/meta/wire-line.json is missing or is not valid JSON.');
+    let body;
+    try { body = JSON.parse((await readBody(req, 512 * 1024)).toString('utf8')); } catch (e) { return fail(res, 400, 'invalid_argument', 'Body must be JSON.'); }
+    const r = cleanSetup(body, cfg);
+    if (r.error) return fail(res, 400, 'invalid_argument', r.error);
+    writeJson(SETUP_FILE, r.setup);
+    return send(res, 200, { ok: true, setup: r.setup });
+  }
+  if (p === '/api/line/clips') {
+    const clips = [], runs = runLabels();
+    if (fs.existsSync(ASSETS)) {
+      for (const n of fs.readdirSync(ASSETS).sort()) {
+        const m = /^([a-f0-9]{32})\.(mp4|webm)$/.exec(n);
+        if (m) clips.push({ key: 'asset:' + m[1], label: runs[m[1]] || 'Clip ' + m[1].slice(0, 8), url: '/_blob/' + m[1], group: 'assets' });
+      }
+      clips.sort((a, b) => (a.label.startsWith('Run ') === b.label.startsWith('Run ') ? a.label.localeCompare(b.label, 'en', { numeric: true }) : a.label.startsWith('Run ') ? -1 : 1));
+    }
+    for (const s of listSessions().slice(0, 30)) {
+      for (const v of s.videos) clips.push({ key: 'session:' + s.id + ':' + v.file, label: (s.title || s.id) + ', ' + v.station + (v.part > 1 ? ' part ' + v.part : ''), url: '/api/sessions/' + s.id + '/video/' + v.station + (v.part > 1 ? '?part=' + v.part : ''), group: 'sessions' });
+    }
+    return send(res, 200, { clips });
+  }
+  return fail(res, 404, 'not_found', 'Nothing here.');
+}
+
+// ---------- wire line: sessions ----------
+// A session folder holds session.json, events.jsonl (append-only) and one video per station (plus -2, -3 when the
+// recording restarted). session.json is cached here and written at most every 3 s while chunks arrive.
+const SESS = new Map();
+function sessionFile(id) { return path.join(SESSIONS, id, 'session.json'); }
+function loadSession(id) {
+  let s = SESS.get(id);
+  if (!s) { s = { doc: readJson(sessionFile(id)), timer: null }; SESS.set(id, s); }
+  return s;
+}
+function writeJsonRetry(f, obj) {
+  // A virus scanner or indexer can hold the file for a moment on Windows: retry the rename a few times.
+  for (let i = 0; i < 5; i++) {
+    try { writeJson(f, obj); return; } catch (e) {
+      if (i === 4) { try { fs.writeFileSync(f, JSON.stringify(obj, null, 2) + '\n'); } catch (e2) { console.error('Could not write ' + f, e2); } }
+      else Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+    }
+  }
+}
+function saveSession(id, now) {
+  const s = SESS.get(id);
+  if (!s) return;
+  if (now) { if (s.timer) clearTimeout(s.timer); s.timer = null; writeJsonRetry(sessionFile(id), s.doc); return; }
+  if (!s.timer) s.timer = setTimeout(() => { s.timer = null; writeJsonRetry(sessionFile(id), s.doc); }, 3000);
+}
+function readEvents(id) {
+  const f = path.join(SESSIONS, id, 'events.jsonl');
+  if (!fs.existsSync(f)) return [];
+  const out = [];
+  for (const line of fs.readFileSync(f, 'utf8').split('\n')) { if (!line.trim()) continue; try { out.push(JSON.parse(line)); } catch (e) { /* a torn line */ } }
+  return out;
+}
+function videoList(doc) {
+  const out = [];
+  for (const [station, parts] of Object.entries(doc.recordings || {})) for (const r of parts) out.push({ station, part: r.part, file: r.file, mime: r.mime, bytes: r.bytes, chunks: r.chunks, gaps: (r.gaps || []).length, startedAt: r.startedAt });
+  return out;
+}
+function listSessions() {
+  if (!fs.existsSync(SESSIONS)) return [];
+  const out = [];
+  for (const id of fs.readdirSync(SESSIONS).filter(n => SESSION_ID.test(n)).sort().reverse()) {
+    try {
+      const d = SESS.has(id) ? SESS.get(id).doc : readJson(sessionFile(id));
+      out.push({ id, title: d.title, crew: d.crew, shift: d.shift, startedAt: d.startedAt, endedAt: d.endedAt || null, videos: videoList(d) });
+    } catch (e) { /* not a session */ }
+  }
+  return out;
+}
+function newSessionId() {
+  const d = new Date(), z = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}-${crypto.randomBytes(2).toString('hex')}`;
+}
+function cleanEvent(e, ids) {
+  if (!e || typeof e !== 'object' || Array.isArray(e)) return 'is not an object';
+  if (!LineEngine.EVENT_TYPES.includes(e.type)) return 'has an unknown type';
+  if (typeof e.t !== 'number' || !isFinite(e.t)) return 'has no time t';
+  if (e.station != null && !ids.includes(e.station)) return 'names an unknown station';
+  if (JSON.stringify(e).length > 4000) return 'is too long';
+  return null;
+}
+
+async function sessionsApi(req, res, p, url) {
+  if (p === '/api/sessions') {
+    if (req.method === 'GET') return send(res, 200, { sessions: listSessions() });
+    if (req.method !== 'POST') return fail(res, 405, 'invalid_argument', 'Method not allowed.');
+    const cfg = lineConfig();
+    if (!cfg) return fail(res, 500, 'unavailable', 'data/meta/wire-line.json is missing or is not valid JSON.');
+    let body;
+    try { body = JSON.parse((await readBody(req, 256 * 1024)).toString('utf8') || '{}'); } catch (e) { return fail(res, 400, 'invalid_argument', 'Body must be JSON.'); }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return fail(res, 400, 'invalid_argument', 'Body must be a JSON object.');
+    const ids = stationIds(cfg), stations = {};
+    for (const [sid, v] of Object.entries(body.stations || {})) {
+      if (!ids.includes(sid)) return fail(res, 400, 'invalid_argument', 'Unknown station "' + String(sid).slice(0, 40) + '".');
+      const input = v && ['camera', 'clip', 'none'].includes(v.input) ? v.input : 'none';
+      stations[sid] = { input, label: text(v && v.label, 200), record: !!(v && v.record) };
+    }
+    let setup = {};
+    try { setup = fs.existsSync(SETUP_FILE) ? readJson(SETUP_FILE) : {}; } catch (e) { /* none */ }
+    const id = newSessionId(), now = Date.now();
+    const doc = {
+      id, title: text(body.title, 120), crew: text(body.crew, 80), shift: text(body.shift, 40), notes: text(body.notes, 2000),
+      startedAt: new Date(now).toISOString(), startedAtMs: now, endedAt: null, stations,
+      client: body.client && typeof body.client === 'object' && JSON.stringify(body.client).length <= 2000 ? body.client : {},
+      config: cfg, setup, recordings: {}
+    };
+    fs.mkdirSync(path.join(SESSIONS, id), { recursive: true });
+    fs.writeFileSync(path.join(SESSIONS, id, 'events.jsonl'), '');
+    SESS.set(id, { doc, timer: null });
+    saveSession(id, true);
+    return send(res, 200, { id, startedAt: doc.startedAt, startedAtMs: now });
+  }
+
+  // Everything below is /api/sessions/<id>[/...]. The path is already decoded, so an encoded slash makes extra segments.
+  const segs = p.slice('/api/sessions/'.length).split('/');
+  const id = segs[0], rest = segs.slice(1);
+  if (!SESSION_ID.test(id)) return fail(res, 400, 'invalid_argument', 'Bad session id.');
+  if (!fs.existsSync(sessionFile(id))) return fail(res, 404, 'not_found', 'No such session.');
+  const S = loadSession(id), doc = S.doc, dir = path.join(SESSIONS, id);
+  const ids = stationIds(doc.config).length ? stationIds(doc.config) : stationIds(lineConfig());
+
+  if (!rest.length) {
+    if (req.method !== 'GET') return fail(res, 405, 'invalid_argument', 'Method not allowed.');
+    const evf = path.join(dir, 'events.jsonl');
+    const events = fs.existsSync(evf) ? fs.readFileSync(evf, 'utf8').split('\n').filter(l => l.trim()).length : 0;
+    return send(res, 200, Object.assign({}, doc, { eventCount: events, videos: videoList(doc) }));
+  }
+  if (rest.length === 1) {
+    const what = rest[0];
+    if (what === 'events' && req.method === 'POST') {
+      let body;
+      try { body = JSON.parse((await readBody(req, 4 * 1024 * 1024)).toString('utf8')); } catch (e) { return fail(res, 400, 'invalid_argument', 'Body must be JSON.'); }
+      const list = Array.isArray(body) ? body : body && Array.isArray(body.events) ? body.events : null;
+      if (!list || list.length > 5000) return fail(res, 400, 'invalid_argument', 'Send {"events": [...]} with at most 5000 events.');
+      for (let i = 0; i < list.length; i++) {
+        const why = cleanEvent(list[i], ids);
+        if (why) return fail(res, 400, 'invalid_argument', 'Event ' + i + ' ' + why + '.');
+        if (typeof list[i].ts !== 'number') list[i].ts = Math.round((list[i].t - doc.startedAtMs)) / 1000;
+      }
+      if (list.length) fs.appendFileSync(path.join(dir, 'events.jsonl'), list.map(e => JSON.stringify(e)).join('\n') + '\n');
+      return send(res, 200, { ok: true, appended: list.length });
+    }
+    if (what === 'end' && req.method === 'POST') {
+      try { await readBody(req, 64 * 1024); } catch (e) { /* ignore the body */ }
+      if (!doc.endedAt) { doc.endedAt = new Date().toISOString(); doc.endedAtMs = Date.now(); }
+      try { doc.summary = LineEngine.summarize(readEvents(id), doc.config || lineConfig(), { now: doc.endedAtMs }); } catch (e) { doc.summary = null; console.error(e); }
+      saveSession(id, true);
+      return send(res, 200, Object.assign({}, doc, { videos: videoList(doc) }));
+    }
+    if (what === 'events.jsonl' && req.method === 'GET') {
+      return send(res, 200, fs.readFileSync(path.join(dir, 'events.jsonl')), 'application/x-ndjson; charset=utf-8', { 'Content-Disposition': `attachment; filename="${id}-events.jsonl"` });
+    }
+    if ((what === 'substeps.csv' || what === 'cycles.csv') && req.method === 'GET') {
+      const meta = { id, crew: doc.crew, shift: doc.shift, startedAtMs: doc.startedAtMs };
+      const cfg = doc.config || lineConfig();
+      const csv = what === 'substeps.csv' ? LineEngine.substepsCsv(readEvents(id), cfg, meta) : LineEngine.cyclesCsv(readEvents(id), cfg, meta);
+      return send(res, 200, csv, 'text/csv; charset=utf-8', { 'Content-Disposition': `attachment; filename="${id}-${what}"` });
+    }
+    return fail(res, 400, 'invalid_argument', 'Bad session path.');
+  }
+  if (rest.length === 2 && rest[0] === 'video') {
+    const station = rest[1];
+    if (!STATION_ID.test(station) || !ids.includes(station)) return fail(res, 400, 'invalid_argument', 'Bad station name.');
+    const part = url.searchParams.has('part') ? Number(url.searchParams.get('part')) : 1;
+    if (!Number.isInteger(part) || part < 1 || part > 99) return fail(res, 400, 'invalid_argument', 'part must be a whole number from 1 to 99.');
+    const parts = (doc.recordings[station] = doc.recordings[station] || []);
+    let rec = parts.find(r => r.part === part);
+    if (req.method === 'GET') {
+      if (!rec || !fs.existsSync(path.join(dir, rec.file))) return fail(res, 404, 'not_found', 'No recording for that station.');
+      return serveFile(req, res, path.join(dir, rec.file), TYPES[path.extname(rec.file)] || 'video/webm');
+    }
+    if (req.method !== 'POST') return fail(res, 405, 'invalid_argument', 'Method not allowed.');
+    const seq = Number(url.searchParams.get('seq'));
+    if (!url.searchParams.has('seq') || !Number.isInteger(seq) || seq < 0) return fail(res, 400, 'invalid_argument', 'seq must be a whole number from 0.');
+    const mime = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+    if (!VIDEO_EXT[mime]) return fail(res, 415, 'unsupported_type', 'Send video/mp4 or video/webm chunks.');
+    let body;
+    try { body = await readBody(req, 32 * 1024 * 1024); } catch (e) { return fail(res, 413, 'too_large', 'A chunk over 32 MB was refused.'); }
+    if (!rec) {
+      const t0 = Number(url.searchParams.get('t0'));
+      rec = { part, file: station + (part > 1 ? '-' + part : '') + VIDEO_EXT[mime], mime, startedAt: isFinite(t0) && t0 > 0 ? t0 : Date.now(), chunks: 0, bytes: 0, nextSeq: 0, gaps: [], rejected: 0 };
+      parts.push(rec);
+    } else if (rec.mime !== mime) return fail(res, 400, 'invalid_argument', 'This recording is ' + rec.mime + '; start a new part for another format.');
+    if (seq < rec.nextSeq) {
+      // Already have it (a retry) or it came late: appending would scramble the file, so it is refused.
+      rec.rejected = (rec.rejected || 0) + 1;
+      saveSession(id, false);
+      return send(res, 409, { code: 'out_of_order', message: 'Chunk ' + seq + ' is behind; the next expected chunk is ' + rec.nextSeq + '.', expected: rec.nextSeq });
+    }
+    const gap = seq > rec.nextSeq;
+    if (gap) {
+      rec.gaps.push({ expected: rec.nextSeq, got: seq, at: new Date().toISOString() });
+      console.warn(`Session ${id} ${station}: video chunk gap, expected ${rec.nextSeq}, got ${seq}.`);
+    }
+    fs.appendFileSync(path.join(dir, rec.file), body);
+    rec.nextSeq = seq + 1; rec.chunks++; rec.bytes += body.length; rec.lastChunkAt = Date.now();
+    saveSession(id, gap || rec.chunks === 1);
+    return send(res, 200, { ok: true, expected: rec.nextSeq, bytes: rec.bytes });
+  }
+  return fail(res, 400, 'invalid_argument', 'Bad session path.');
 }
 
 http.createServer((req, res) => {

@@ -11,7 +11,8 @@
     "start": "node server.mjs",
     "runlog": "node scripts/runlog.mjs",
     "check": "node scripts/runlog.mjs validate",
-    "test:live": "node scripts/test-live-engine.mjs && node scripts/test-live-detect.mjs"
+    "test:live": "node scripts/test-live-engine.mjs && node scripts/test-live-detect.mjs",
+    "test:line": "node scripts/test-line-engine.mjs && node scripts/test-line-server.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "0.10.35",

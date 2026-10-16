@@ -5,3 +5,7 @@ node_modules/
 data/assets/*.upload.*
 .DS_Store
 Thumbs.db
+# Wire line sessions: raw video from every camera (about 1 GB per hour for 4 cameras). Never commit.
+data/sessions/
+# Zones and calibration belong to this laptop and its camera mounts.
+data/meta/wire-line-setup.json
