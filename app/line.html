@@ -1,0 +1,1134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wire line</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Saira:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #eef0ee; --surface: #fcfcfb; --surface-2: #f3f4f2; --sunk: #e4e7e4;
+  --ink: #15181b; --ink-2: #4a4f56; --muted: #767b83; --line: #dcdfdc; --line-2: #c5c9c5;
+  --accent: #a3522a; --accent-2: #8a4321; --on-accent: #ffffff; --accent-wash: rgba(163, 82, 42, .09);
+  --good: #0ca30c; --good-ink: #006300; --warn: #fab219; --warn-ink: #7a5200; --crit: #d03b3b; --crit-ink: #b02e2e;
+  --shadow: 0 1px 2px rgba(21, 24, 27, .06);
+  --f-ui: "Saira", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101214; --surface: #181a1d; --surface-2: #1f2225; --sunk: #0c0d0f;
+    --ink: #eff1ef; --ink-2: #bfc3c8; --muted: #8a8f96; --line: #2a2e33; --line-2: #3a3f45;
+    --accent: #dc8b55; --accent-2: #e9a273; --on-accent: #15181b; --accent-wash: rgba(220, 139, 85, .14);
+    --good-ink: #3fbf3f; --warn-ink: #fab219; --crit-ink: #e66767;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .35);
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { color-scheme: light; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-ui); font-size: 14px; line-height: 1.4; }
+h1, h2, h3 { margin: 0; font-weight: 600; }
+p { margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 5px 12px; border-radius: 6px; border: 1px solid var(--line-2); background: var(--surface); cursor: pointer; font-weight: 500; font-size: 13.5px; white-space: nowrap; }
+.btn:hover { border-color: var(--ink-2); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
+.btn.sm { padding: 2px 9px; font-size: 12.5px; }
+.btn.on { background: var(--accent-wash); border-color: var(--accent); color: var(--accent-2); }
+.btn.flash { box-shadow: 0 0 0 4px color-mix(in srgb, var(--good) 35%, transparent); }
+.btn.pass { border-color: color-mix(in srgb, var(--good) 60%, var(--line-2)); color: var(--good-ink); }
+.btn.fail { border-color: color-mix(in srgb, var(--crit) 55%, var(--line-2)); color: var(--crit-ink); }
+kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2); border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; color: var(--ink-2); }
+.btn.primary kbd { background: rgba(255, 255, 255, .18); border-color: rgba(255, 255, 255, .35); color: inherit; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); }
+.pad { padding: 12px 14px; }
+.chip { display: inline-block; font-size: 11px; font-weight: 600; padding: 0 7px; border-radius: 4px; border: 1px solid var(--line-2); color: var(--ink-2); white-space: nowrap; line-height: 18px; }
+.chip.warn { color: var(--warn-ink); border-color: color-mix(in srgb, var(--warn) 70%, transparent); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.chip.crit { color: var(--crit-ink); border-color: color-mix(in srgb, var(--crit) 50%, transparent); background: color-mix(in srgb, var(--crit) 8%, transparent); }
+.chip.good { color: var(--good-ink); border-color: color-mix(in srgb, var(--good) 55%, transparent); }
+.seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: var(--surface); padding: 3px 10px; cursor: pointer; font-size: 12.5px; font-weight: 500; }
+.seg button + button { border-left: 1px solid var(--line-2); }
+.seg button.on { background: var(--accent); color: var(--on-accent); }
+
+.wrap { max-width: 1840px; margin: 0 auto; padding: 12px 16px 40px; display: grid; gap: 10px; }
+.top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.top h1 { font-size: 22px; line-height: 1.1; }
+.top .note { color: var(--ink-2); font-size: 13px; }
+.sess { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sess .live { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line-2); flex: none; display: inline-block; }
+.dot.rec { background: var(--crit); box-shadow: 0 0 0 3px rgba(208, 59, 59, .2); animation: blink 1.4s ease-in-out infinite; }
+@keyframes blink { 50% { opacity: .45; } }
+.banner { padding: 8px 12px; border-radius: 6px; border: 1px solid color-mix(in srgb, var(--warn) 60%, transparent); background: color-mix(in srgb, var(--warn) 12%, var(--surface)); color: var(--warn-ink); font-size: 13px; }
+.banner.crit { border-color: color-mix(in srgb, var(--crit) 50%, transparent); background: color-mix(in srgb, var(--crit) 8%, var(--surface)); color: var(--crit-ink); }
+.banner.good { border-color: color-mix(in srgb, var(--good) 50%, transparent); background: color-mix(in srgb, var(--good) 8%, var(--surface)); color: var(--ink); }
+.banner a { color: inherit; font-weight: 600; }
+
+.form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 2fr); gap: 10px; align-items: end; }
+.form label { display: grid; gap: 3px; font-size: 12px; color: var(--ink-2); font-weight: 600; }
+.form input, .form textarea { padding: 6px 8px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--surface); font-size: 14px; font-weight: 400; }
+.form textarea { resize: vertical; min-height: 34px; height: 34px; }
+.form .acts { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; }
+@media (max-width: 900px) { .form { grid-template-columns: 1fr; } }
+
+.summary { display: grid; grid-template-columns: repeat(4, minmax(110px, auto)) minmax(0, 1fr) auto; gap: 0; align-items: stretch; }
+.sum-tile { padding: 8px 14px; border-right: 1px solid var(--line); }
+.sum-tile .v { font-family: var(--f-mono); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.sum-tile .s { font-size: 11.5px; color: var(--muted); }
+.flow { display: flex; align-items: center; gap: 4px; padding: 8px 14px; flex-wrap: wrap; border-right: 1px solid var(--line); }
+.fl-st { border: 1px solid var(--line-2); border-radius: 6px; padding: 2px 8px; text-align: center; min-width: 74px; background: var(--surface-2); }
+.fl-st b { display: block; font-size: 12px; }
+.fl-st span { font-family: var(--f-mono); font-size: 12px; color: var(--ink-2); }
+.fl-st.bottleneck { border-color: var(--crit); background: color-mix(in srgb, var(--crit) 9%, var(--surface)); }
+.fl-st.bottleneck b::after { content: " bottleneck"; font-weight: 600; font-size: 10.5px; color: var(--crit-ink); text-transform: uppercase; letter-spacing: .05em; }
+.fl-st.over { border-color: var(--warn); }
+.fl-ar { display: grid; justify-items: center; font-family: var(--f-mono); font-size: 11.5px; color: var(--ink-2); min-width: 34px; }
+.fl-ar i { font-style: normal; color: var(--muted); font-size: 13px; line-height: 1; }
+.fl-ar.neg { color: var(--crit-ink); }
+.fails { padding: 8px 14px; display: grid; gap: 3px; align-content: center; font-size: 12.5px; }
+@media (max-width: 1200px) { .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .sum-tile, .flow { border-right: 0; border-bottom: 1px solid var(--line); } .flow { grid-column: 1 / -1; } .fails { grid-column: 1 / -1; } }
+
+.toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); }
+.toolbar .sep { width: 1px; height: 20px; background: var(--line-2); }
+.toolbar .keys { margin-left: auto; display: flex; gap: 10px; flex-wrap: wrap; }
+
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
+.st { display: grid; grid-template-rows: auto 1fr auto; min-width: 0; }
+.st-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.st-badge { font-family: var(--f-mono); font-weight: 600; font-size: 12px; background: var(--ink); color: var(--surface); border-radius: 4px; padding: 1px 6px; }
+.st-head h2 { font-size: 16px; margin-right: auto; }
+.st-head select { max-width: 230px; min-width: 0; padding: 3px 6px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--surface); font-size: 12.5px; }
+.recl { display: inline-flex; gap: 4px; align-items: center; font-size: 12.5px; color: var(--ink-2); }
+.st-body { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 10px; padding: 8px 10px; min-height: 0; }
+@media (max-width: 640px) { .st-body { grid-template-columns: 1fr; } }
+.stage { position: relative; aspect-ratio: 4 / 3; background: #0b0c0d; border-radius: 6px; overflow: hidden; align-self: start; }
+.stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.stage.setup canvas { cursor: crosshair; touch-action: none; }
+.nosrc { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 16px; color: #aab0b6; font-size: 13px; }
+.info { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.nowbox { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; border-left: 4px solid var(--line-2); padding: 2px 0 2px 8px; }
+.nowbox.incycle { border-left-color: var(--accent); }
+.nowbox.over { border-left-color: var(--warn); }
+.nowbox .cur { font-weight: 600; font-size: 14.5px; line-height: 1.25; }
+.nowbox .big { font-size: 26px; font-weight: 600; line-height: 1; white-space: nowrap; }
+.kv { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px 8px; font-size: 12.5px; }
+.kv span { display: block; font-family: var(--f-ui); font-size: 10.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.kv b { font-weight: 600; white-space: nowrap; }
+.kv b.over { color: var(--warn-ink); }
+.qa { font-size: 12.5px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.check { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.check li { display: grid; grid-template-columns: 16px minmax(0, 1fr) 52px; gap: 6px; align-items: center; padding: 3px 4px; border-bottom: 1px solid var(--line); font-size: 12.5px; border-left: 3px solid transparent; }
+.check li .ic { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--line-2); }
+.check li.now { background: var(--accent-wash); border-left-color: var(--accent); font-weight: 600; }
+.check li.now .ic { border-color: var(--accent); background: var(--accent); }
+.check li.done .ic { border-color: var(--good); background: var(--good); }
+.check li.off, .check li.wait { color: var(--muted); }
+.check li.off .ic { border-style: dashed; }
+.check li.wait .ic { border-color: var(--warn); }
+.check li small { display: block; font-weight: 400; font-size: 11px; color: var(--muted); line-height: 1.15; }
+.check li.wait small { color: var(--warn-ink); }
+.check .num { text-align: right; font-size: 12px; color: var(--ink-2); }
+.check .tag { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--accent-2); }
+.check .rep { font-family: var(--f-mono); font-size: 11px; color: var(--ink-2); }
+.st-foot { display: flex; gap: 8px; align-items: center; padding: 7px 10px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.st-foot .meta { margin-left: auto; font-size: 12px; color: var(--ink-2); }
+.st-foot .meta .recd { color: var(--crit-ink); font-weight: 600; }
+.reasons { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 8px 10px; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--crit) 6%, var(--surface)); font-size: 13px; }
+.reasons .btn { font-size: 12.5px; }
+.setup-panel { display: grid; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--line); background: var(--surface-2); font-size: 12.5px; }
+.zbtns, .calrow { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.zsw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.stmsg { font-size: 12px; color: var(--crit-ink); }
+
+.sessions table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.sessions th { text-align: left; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+.sessions td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.sessions td a { color: var(--accent-2); margin-right: 8px; white-space: nowrap; }
+.sessions .tbl { max-height: 320px; overflow: auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Wire line</h1>
+      <p class="note" id="hdrNote">Four stations, one overhead camera each. Records cycle and substep times, QA results and every camera's video.</p>
+    </div>
+    <div class="sess" id="sessBox">
+      <span class="live" id="sessLive" hidden><span class="dot rec"></span><span id="sessTitle"></span><span class="mono" id="sessClock">0:00</span></span>
+      <span class="muted mono" id="sessInfo"></span>
+      <button class="btn primary" id="btnStart" type="button">Start session</button>
+      <button class="btn" id="btnStop" type="button" hidden>Stop session</button>
+      <button class="btn" id="btnSessions" type="button">Sessions and exports</button>
+    </div>
+  </header>
+
+  <div id="banners"></div>
+
+  <form class="panel pad form" id="startForm" hidden autocomplete="off">
+    <label>Title<input id="fTitle" maxlength="120" placeholder="Dry run 1"></label>
+    <label>Crew / training group<input id="fCrew" maxlength="80" placeholder="Group B"></label>
+    <label>Shift<input id="fShift" maxlength="40" placeholder="Morning"></label>
+    <label>Notes<textarea id="fNotes" maxlength="2000" placeholder="What is different about this run"></textarea></label>
+    <div class="acts"><button class="btn primary" type="submit">Start recording</button><button class="btn" id="btnCancelStart" type="button">Cancel</button>
+      <span class="muted" id="startNote">Counts start from zero. Stations with Rec on record their video.</span></div>
+  </form>
+
+  <section class="panel pad sessions" id="sessionsPanel" hidden aria-label="Sessions">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span class="eyebrow">Sessions</span><button class="btn sm" id="btnRefresh" type="button">Refresh</button></div>
+    <div class="tbl" id="sessTbl"><div class="muted">Loading...</div></div>
+  </section>
+
+  <section class="panel summary" id="summary" aria-label="Line summary">
+    <div class="sum-tile"><div class="eyebrow">Units done</div><div class="v" id="sUnits">0</div><div class="s" id="sUnitsS">tested at QA</div></div>
+    <div class="sum-tile"><div class="eyebrow">Units per hour</div><div class="v" id="sUph">--</div><div class="s" id="sUphS">since start</div></div>
+    <div class="sum-tile"><div class="eyebrow">First-pass yield</div><div class="v" id="sFpy">--</div><div class="s" id="sFpyS">pass / tested</div></div>
+    <div class="sum-tile"><div class="eyebrow">Takt</div><div class="v" id="sTakt">--</div><div class="s" id="sTaktS">not set</div></div>
+    <div class="flow" id="sFlow"></div>
+    <div class="fails" id="sFails"></div>
+  </section>
+
+  <div class="toolbar">
+    <button class="btn sm" id="btnModel" type="button">Model: off</button>
+    <button class="btn sm" id="btnHands" type="button">Hands: off</button>
+    <span class="muted" id="detNote"></span>
+    <span class="sep"></span>
+    <button class="btn sm" id="btnCams" type="button">Find cameras</button>
+    <span class="sep"></span>
+    <span>Count</span><span class="seg" id="basisSeg"><button type="button" data-b="auto">Auto</button><button type="button" data-b="detected">Detected</button><button type="button" data-b="manual">Manual</button></span>
+    <button class="btn sm" id="btnReset" type="button">Reset counts</button>
+    <span class="keys"><span><kbd>1</kbd>-<kbd id="kLast">4</kbd> cycle done</span><span><kbd>P</kbd> pass</span><span><kbd>F</kbd> fail</span><span><kbd>Esc</kbd> close</span></span>
+  </div>
+
+  <div class="grid" id="grid"></div>
+</div>
+
+<script src="/line-engine.js"></script>
+<script src="/live-detect.js"></script>
+<script>
+(() => {
+  'use strict';
+  const LE = window.LineEngine, LD = window.LiveDetect;
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const now = () => Date.now();
+  const fmtS = v => (v == null || !isFinite(v) ? '--' : v.toFixed(1) + ' s');
+  const fmtClock = ms => { const s = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s % 60).padStart(2, '0'); };
+  const fmtMB = b => (b / 1048576).toFixed(1) + ' MB';
+  const store = {
+    get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage blocked */ } }
+  };
+  const ZONE_COLORS = ['#2a78d6', '#1baf7a', '#eb6834', '#b05bd6', '#eda100', '#e0457b'];
+  const PROC_PIXELS = 160 * 120;     // zone signals run on a frame of about 160x120
+  const SIGNAL_MS = 125;             // about 8 Hz per station
+  const GPU = /[?&]gpu\b/.test(location.search);
+  const MIN_BOX = 0.25;
+
+  const G = {
+    config: null, setup: {}, events: [], queue: [], session: null, lastSession: null, basis: store.get('wire-line:basis') || 'auto',
+    modelOn: false, handsOn: false, cameras: [], clips: [], camAllowed: false, failPick: null, sending: false, summary: null, sumAt: 0, evSeen: -1,
+    qaId: null, saveTimer: null, starting: false, stopping: false
+  };
+  const Y = { status: 'off', backend: '', size: 640, session: null, ort: null, inName: '', outName: '', canvas: null, ctx: null, buf: null, classes: [], error: '', loading: null };
+  const H = { status: 'off', lm: null, canvas: null, ctx: null, error: '', loading: null };
+  const ST = {};
+  let LIST = [];
+
+  // ---------- events ----------
+  function emit(e) {
+    const st = e.station && ST[e.station];
+    if (st && st.rec && st.rec.startedAt && e.t >= st.rec.startedAt) { e.videoT = Math.round((e.t - st.rec.startedAt) / 10) / 100; e.videoFile = st.rec.file; }
+    if (G.session) { e.ts = Math.round(e.t - G.session.startedAtMs) / 1000; G.queue.push(e); }
+    G.events.push(e);
+  }
+  async function sendEvents() {
+    if (!G.session || G.sending || !G.queue.length) return;
+    G.sending = true;
+    const batch = G.queue.slice(0, 2000);
+    try {
+      const r = await fetch('/api/sessions/' + G.session.id + '/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ events: batch }) });
+      if (r.ok) G.queue.splice(0, batch.length);
+      else if (r.status === 400) { console.error('Events refused', await r.text()); G.queue.splice(0, batch.length); }
+    } catch (e) { /* offline: keep them and retry */ } finally { G.sending = false; }
+  }
+  setInterval(sendEvents, 2000);
+  // Best effort when the tab closes: hand the last events to the browser to send.
+  window.addEventListener('pagehide', () => {
+    if (G.session && G.queue.length && navigator.sendBeacon) navigator.sendBeacon('/api/sessions/' + G.session.id + '/events', new Blob([JSON.stringify({ events: G.queue })], { type: 'application/json' }));
+  });
+
+  // ---------- setup (zones and calibration), saved on the server ----------
+  function normSetup(st, x) {
+    const out = { zones: {}, calib: { motion: {}, bright: {} }, updatedAt: x && x.updatedAt || null };
+    const ids = st.zones.map(z => z.id);
+    if (x && x.zones) for (const k of Object.keys(x.zones)) if (ids.includes(k)) out.zones[k] = x.zones[k];
+    if (x && x.calib) {
+      for (const k of Object.keys(x.calib.motion || {})) if (ids.includes(k)) out.calib.motion[k] = x.calib.motion[k];
+      for (const k of Object.keys(x.calib.bright || {})) if (ids.includes(k)) out.calib.bright[k] = x.calib.bright[k];
+    }
+    return out;
+  }
+  function saveSetup(st) {
+    st.setup.updatedAt = new Date().toISOString();
+    G.setup[st.id] = st.setup;
+    clearTimeout(G.saveTimer);
+    G.saveTimer = setTimeout(async () => {
+      const body = {};
+      for (const s of LIST) body[s.id] = s.setup;
+      try {
+        const r = await fetch('/api/line/setup', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!r.ok) banner('setup', 'Setup was not saved: ' + ((await r.json()).message || r.status), 'crit');
+        else banner('setup', '');
+      } catch (e) { banner('setup', 'Setup was not saved: the local server is not answering.', 'crit'); }
+    }, 400);
+  }
+  // The zone(s) the bulb test reads, so the QA tile can offer Bulb off / Bulb on.
+  function bulbZones(cfg) {
+    if (!cfg.qa || !cfg.qa.lightSubstep) return [];
+    const sub = cfg.substeps.find(s => s.id === cfg.qa.lightSubstep);
+    return sub ? LE.members(sub.zones).filter(m => m.signal === 'bright').map(m => m.zone) : [];
+  }
+
+  // ---------- banners ----------
+  const banners = {};
+  function banner(key, html, kind) {
+    if (!html) delete banners[key]; else banners[key] = { html, kind: kind || '' };
+    $('banners').innerHTML = Object.values(banners).map(b => `<div class="banner ${b.kind}">${b.html}</div>`).join('');
+    $('banners').style.display = Object.keys(banners).length ? 'grid' : 'none';
+    $('banners').style.gap = '6px';
+  }
+
+  // ---------- stations ----------
+  function makeStation(cfg, idx) {
+    const isQa = !!cfg.qa, bulbs = bulbZones(cfg);
+    const st = {
+      cfg, id: cfg.id, idx, isQa, bulbs,
+      eng: LE.createStation(cfg, { holdFrames: G.config.holdFrames, defaults: G.config.defaults, qaGraceSec: G.config.qaGraceSec }),
+      source: { type: 'none', key: 'none', label: 'None (manual only)' }, stream: null, recOn: false, rec: null, recBytes: 0,
+      setup: normSetup(cfg, G.setup[cfg.id]), prevGray: null, sig: null, lastProc: 0, lastCT: 0, fps: 0, fpsN: 0, fpsT: now(), fresh: false,
+      dets: null, detsPrev: null, detT: 0, hands: null, handsT: 0, modelN: 0, modelFps: 0, modelT: now(),
+      manualN: 0, setupOn: false, drawZone: null, drag: null, calib: null, err: '', clearArm: 0, lastCheck: '', token: 0
+    };
+    const el = document.createElement('section');
+    el.className = 'panel st'; el.dataset.st = cfg.id;
+    el.innerHTML = `
+      <div class="st-head">
+        <span class="st-badge">${esc(cfg.id.toUpperCase())}</span><h2>${esc(cfg.label)}</h2>
+        <select class="src" aria-label="Video source for ${esc(cfg.label)}"></select>
+        <label class="recl" title="Record this station's video while a session runs"><input type="checkbox" class="rec"> Rec</label>
+        <button class="btn sm setupb" type="button">Setup</button>
+      </div>
+      <div class="st-body">
+        <div class="stage"><video muted playsinline></video><canvas></canvas><div class="nosrc">No video. Pick a camera or a clip above, or use the buttons below.</div></div>
+        <div class="info">
+          <div class="nowbox"><div><div class="eyebrow nowlab">Now</div><div class="cur">Waiting for the first step</div></div><div class="big mono"></div></div>
+          <div class="kv mono"></div>
+          <div class="qa"${isQa ? '' : ' hidden'}></div>
+          <ol class="check"></ol>
+        </div>
+      </div>
+      <div class="st-foot">
+        <button class="btn primary cyc" type="button">Cycle done <kbd>${idx + 1}</kbd></button>
+        ${isQa ? '<button class="btn pass passb" type="button">Pass <kbd>P</kbd></button><button class="btn fail failb" type="button">Fail <kbd>F</kbd></button>' : ''}
+        <span class="stmsg"></span>
+        <span class="meta mono"></span>
+      </div>
+      ${isQa ? '<div class="reasons" hidden></div>' : ''}
+      <div class="setup-panel" hidden>
+        <div class="zbtns"></div>
+        <div class="calrow"><button class="btn sm calb" type="button">Calibrate empty</button>${bulbs.length ? '<button class="btn sm boff" type="button">Bulb off</button><button class="btn sm bon" type="button">Bulb on</button>' : ''}<button class="btn sm clr" type="button">Clear zones</button><span class="calst muted"></span></div>
+        <div class="muted">Pick a zone, then drag a box on the video. Calibrate with the work area empty${bulbs.length ? ' and the bulb off; then light the bulb and press Bulb on' : ''}.</div>
+      </div>`;
+    const q = s => el.querySelector(s);
+    Object.assign(st, {
+      el, video: q('video'), canvas: q('canvas'), stage: q('.stage'), nosrc: q('.nosrc'), sel: q('.src'), recBox: q('.rec'), setupBtn: q('.setupb'),
+      elNow: q('.nowbox'), elNowLab: q('.nowlab'), elCur: q('.cur'), elBig: q('.big'), elKv: q('.kv'), elQa: q('.qa'), elCheck: q('.check'),
+      elMeta: q('.meta'), elMsg: q('.stmsg'), setupPanel: q('.setup-panel'), zbtns: q('.zbtns'), calst: q('.calst'), reasons: q('.reasons')
+    });
+    st.ctx = st.canvas.getContext('2d');
+    st.proc = document.createElement('canvas');
+    st.pctx = st.proc.getContext('2d', { willReadFrequently: true });
+    st.video.loop = true;
+    // Blur after picking, so the number and letter hotkeys reach the page instead of the list.
+    st.sel.onchange = () => { st.sel.blur(); setSource(st, st.sel.value); };
+    st.recBox.onchange = () => setRec(st, st.recBox.checked);
+    st.setupBtn.onclick = () => toggleSetup(st);
+    q('.cyc').onclick = () => manualCycle(st);
+    if (isQa) { q('.passb').onclick = () => manualPass(); q('.failb').onclick = () => openFail(); }
+    q('.calb').onclick = () => calibrate(st, 'empty');
+    if (bulbs.length) { q('.boff').onclick = () => calibrate(st, 'off'); q('.bon').onclick = () => calibrate(st, 'on'); }
+    q('.clr').onclick = () => clearZones(st);
+    bindDrawing(st);
+    if (window.ResizeObserver) new ResizeObserver(() => { sizeCanvas(st); drawOverlay(st); }).observe(st.stage);
+    st.video.addEventListener('loadedmetadata', () => { sizeCanvas(st); drawOverlay(st); });
+    return st;
+  }
+
+  // ---------- sources ----------
+  function sourceOptions(st) {
+    const used = {};
+    for (const s of LIST) if (s !== st && s.source.type === 'camera') used[s.source.key] = s.id.toUpperCase();
+    let html = '<option value="none">None (manual only)</option>';
+    if (G.cameras.length) html += '<optgroup label="Cameras">' + G.cameras.map(c => `<option value="${esc(c.key)}"${used[c.key] ? ' disabled' : ''}>${esc(c.label)}${used[c.key] ? ' (on ' + used[c.key] + ')' : ''}</option>`).join('') + '</optgroup>';
+    else html += '<optgroup label="Cameras"><option disabled>Press Find cameras</option></optgroup>';
+    const a = G.clips.filter(c => c.group === 'assets'), s = G.clips.filter(c => c.group === 'sessions');
+    if (a.length) html += '<optgroup label="Recorded clips">' + a.map(c => `<option value="clip:${esc(c.key)}">${esc(c.label)}</option>`).join('') + '</optgroup>';
+    if (s.length) html += '<optgroup label="Session recordings">' + s.map(c => `<option value="clip:${esc(c.key)}">${esc(c.label)}</option>`).join('') + '</optgroup>';
+    return html;
+  }
+  function rebuildPickers() {
+    for (const st of LIST) {
+      const html = sourceOptions(st);
+      if (html !== st.selHtml) { st.sel.innerHTML = html; st.selHtml = html; }
+      st.sel.value = st.source.key;
+      if (st.sel.value !== st.source.key) st.sel.value = 'none';
+    }
+  }
+  async function loadClips() {
+    try { G.clips = (await (await fetch('/api/line/clips', { cache: 'no-store' })).json()).clips || []; } catch (e) { G.clips = []; }
+    rebuildPickers();
+  }
+  async function findCameras(ask) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) { banner('cam', 'This browser gives no camera access here. Clips and the buttons still work.'); return; }
+    if (ask) {
+      try { const tmp = await navigator.mediaDevices.getUserMedia({ video: true }); tmp.getTracks().forEach(t => t.stop()); G.camAllowed = true; banner('cam', ''); }
+      catch (e) { banner('cam', 'Camera permission was not given (' + esc(e && e.name || 'error') + '). Clips and the buttons still work.'); }
+    }
+    const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+    G.cameras = devs.map((d, i) => ({ key: 'cam:' + (d.label || d.deviceId || String(i)), deviceId: d.deviceId, label: d.label || 'Camera ' + (i + 1) }));
+    if (devs.some(d => d.label)) G.camAllowed = true;
+    $('btnCams').textContent = G.cameras.length ? 'Cameras: ' + G.cameras.length + ' (refresh)' : 'Find cameras';
+    rebuildPickers();
+  }
+
+  async function stopSource(st) {
+    st.token++;
+    if (st.rec) await stopRecording(st);
+    if (st.stream) { st.stream.getTracks().forEach(t => t.stop()); st.stream = null; }
+    const v = st.video;
+    v.pause(); v.removeAttribute('src'); v.srcObject = null; try { v.load(); } catch (e) { /* ignore */ }
+  }
+  async function setSource(st, key, quiet) {
+    key = key || 'none';
+    if (key.startsWith('cam:') && LIST.some(s => s !== st && s.source.key === key)) { st.sel.value = st.source.key; return; }
+    await stopSource(st);
+    const token = st.token, t = now();
+    let src = { type: 'none', key: 'none', label: 'None (manual only)' };
+    if (key.startsWith('cam:')) { const c = G.cameras.find(x => x.key === key); if (c) src = { type: 'camera', key, label: c.label, deviceId: c.deviceId }; }
+    else if (key.startsWith('clip:')) { const c = G.clips.find(x => 'clip:' + x.key === key); if (c) src = { type: 'clip', key, label: c.label, url: c.url }; }
+    st.source = src; st.err = '';
+    st.prevGray = null; st.sig = null; st.dets = st.detsPrev = null; st.hands = null; st.lastCT = 0;
+    st.eng.abandon(t).forEach(emit);
+    emit({ type: 'source_change', station: st.id, t, input: src.type, note: src.label });
+    if (!quiet) store.set('wire-line:source:' + st.id, src.key);
+    st.recOn = src.type === 'camera' ? (store.get('wire-line:rec:' + st.id) !== false) : src.type === 'clip' ? store.get('wire-line:recclip:' + st.id) === true : false;
+    st.recBox.checked = st.recOn; st.recBox.disabled = src.type === 'none';
+    const v = st.video;
+    try {
+      if (src.type === 'camera') {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: src.deviceId }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 15 } }, audio: false });
+        if (token !== st.token) { stream.getTracks().forEach(x => x.stop()); return; }
+        st.stream = stream; v.srcObject = stream;
+        await v.play().catch(() => {});
+      } else if (src.type === 'clip') {
+        v.src = src.url; v.loop = true; v.defaultPlaybackRate = v.playbackRate = 1;
+        await v.play().catch(() => {});
+      }
+    } catch (e) {
+      st.err = 'Could not open ' + src.label + ' (' + (e && e.name || 'error') + '). ' + (e && e.name === 'NotReadableError' ? 'Another app or USB bandwidth may be the problem: try another port.' : 'Pick another source.');
+      st.source = { type: 'none', key: 'none', label: 'None (manual only)' };
+      emit({ type: 'source_change', station: st.id, t: now(), input: 'none', note: 'failed: ' + src.label });
+    }
+    st.nosrc.hidden = st.source.type !== 'none';
+    rebuildPickers();
+    if (G.session && st.recOn && st.source.type !== 'none') startRecording(st);
+    sizeCanvas(st); drawOverlay(st);
+  }
+
+  // ---------- recording (MediaRecorder per station, chunks uploaded in order) ----------
+  function pickMime() {
+    if (!window.MediaRecorder) return null;
+    for (const m of ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp8', 'video/webm']) { try { if (MediaRecorder.isTypeSupported(m)) return m; } catch (e) { /* next */ } }
+    return null;
+  }
+  function setRec(st, on) {
+    st.recOn = !!on;
+    store.set((st.source.type === 'clip' ? 'wire-line:recclip:' : 'wire-line:rec:') + st.id, st.recOn);
+    if (!G.session) return;
+    if (st.recOn && !st.rec && st.source.type !== 'none') startRecording(st);
+    else if (!st.recOn && st.rec) stopRecording(st);
+  }
+  function startRecording(st) {
+    if (!G.session || st.rec || st.source.type === 'none') return;
+    const mime = pickMime();
+    if (!mime) { st.err = 'This browser cannot record video.'; return; }
+    let tracks = [];
+    try {
+      if (st.source.type === 'camera' && st.stream) tracks = st.stream.getVideoTracks();
+      else if (st.source.type === 'clip' && st.video.captureStream) tracks = st.video.captureStream().getVideoTracks();
+    } catch (e) { tracks = []; }
+    if (!tracks.length) { st.err = 'No video track to record yet.'; return; }
+    const part = (G.session.parts[st.id] || 0) + 1;
+    G.session.parts[st.id] = part;
+    const base = mime.split(';')[0], ext = base === 'video/mp4' ? '.mp4' : '.webm';
+    let mr;
+    try { mr = new MediaRecorder(new MediaStream(tracks), { mimeType: mime, videoBitsPerSecond: 600000 }); }
+    catch (e) { st.err = 'Recorder failed to start (' + (e && e.name || 'error') + ').'; return; }
+    const rec = { mr, st: st.id, part, base, file: st.id + (part > 1 ? '-' + part : '') + ext, queue: [], seq: 0, bytes: 0, busy: false, startedAt: 0, sid: G.session.id, dropped: 0, stopped: null };
+    mr.ondataavailable = e => { if (e.data && e.data.size) { rec.queue.push(e.data); if (rec.queue.length > 60) { rec.queue.shift(); rec.seq++; rec.dropped++; } pumpChunks(rec); } };
+    rec.stopped = new Promise(res => { mr.onstop = res; mr.onerror = res; });
+    rec.startedAt = now();
+    mr.start(2000);
+    st.rec = rec;
+  }
+  async function pumpChunks(rec) {
+    if (rec.busy) return;
+    rec.busy = true;
+    let tries = 0;
+    try {
+      while (rec.queue.length) {
+        const blob = rec.queue[0];
+        const url = `/api/sessions/${rec.sid}/video/${rec.st}?seq=${rec.seq}&part=${rec.part}` + (rec.seq === 0 ? '&t0=' + rec.startedAt : '');
+        let ok = false;
+        try {
+          const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': rec.base }, body: blob });
+          if (r.ok) { rec.bytes += blob.size; ok = true; }
+          else if (r.status === 409) ok = true;                                          // the server already has it
+          else if (r.status >= 400 && r.status < 500) { ok = true; rec.dropped++; console.error('Video chunk refused', r.status, await r.text()); }
+        } catch (e) { ok = false; }
+        if (ok) { rec.queue.shift(); rec.seq++; tries = 0; } else { if (++tries > 30) { rec.queue.shift(); rec.seq++; rec.dropped++; tries = 0; } await sleep(1000); }
+      }
+    } finally { rec.busy = false; }
+  }
+  async function stopRecording(st) {
+    const rec = st.rec;
+    if (!rec) return;
+    st.rec = null; st.recBytes = 0;
+    try { if (rec.mr.state !== 'inactive') rec.mr.stop(); } catch (e) { /* stopped */ }
+    await Promise.race([rec.stopped, sleep(3000)]);
+    const until = now() + 15000;
+    while ((rec.queue.length || rec.busy) && now() < until) { pumpChunks(rec); await sleep(150); }
+  }
+
+  // ---------- frame loop: zone signals at about 8 Hz per station, one station per tick ----------
+  function procSize(vw, vh) { const s = Math.sqrt(PROC_PIXELS / (vw * vh)); return { w: Math.max(16, Math.round(vw * s)), h: Math.max(12, Math.round(vh * s)) }; }
+  function zonesOf(st) { return st.setup.zones; }
+  function processStation(st) {
+    const v = st.video;
+    st.lastProc = now();
+    if (st.source.type === 'none' || v.readyState < 2 || !v.videoWidth || v.paused) return;
+    const { w, h } = procSize(v.videoWidth, v.videoHeight);
+    if (st.proc.width !== w || st.proc.height !== h) { st.proc.width = w; st.proc.height = h; st.prevGray = null; }
+    if (st.source.type === 'clip' && v.currentTime + 0.3 < st.lastCT) st.prevGray = null;    // the clip looped: no motion from the jump
+    st.lastCT = v.currentTime;
+    st.pctx.drawImage(v, 0, 0, w, h);
+    const img = st.pctx.getImageData(0, 0, w, h);
+    const zones = zonesOf(st);
+    const r = LE.zoneSignals(img.data, w, h, st.prevGray, zones, st.setup.calib);
+    st.prevGray = r.gray;
+    if (st.calib) st.calib.samples.push(r.signals);
+    const t = now();
+    let cls = null, hp = null;
+    if (G.modelOn && Y.status === 'ready') {
+      const fresh = st.dets && t - st.detT < 3000;
+      cls = LE.steadyClasses(fresh && st.detsPrev ? LE.classSignals(st.detsPrev, zones, Y.classes) : null, LE.classSignals(fresh ? st.dets : [], zones, Y.classes));
+    }
+    if (G.handsOn && H.status === 'ready') hp = LE.handPresence(st.hands && t - st.handsT < 2000 ? st.hands : [], zones);
+    st.sig = LE.mergeSignals(r.signals, cls, hp);
+    st.eng.update(st.sig, t).forEach(emit);
+    st.fpsN++;
+    if (t - st.fpsT >= 1000) { st.fps = st.fpsN * 1000 / (t - st.fpsT); st.fpsN = 0; st.fpsT = t; }
+    st.fresh = true;
+  }
+  setInterval(() => {
+    // Pick the station that waited longest; one per tick keeps each tick short.
+    const t = now();
+    let pick = null;
+    for (const st of LIST) if (st.source.type !== 'none' && t - st.lastProc >= SIGNAL_MS && (!pick || st.lastProc < pick.lastProc)) pick = st;
+    if (pick) { try { processStation(pick); } catch (e) { console.error(e); } if (pick.fresh) { drawOverlay(pick); pick.fresh = false; } }
+    for (const st of LIST) if (st.source.type === 'none' || st.video.paused) st.eng.tick(t).forEach(emit);
+  }, 30);
+
+  // ---------- model and hands: one shared session each, round-robin over stations, never overlapping ----------
+  async function loadModel() {
+    if (Y.loading) return Y.loading;
+    const m = G.config.model;
+    if (!m) return null;
+    Y.status = 'loading'; Y.error = '';
+    Y.loading = (async () => {
+      try {
+        const mod = await import(GPU ? '/vendor/ort/ort.webgpu.min.mjs' : '/vendor/ort/ort.wasm.min.mjs');
+        const ort = mod.InferenceSession ? mod : mod.default;
+        ort.env.wasm.wasmPaths = '/vendor/ort/';
+        const threads = self.crossOriginIsolated ? Math.max(1, Math.min(2, navigator.hardwareConcurrency || 2)) : 1;
+        ort.env.wasm.numThreads = threads;
+        const res = await fetch(m.file, { cache: 'reload' });
+        if (!res.ok) throw new Error('model file ' + m.file + ' not found (' + res.status + ')');
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        let session = null, backend = '';
+        if (GPU && navigator.gpu) {
+          try { if (await navigator.gpu.requestAdapter()) { session = await ort.InferenceSession.create(bytes, { executionProviders: ['webgpu'] }); backend = 'WebGPU'; } }
+          catch (e) { console.warn('WebGPU unavailable, using WASM', e); session = null; }
+        }
+        if (!session) { session = await ort.InferenceSession.create(bytes, { executionProviders: ['wasm'] }); backend = 'WASM x' + threads; }
+        Y.ort = ort; Y.session = session; Y.backend = backend; Y.classes = (m.classes || []).slice();
+        Y.inName = session.inputNames[0]; Y.outName = session.outputNames[0];
+        Y.size = m.imgsz || 640;
+        try { const md = session.inputMetadata; const sh = Array.isArray(md) ? md[0].shape : md[Y.inName].shape; if (sh && sh[2] > 0) Y.size = sh[2]; } catch (e) { /* keep imgsz */ }
+        Y.canvas = document.createElement('canvas'); Y.canvas.width = Y.canvas.height = Y.size;
+        Y.ctx = Y.canvas.getContext('2d', { willReadFrequently: true });
+        Y.buf = new Float32Array(3 * Y.size * Y.size);
+        await session.run({ [Y.inName]: new ort.Tensor('float32', Y.buf, [1, 3, Y.size, Y.size]) });
+        Y.status = 'ready';
+      } catch (e) {
+        console.error('Model load failed', e);
+        Y.status = 'failed'; Y.error = String(e && e.message || e); Y.loading = null;
+      }
+    })();
+    return Y.loading;
+  }
+  async function infer(v) {
+    const S = Y.size, sw = v.videoWidth, sh = v.videoHeight, lb = LD.letterbox(sw, sh, S), ctx = Y.ctx;
+    ctx.fillStyle = 'rgb(114,114,114)'; ctx.fillRect(0, 0, S, S);
+    ctx.drawImage(v, 0, 0, sw, sh, lb.padX, lb.padY, lb.nw, lb.nh);
+    LD.fillTensor(ctx.getImageData(0, 0, S, S).data, S, Y.buf);
+    const out = await Y.session.run({ [Y.inName]: new Y.ort.Tensor('float32', Y.buf, [1, 3, S, S]) });
+    const o = out[Y.outName];
+    return LD.decodeOutput(o.data, o.dims, lb, sw, sh, MIN_BOX, 0.7, Y.classes);
+  }
+  async function loadHands() {
+    if (H.loading) return H.loading;
+    H.status = 'loading'; H.error = '';
+    H.loading = (async () => {
+      try {
+        const mp = await import('/vendor/mediapipe/vision_bundle.mjs');
+        const files = await mp.FilesetResolver.forVisionTasks('/vendor/mediapipe/wasm');
+        // IMAGE mode, CPU delegate: one landmarker shared by all stations, frames from different cameras in turn.
+        H.lm = await mp.HandLandmarker.createFromOptions(files, {
+          baseOptions: { modelAssetPath: '/models/hand_landmarker.task', delegate: 'CPU' },
+          runningMode: 'IMAGE', numHands: 2, minHandDetectionConfidence: 0.4, minHandPresenceConfidence: 0.4
+        });
+        H.canvas = document.createElement('canvas'); H.ctx = H.canvas.getContext('2d');
+        H.status = 'ready';
+      } catch (e) { console.error('Hand model failed', e); H.status = 'failed'; H.error = String(e && e.message || e); H.loading = null; }
+    })();
+    return H.loading;
+  }
+  function detectHands(v) {
+    const w = 256, h = Math.max(1, Math.round(256 * v.videoHeight / v.videoWidth));
+    if (H.canvas.width !== w || H.canvas.height !== h) { H.canvas.width = w; H.canvas.height = h; }
+    H.ctx.drawImage(v, 0, 0, w, h);
+    const r = H.lm.detect(H.canvas);
+    return (r && r.landmarks) || [];
+  }
+  let detecting = false;
+  async function detectLoop() {
+    if (detecting) return;
+    detecting = true;
+    let k = 0;
+    try {
+      while (G.modelOn || G.handsOn) {
+        const live = LIST.filter(s => s.source.type !== 'none' && s.video.readyState >= 2 && s.video.videoWidth && !s.video.paused);
+        if (!live.length) { await sleep(250); continue; }
+        const st = live[k++ % live.length];
+        if (G.modelOn && Y.status === 'ready') {
+          try {
+            const d = await infer(st.video);
+            st.detsPrev = st.dets; st.dets = d; st.detT = now(); st.modelN++;
+          } catch (e) { console.error(e); }
+          const t = now();
+          if (t - st.modelT >= 2000) { st.modelFps = st.modelN * 1000 / (t - st.modelT); st.modelN = 0; st.modelT = t; }
+        }
+        if (G.handsOn && H.status === 'ready') { try { st.hands = detectHands(st.video); st.handsT = now(); } catch (e) { console.warn(e); } }
+        await sleep(15);
+      }
+    } finally { detecting = false; }
+  }
+  async function setModel(on) {
+    if (on && !G.config.model) return;
+    G.modelOn = !!on;
+    if (G.modelOn) {
+      renderToolbar();
+      await loadModel();
+      if (Y.status !== 'ready') { G.modelOn = false; banner('model', 'The model could not load: ' + esc(Y.error), 'crit'); }
+      else banner('model', '');
+    }
+    for (const st of LIST) { st.eng.setModel(G.modelOn ? Y.classes : null); if (!G.modelOn) { st.dets = st.detsPrev = null; } }
+    renderToolbar();
+    if (G.modelOn || G.handsOn) detectLoop();
+  }
+  async function setHands(on) {
+    G.handsOn = !!on;
+    if (G.handsOn) {
+      renderToolbar();
+      await loadHands();
+      if (H.status !== 'ready') { G.handsOn = false; banner('hands', 'The hand model could not load: ' + esc(H.error), 'crit'); } else banner('hands', '');
+    }
+    if (!G.handsOn) for (const st of LIST) st.hands = null;
+    renderToolbar();
+    if (G.modelOn || G.handsOn) detectLoop();
+  }
+
+  // ---------- setup mode: draw zones, calibrate ----------
+  function toggleSetup(st) {
+    st.setupOn = !st.setupOn;
+    st.setupPanel.hidden = !st.setupOn;
+    st.setupBtn.classList.toggle('on', st.setupOn);
+    st.stage.classList.toggle('setup', st.setupOn);
+    if (st.setupOn && !st.drawZone) st.drawZone = (st.cfg.zones.find(z => !st.setup.zones[z.id]) || st.cfg.zones[0]).id;
+    renderSetup(st); drawOverlay(st);
+  }
+  function renderSetup(st) {
+    st.zbtns.innerHTML = '<span class="muted">Draw:</span>' + st.cfg.zones.map((z, i) => `<button type="button" class="btn sm${st.drawZone === z.id ? ' on' : ''}" data-z="${esc(z.id)}"><span class="zsw" style="background:${ZONE_COLORS[i % ZONE_COLORS.length]}"></span>${esc(z.label)}${st.setup.zones[z.id] ? ' ✓' : ''}</button>`).join('');
+    st.zbtns.querySelectorAll('button').forEach(b => { b.onclick = () => { st.drawZone = b.dataset.z; renderSetup(st); }; });
+    const c = st.setup.calib, nm = Object.keys(c.motion || {}).length;
+    const bulb = st.bulbs.map(z => c.bright[z] || {}).find(Boolean) || {};
+    let txt = nm ? 'Calibrated' + (st.setup.updatedAt ? ' ' + new Date(st.setup.updatedAt).toLocaleTimeString() : '') : 'Not calibrated';
+    if (st.bulbs.length) txt += ' | bulb off ' + (bulb.off != null ? Math.round(bulb.off) : '--') + ', on ' + (bulb.on != null ? Math.round(bulb.on) : '--');
+    if (st.calib) txt = 'Calibrating... keep still';
+    st.calst.textContent = txt;
+  }
+  function contentRect(st) {
+    const c = st.canvas, v = st.video, W = c.width, H2 = c.height, vw = v.videoWidth, vh = v.videoHeight;
+    if (!vw || !vh) return { x: 0, y: 0, w: W, h: H2 };
+    const s = Math.min(W / vw, H2 / vh), w = vw * s, h = vh * s;
+    return { x: (W - w) / 2, y: (H2 - h) / 2, w, h };
+  }
+  function toNorm(st, ev) {
+    const r = st.canvas.getBoundingClientRect(), d = st.canvas.width / (r.width || 1), cr = contentRect(st);
+    return { x: Math.min(1, Math.max(0, ((ev.clientX - r.left) * d - cr.x) / cr.w)), y: Math.min(1, Math.max(0, ((ev.clientY - r.top) * d - cr.y) / cr.h)) };
+  }
+  function bindDrawing(st) {
+    const c = st.canvas;
+    c.addEventListener('pointerdown', ev => {
+      if (!st.setupOn || !st.drawZone || st.source.type === 'none') return;
+      const p = toNorm(st, ev);
+      st.drag = { zone: st.drawZone, x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+      try { c.setPointerCapture(ev.pointerId); } catch (e) { /* synthetic event */ }
+      ev.preventDefault();
+    });
+    c.addEventListener('pointermove', ev => { if (st.drag) { const p = toNorm(st, ev); st.drag.x1 = p.x; st.drag.y1 = p.y; drawOverlay(st); } });
+    const end = ev => {
+      if (!st.drag) return;
+      const p = toNorm(st, ev), d = st.drag;
+      d.x1 = p.x; d.y1 = p.y;
+      const x = Math.min(d.x0, d.x1), y = Math.min(d.y0, d.y1), w = Math.abs(d.x1 - d.x0), h = Math.abs(d.y1 - d.y0);
+      st.drag = null;
+      if (w > 0.02 && h > 0.02) {
+        st.setup.zones[d.zone] = { x: +x.toFixed(4), y: +y.toFixed(4), w: +w.toFixed(4), h: +h.toFixed(4) };
+        st.prevGray = null;
+        saveSetup(st);
+        const next = st.cfg.zones.find(z => !st.setup.zones[z.id]);
+        if (next) st.drawZone = next.id;
+      }
+      renderSetup(st); drawOverlay(st);
+    };
+    c.addEventListener('pointerup', end);
+    c.addEventListener('pointercancel', () => { st.drag = null; drawOverlay(st); });
+  }
+  function clearZones(st) {
+    // Two clicks, no dialog: the first arms it for 3 seconds.
+    const btn = st.el.querySelector('.clr');
+    if (now() - st.clearArm > 3000) { st.clearArm = now(); btn.textContent = 'Click again to clear'; setTimeout(() => { btn.textContent = 'Clear zones'; }, 3000); return; }
+    st.clearArm = 0; btn.textContent = 'Clear zones';
+    st.setup = { zones: {}, calib: { motion: {}, bright: {} }, updatedAt: null };
+    st.drawZone = st.cfg.zones[0].id;
+    saveSetup(st); renderSetup(st); drawOverlay(st);
+  }
+  async function calibrate(st, kind) {
+    if (st.source.type === 'none' || st.calib) return;
+    if (!Object.keys(st.setup.zones).length) { st.err = 'Draw the zones first, then calibrate.'; return; }
+    st.calib = { kind, samples: [] };
+    renderSetup(st);
+    await sleep(2000);
+    const c = LE.calibrationFrom(st.calib.samples);
+    st.calib = null;
+    const cal = st.setup.calib;
+    if (kind === 'empty') {
+      cal.motion = c.motion;
+      for (const z of Object.keys(c.brightness)) cal.bright[z] = Object.assign({}, cal.bright[z], { off: c.brightness[z] });
+    } else {
+      for (const z of st.bulbs) if (c.brightness[z] != null) cal.bright[z] = Object.assign({}, cal.bright[z], { [kind]: c.brightness[z] });
+    }
+    st.err = '';
+    saveSetup(st); renderSetup(st);
+  }
+
+  // ---------- overlay ----------
+  function sizeCanvas(st) {
+    const r = st.stage.getBoundingClientRect(), d = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.max(2, Math.round(r.width * d)), h = Math.max(2, Math.round(r.height * d));
+    if (st.canvas.width !== w || st.canvas.height !== h) { st.canvas.width = w; st.canvas.height = h; }
+  }
+  function drawOverlay(st) {
+    const ctx = st.ctx, c = st.canvas;
+    ctx.clearRect(0, 0, c.width, c.height);
+    if (st.source.type === 'none') return;
+    const cr = contentRect(st), k = Math.max(0.7, c.width / 520);
+    const zones = Object.assign({}, st.setup.zones);
+    if (st.drag) { const d = st.drag; zones[d.zone] = { x: Math.min(d.x0, d.x1), y: Math.min(d.y0, d.y1), w: Math.abs(d.x1 - d.x0), h: Math.abs(d.y1 - d.y0) }; }
+    const thr = (G.config.defaults && G.config.defaults.activity) || 0.1;
+    ctx.textBaseline = 'top';
+    st.cfg.zones.forEach((z, i) => {
+      const r = zones[z.id];
+      if (!r) return;
+      const col = ZONE_COLORS[i % ZONE_COLORS.length], s = st.sig && st.sig[z.id];
+      const x = cr.x + r.x * cr.w, y = cr.y + r.y * cr.h, w = r.w * cr.w, h = r.h * cr.h;
+      if (s && s.activity >= thr) { ctx.fillStyle = col + '33'; ctx.fillRect(x, y, w, h); }
+      ctx.lineWidth = Math.max(1.5, 2 * k); ctx.strokeStyle = col; ctx.strokeRect(x, y, w, h);
+      const fs = Math.max(10, 11 * k);
+      ctx.font = `600 ${fs}px Saira, sans-serif`;
+      let label = z.label;
+      if (s) label += ' ' + Math.round(s.activity * 100) + (s.bright != null && st.bulbs.includes(z.id) ? ' | light ' + Math.round(s.bright * 100) : '');
+      const tw = ctx.measureText(label).width + 8 * k, th = fs + 4 * k;
+      const ly = y - th >= cr.y ? y - th : y;
+      ctx.fillStyle = 'rgba(15,17,19,.78)'; ctx.fillRect(x, ly, tw, th);
+      ctx.fillStyle = col; ctx.fillRect(x, ly, 3 * k, th);
+      ctx.fillStyle = '#fff'; ctx.fillText(label, x + 5 * k, ly + 2 * k);
+    });
+    if (G.modelOn && st.dets) {
+      ctx.font = `600 ${Math.max(10, 11 * k)}px Saira, sans-serif`;
+      for (const d of st.dets) {
+        if (d.conf < (G.config.defaults.class || 0.4)) continue;
+        const nb = d.nbox, x = cr.x + nb[0] * cr.w, y = cr.y + nb[1] * cr.h;
+        ctx.strokeStyle = '#f0b429'; ctx.lineWidth = Math.max(1.5, 2 * k); ctx.strokeRect(x, y, (nb[2] - nb[0]) * cr.w, (nb[3] - nb[1]) * cr.h);
+        ctx.fillStyle = '#f0b429'; ctx.fillText(d.cls + ' ' + Math.round(d.conf * 100), x + 3, y + 3);
+      }
+    }
+    if (G.handsOn && st.hands) {
+      ctx.fillStyle = 'rgba(240,180,41,.9)';
+      for (const hand of st.hands) for (const p of hand) { ctx.beginPath(); ctx.arc(cr.x + p.x * cr.w, cr.y + p.y * cr.h, Math.max(2, 2 * k), 0, 6.283); ctx.fill(); }
+    }
+    if (st.calib) {
+      ctx.fillStyle = 'rgba(15,17,19,.7)'; ctx.fillRect(cr.x, cr.y, cr.w, 22 * k);
+      ctx.fillStyle = '#fff'; ctx.font = `600 ${Math.max(11, 12 * k)}px Saira, sans-serif`;
+      ctx.fillText(st.calib.kind === 'on' ? 'Recording the lit bulb...' : st.calib.kind === 'off' ? 'Recording the dark bulb...' : 'Calibrating: keep the area empty', cr.x + 8 * k, cr.y + 4 * k);
+    }
+  }
+
+  // ---------- manual buttons (the answer key) ----------
+  function flash(btn) { if (!btn) return; btn.classList.add('flash'); setTimeout(() => btn.classList.remove('flash'), 300); }
+  function manualCycle(st) {
+    emit({ type: 'manual', station: st.id, action: 'cycle_done', source: 'manual', t: now(), cycle: ++st.manualN });
+    flash(st.el.querySelector('.cyc'));
+    G.evSeen = -1;
+  }
+  function qaSt() { return G.qaId ? ST[G.qaId] : null; }
+  function manualPass() {
+    const st = qaSt();
+    if (!st) return;
+    closeFail(false);
+    const t = now();
+    emit({ type: 'manual', station: st.id, action: 'pass', source: 'manual', t, cycle: ++st.manualN });
+    st.eng.manualQa({ result: 'pass', reason: null, t }).forEach(emit);
+    flash(st.el.querySelector('.passb'));
+    G.evSeen = -1;
+  }
+  function openFail() {
+    const st = qaSt();
+    if (!st) return;
+    if (G.failPick) { closeFail(true); return; }
+    const t = now();
+    G.failPick = { t, timer: setTimeout(() => pickReason(null), 20000) };
+    st.eng.setQaHold(true);
+    st.reasons.innerHTML = '<b>Fail: why?</b>' + (G.config.failReasons || []).map(r => `<button type="button" class="btn sm" data-r="${esc(r.id)}" title="Cause: ${esc(r.cause || 'none')}${r.defect === false ? ', not a defect (retest)' : ''}">${esc(r.label)}</button>`).join('') +
+      '<button type="button" class="btn sm" data-r="">No reason</button><button type="button" class="btn sm" data-cancel="1">Cancel <kbd>Esc</kbd></button>';
+    st.reasons.querySelectorAll('button').forEach(b => { b.onclick = () => (b.dataset.cancel ? closeFail(true) : pickReason(b.dataset.r || null)); });
+    st.reasons.hidden = false;
+    flash(st.el.querySelector('.failb'));
+  }
+  function pickReason(id) {
+    const st = qaSt(), f = G.failPick;
+    if (!st || !f) return;
+    clearTimeout(f.timer); G.failPick = null; st.reasons.hidden = true;
+    emit({ type: 'manual', station: st.id, action: 'fail', reason: id || null, source: 'manual', t: f.t, cycle: ++st.manualN });
+    st.eng.manualQa({ result: 'fail', reason: id || null, t: f.t }).forEach(emit);
+    G.evSeen = -1;
+  }
+  function closeFail(cancel) {
+    const st = qaSt(), f = G.failPick;
+    if (!st || !f) return;
+    clearTimeout(f.timer); G.failPick = null; st.reasons.hidden = true;
+    if (cancel) st.eng.setQaHold(false);
+  }
+  window.addEventListener('keydown', e => {
+    if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) && e.target.type !== 'checkbox') return;
+    if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+    const n = Number(e.key);
+    if (n >= 1 && n <= LIST.length) { e.preventDefault(); manualCycle(LIST[n - 1]); }
+    else if (e.key === 'p' || e.key === 'P') { e.preventDefault(); manualPass(); }
+    else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); openFail(); }
+    else if (e.key === 'Escape') closeFail(true);
+  });
+
+  // ---------- sessions ----------
+  function showStartForm(on) { $('startForm').hidden = !on; if (on) $('fTitle').focus(); }
+  async function startSession(info) {
+    if (G.session || G.starting) return;
+    G.starting = true;
+    try {
+      const stations = {};
+      for (const st of LIST) stations[st.id] = { input: st.source.type, label: st.source.label, record: st.recOn && st.source.type !== 'none' };
+      const body = Object.assign({}, info, { stations, client: { gpu: GPU, model: G.modelOn, hands: G.handsOn, agent: navigator.userAgent.slice(0, 160) } });
+      const r = await fetch('/api/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.message || r.status);
+      for (const st of LIST) if (st.rec) await stopRecording(st);
+      G.session = { id: j.id, startedAtMs: j.startedAtMs, title: info.title, crew: info.crew, shift: info.shift, parts: {} };
+      G.events = []; G.queue = []; G.evSeen = -1;
+      for (const st of LIST) { st.eng.restart(); st.manualN = 0; }
+      if (G.failPick) closeFail(true);
+      emit({ type: 'session_start', t: j.startedAtMs, source: 'page', note: info.title || '' });
+      for (const st of LIST) emit({ type: 'source_change', station: st.id, t: j.startedAtMs, input: st.source.type, note: st.source.label });
+      for (const st of LIST) if (st.recOn && st.source.type !== 'none') startRecording(st);
+      showStartForm(false);
+      banner('session', '');
+    } catch (e) {
+      banner('session', 'The session did not start: ' + esc(e && e.message || e), 'crit');
+    } finally { G.starting = false; renderSession(); }
+  }
+  async function stopSession() {
+    if (!G.session || G.stopping) return;
+    G.stopping = true;
+    renderSession();
+    const sess = G.session;
+    try {
+      if (G.failPick) pickReason(null);
+      for (const st of LIST) st.eng.flush().forEach(emit);
+      await Promise.all(LIST.map(st => stopRecording(st)));
+      emit({ type: 'session_end', t: now(), source: 'page' });
+      for (let i = 0; i < 20 && G.queue.length; i++) { await sendEvents(); if (G.queue.length) await sleep(300); }
+      const r = await fetch('/api/sessions/' + sess.id + '/end', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const doc = await r.json();
+      G.lastSession = doc;
+      const L = doc.summary && doc.summary.line;
+      const base = '/api/sessions/' + sess.id;
+      banner('session', `Session saved: <b>${esc(sess.title || sess.id)}</b>${L ? ` | ${L.units} units, FPY ${L.fpy == null ? '--' : Math.round(L.fpy * 100) + '%'}` : ''} | ` +
+        `<a href="${base}/substeps.csv" download>substeps.csv</a> <a href="${base}/cycles.csv" download>cycles.csv</a> <a href="${base}/events.jsonl" download>events.jsonl</a> <a href="${base}" target="_blank" rel="noopener">session.json</a>` +
+        (G.queue.length ? ` | <b>${G.queue.length} events were not sent</b>` : ''), G.queue.length ? 'crit' : 'good');
+    } catch (e) {
+      banner('session', 'Stopping had a problem: ' + esc(e && e.message || e) + '. The data sent so far is on disk.', 'crit');
+    } finally {
+      G.session = null; G.queue = []; G.stopping = false;
+      // Live counting starts over; the finished session lives on the server.
+      G.events = []; G.evSeen = -1;
+      for (const st of LIST) { st.eng.restart(); st.manualN = 0; }
+      const t = now();
+      for (const st of LIST) emit({ type: 'source_change', station: st.id, t, input: st.source.type, note: st.source.label });
+      renderSession(); loadClips(); if (!$('sessionsPanel').hidden) loadSessions();
+    }
+  }
+  async function loadSessions() {
+    try {
+      const j = await (await fetch('/api/sessions', { cache: 'no-store' })).json();
+      const rows = (j.sessions || []).map(s => {
+        const base = '/api/sessions/' + s.id, bytes = s.videos.reduce((a, v) => a + (v.bytes || 0), 0);
+        return `<tr><td class="mono">${esc(s.id)}</td><td>${esc(s.title || '')}</td><td>${esc(s.crew || '')}</td><td>${esc(s.shift || '')}</td>` +
+          `<td>${s.startedAt ? esc(new Date(s.startedAt).toLocaleString()) : ''}</td><td>${s.endedAt ? esc(new Date(s.endedAt).toLocaleTimeString()) : '<span class="chip warn">not ended</span>'}</td>` +
+          `<td class="mono">${s.videos.length} (${fmtMB(bytes)})</td><td><a href="${base}/substeps.csv" download>substeps.csv</a><a href="${base}/cycles.csv" download>cycles.csv</a><a href="${base}/events.jsonl" download>events</a><a href="${base}" target="_blank" rel="noopener">json</a></td></tr>`;
+      }).join('');
+      $('sessTbl').innerHTML = rows ? `<table><thead><tr><th>Id</th><th>Title</th><th>Crew / group</th><th>Shift</th><th>Started</th><th>Ended</th><th>Videos</th><th>Exports</th></tr></thead><tbody>${rows}</tbody></table>` : '<div class="muted">No sessions yet.</div>';
+    } catch (e) { $('sessTbl').innerHTML = '<div class="muted">The local server is not answering.</div>'; }
+  }
+
+  // ---------- rendering (4 times a second) ----------
+  function missingText(st, r) {
+    if (st.source.type === 'none') return 'no video';
+    const m = r.missing[0];
+    if (!m) return '';
+    const z = st.cfg.zones.find(x => x.id === m.zone), zl = z ? z.label : m.zone;
+    if (!m.signal) return 'draw the ' + zl + ' zone (Setup)';
+    if (m.signal === 'bright') return 'calibrate the bulb (Setup)';
+    if (m.signal.startsWith('class:')) return 'model is off';
+    return 'waiting for video';
+  }
+  function renderStation(st, sum, t) {
+    const s = st.eng.state(), cfg = st.cfg, label = id => (cfg.substeps.find(x => x.id === id) || {}).label || id;
+    const ss = sum && sum.stations[st.id], takt = G.config.taktSec;
+    let lab, cur, big = '', cls = 'nowbox';
+    if (s.inCycle) { lab = 'Now (cycle ' + s.cycle + ')'; cur = label(s.current); big = fmtS((t - s.since) / 1000); cls += ' incycle'; if (takt && (t - s.cycleStart) / 1000 > takt) cls += ' over'; }
+    else if (st.source.type === 'none') { lab = 'Manual only'; cur = 'No video: press Cycle done when a unit leaves'; }
+    else { lab = 'Between cycles'; cur = s.cycle ? 'Waiting for the next unit' : 'Waiting for the first step'; big = s.since ? fmtS((t - s.since) / 1000) : ''; }
+    st.elNow.className = cls; st.elNowLab.textContent = lab; st.elCur.textContent = cur; st.elBig.textContent = big;
+    const d = ss ? ss.detected : null, m = ss ? ss.manual : null, over = v => (takt && v != null && v > takt ? ' class="over"' : '');
+    st.elKv.innerHTML = `<div><span>Cycle</span><b>${s.inCycle ? fmtS((t - s.cycleStart) / 1000) : '--'}</b></div>` +
+      `<div><span>Last</span><b${over(d && d.lastSec)}>${fmtS(d && d.lastSec)}</b></div>` +
+      `<div><span>Avg</span><b${over(d && d.avgSec)}>${fmtS(d && d.avgSec)}${d && d.stdSec ? ' ±' + d.stdSec.toFixed(1) : ''}</b></div>` +
+      `<div><span>Done</span><b>${d ? d.cycles : 0} <small class="muted">/ ${m ? m.cycles : 0} manual</small></b></div>`;
+    if (st.isQa) {
+      const lastQa = [...G.events].reverse().find(e => e.type === 'qa_result' && e.station === st.id);
+      const mm = [...G.events].reverse().find(e => e.type === 'flag' && e.station === st.id && e.note === LE.MISMATCH_NOTE);
+      let html = '<span class="eyebrow">Last unit</span>';
+      if (s.waitingQa) html += '<span class="chip warn">sorted, waiting for Pass / Fail</span>';
+      if (lastQa) {
+        html += `<span class="chip ${lastQa.result === 'pass' ? 'good' : lastQa.result === 'fail' ? 'crit' : ''}">${esc(lastQa.result.toUpperCase())}${lastQa.reason ? ': ' + esc(lastQa.reason) : ''}</span>` +
+          `<span class="muted">light ${lastQa.light == null ? '?' : lastQa.light ? 'on' : 'off'}, bin ${lastQa.bin || '?'}, from ${esc(lastQa.source)}</span>`;
+        if (mm && mm.cycle === lastQa.cycle) html += '<span class="chip crit">mismatch: review the video</span>';
+      } else if (!s.waitingQa) html += '<span class="muted">none yet</span>';
+      if (html !== st.lastQaHtml) { st.elQa.innerHTML = html; st.lastQaHtml = html; }
+    }
+    // checklist
+    const rules = st.eng.rules(), counts = {};
+    s.occ.forEach(o => { counts[o.id] = (counts[o.id] || 0) + 1; });
+    const html = rules.map(r => {
+      let c = '', why = '';
+      if (!r.kind) { c = 'off'; why = r.hasModelRule ? 'needs the model' : 'needs a model rule'; }
+      else if (!r.ready) { c = 'wait'; why = missingText(st, r); }
+      if (s.current === r.id) c += ' now'; else if (counts[r.id]) c += ' done';
+      const avg = d && d.substepAvg[r.id];
+      const tip = r.rule ? LE.ruleText(r.rule, cfg) : why;
+      return `<li class="${c}" title="${esc(tip)}"><span class="ic"></span><span class="nm">${esc(r.label)}${counts[r.id] > 1 ? ` <span class="rep">x${counts[r.id]}</span>` : ''}${r.kind === 'model' ? ' <span class="tag">model</span>' : ''}${r.closes ? ' <span class="muted" style="font-size:11px">(ends the cycle)</span>' : ''}${why ? `<small>${esc(why)}</small>` : ''}</span><span class="num mono">${avg != null && !r.closes && d.cycles ? fmtS(avg) : ''}</span></li>`;
+    }).join('');
+    if (html !== st.lastCheck) { st.elCheck.innerHTML = html; st.lastCheck = html; }
+    const recNow = st.rec ? `<span class="recd">REC ${fmtMB(st.rec.bytes)}</span>` + (st.rec.dropped ? ` (${st.rec.dropped} chunks lost)` : '') : '';
+    const parts = [];
+    if (st.source.type !== 'none') parts.push(st.fps.toFixed(1) + ' fps');
+    if (G.modelOn && st.source.type !== 'none') parts.push('model ' + st.modelFps.toFixed(1) + '/s');
+    parts.push('conf ' + (s.lastConf != null ? s.lastConf.toFixed(2) + ' ' + (s.lastSource || '') : '--'));
+    const meta = parts.join(' | ') + (recNow ? ' | ' + recNow : '');
+    if (meta !== st.lastMeta) { st.elMeta.innerHTML = meta; st.lastMeta = meta; }
+    if (st.err !== st.lastErr) { st.elMsg.textContent = st.err; st.lastErr = st.err; }
+  }
+  function renderSummary(sum) {
+    const L = sum.line, ids = LIST.map(s => s.id);
+    $('sUnits').textContent = L.units;
+    $('sUnitsS').textContent = 'tested at ' + (G.qaId || '').toUpperCase() + (L.awaitingQa ? ', ' + L.awaitingQa + ' awaiting result' : '');
+    $('sUph').textContent = L.uph == null || L.elapsedSec < 60 ? '--' : L.uph.toFixed(0);
+    $('sUphS').textContent = L.elapsedSec < 60 ? 'after the first minute' : 'over ' + fmtClock(L.elapsedSec * 1000);
+    $('sFpy').textContent = L.fpy == null ? '--' : Math.round(L.fpy * 100) + '%';
+    $('sFpyS').textContent = L.passed + ' pass / ' + (L.passed + L.defectFails) + ' tested' + (L.nonDefectFails ? ', ' + L.nonDefectFails + ' retest' : '');
+    const takt = G.config.taktSec;
+    $('sTakt').textContent = takt ? fmtS(takt) : '--';
+    $('sTaktS').textContent = takt ? (L.overTakt.length ? 'over: ' + L.overTakt.map(x => x.toUpperCase()).join(', ') : 'all stations within') : 'not set in the config';
+    let flow = '';
+    ids.forEach((id, i) => {
+      const s = sum.stations[id];
+      const c = 'fl-st' + (L.bottleneck === id ? ' bottleneck' : '') + (L.overTakt.includes(id) ? ' over' : '');
+      flow += `<div class="${c}" title="${esc(ST[id].cfg.label)}: ${s.cycles} cycles (${s.basis})"><b>${id.toUpperCase()}</b><span>${s.cycles} | ${fmtS(s.avgSec)}</span></div>`;
+      if (i + 1 < ids.length) { const w = L.wip[i]; flow += `<div class="fl-ar${w.n < 0 ? ' neg' : ''}" title="Work in progress between ${id.toUpperCase()} and ${ids[i + 1].toUpperCase()}${i === 0 ? ' (pairs of wires)' : ''}">${w.n}<i>→</i></div>`; }
+    });
+    $('sFlow').innerHTML = '<span class="eyebrow" style="margin-right:6px">Flow</span>' + flow;
+    const fc = L.failsByCause, parts = ids.map(id => `${id.toUpperCase()} <b>${fc[id] || 0}</b>`);
+    if (fc.unknown) parts.push(`no cause <b>${fc.unknown}</b>`);
+    $('sFails').innerHTML = `<span class="eyebrow">Fails by cause</span><span class="mono">${parts.join(' | ')}</span>` +
+      `<span class="muted">${L.nonDefectFails ? L.nonDefectFails + ' test setup (retest) | ' : ''}${L.mismatches ? `<span class="chip crit">${L.mismatches} mismatch</span>` : '0 mismatches'}</span>`;
+  }
+  function renderSession() {
+    const on = !!G.session;
+    $('sessLive').hidden = !on; $('btnStop').hidden = !on; $('btnStart').hidden = on;
+    $('btnStop').disabled = G.stopping; $('btnStop').textContent = G.stopping ? 'Stopping...' : 'Stop session';
+    if (on) $('sessTitle').textContent = G.session.title || 'Session';
+  }
+  function renderToolbar() {
+    const m = G.config.model;
+    const bm = $('btnModel');
+    bm.disabled = !m;
+    bm.title = m ? 'Run ' + m.file + ' on every camera in turn' : 'No model yet: set "model" in data/meta/wire-line.json when the model team delivers one';
+    bm.textContent = 'Model: ' + (!m ? 'none yet' : Y.status === 'loading' ? 'loading...' : G.modelOn ? 'on' : 'off');
+    bm.classList.toggle('on', G.modelOn);
+    const bh = $('btnHands');
+    bh.textContent = 'Hands: ' + (H.status === 'loading' ? 'loading...' : G.handsOn ? 'on' : 'off');
+    bh.classList.toggle('on', G.handsOn);
+    $('detNote').textContent = (G.modelOn ? Y.backend + (GPU ? '' : ' (add ?gpu for WebGPU)') : '') + (G.handsOn ? (G.modelOn ? ' | ' : '') + 'hands CPU' : '');
+    document.querySelectorAll('#basisSeg button').forEach(b => b.classList.toggle('on', b.dataset.b === G.basis));
+  }
+  function render() {
+    const t = now();
+    // Metrics: recompute when events change, else once a second (idle share and units per hour move with time).
+    if (G.evSeen !== G.events.length || t - G.sumAt > 1000) {
+      G.summary = LE.summarize(G.events, G.config, { now: t, basis: G.basis });
+      G.evSeen = G.events.length; G.sumAt = t;
+      renderSummary(G.summary);
+    }
+    for (const st of LIST) renderStation(st, G.summary, t);
+    if (G.session) {
+      $('sessClock').textContent = fmtClock(t - G.session.startedAtMs);
+      const bytes = LIST.reduce((a, s) => a + (s.rec ? s.rec.bytes : 0), 0);
+      $('sessInfo').textContent = G.events.length + ' events | ' + fmtMB(bytes) + ' video' + (G.queue.length > 20 ? ' | ' + G.queue.length + ' waiting to send' : '');
+    } else $('sessInfo').textContent = G.events.length ? 'Not recording | ' + G.events.length + ' live events' : 'Not recording';
+  }
+  setInterval(render, 250);
+
+  // ---------- wiring ----------
+  $('btnStart').onclick = () => showStartForm($('startForm').hidden);
+  $('btnCancelStart').onclick = () => showStartForm(false);
+  $('startForm').onsubmit = e => { e.preventDefault(); startSession({ title: $('fTitle').value.trim(), crew: $('fCrew').value.trim(), shift: $('fShift').value.trim(), notes: $('fNotes').value.trim() }); };
+  $('btnStop').onclick = () => stopSession();
+  $('btnSessions').onclick = () => { const p = $('sessionsPanel'); p.hidden = !p.hidden; $('btnSessions').classList.toggle('on', !p.hidden); if (!p.hidden) loadSessions(); };
+  $('btnRefresh').onclick = () => { loadSessions(); loadClips(); };
+  $('btnModel').onclick = () => setModel(!G.modelOn);
+  $('btnHands').onclick = () => setHands(!G.handsOn);
+  $('btnCams').onclick = async () => { await findCameras(true); await restoreSources(true); };
+  $('basisSeg').onclick = e => { const b = e.target.closest('button'); if (!b) return; G.basis = b.dataset.b; store.set('wire-line:basis', G.basis); G.evSeen = -1; renderToolbar(); };
+  $('btnReset').onclick = () => {
+    if (G.session) { banner('reset', 'Counts cannot be reset while a session records. Stop the session first.', ''); setTimeout(() => banner('reset', ''), 4000); return; }
+    G.events = []; G.evSeen = -1;
+    const t = now();
+    for (const st of LIST) { st.eng.restart(); st.manualN = 0; emit({ type: 'source_change', station: st.id, t, input: st.source.type, note: st.source.label }); }
+  };
+
+  async function restoreSources(camsOnly) {
+    for (const st of LIST) {
+      const key = store.get('wire-line:source:' + st.id);
+      if (!key || key === st.source.key) continue;
+      if (key.startsWith('cam:') && G.cameras.some(c => c.key === key) && !LIST.some(s => s.source.key === key)) await setSource(st, key, true);
+      else if (!camsOnly && key.startsWith('clip:') && G.clips.some(c => 'clip:' + c.key === key)) await setSource(st, key, true);
+    }
+  }
+
+  // ---------- debug hook (tests and the console) ----------
+  window.__line = {
+    G, ST, Y, H, LE, setSource, startSession, stopSession, manualCycle, manualPass, openFail, pickReason, setModel, setHands,
+    get summary() { return G.summary; },
+    setZones(id, zones) { const st = ST[id]; Object.assign(st.setup.zones, zones); st.prevGray = null; saveSetup(st); if (st.setupOn) renderSetup(st); drawOverlay(st); },
+    calibrate(id, kind) { return calibrate(ST[id], kind || 'empty'); }
+  };
+
+  // ---------- start ----------
+  (async function init() {
+    try {
+      const r = await fetch('/api/line/config', { cache: 'no-store' });
+      G.config = await r.json();
+      if (!r.ok) throw new Error(G.config.message || r.status);
+    } catch (e) {
+      banner('config', 'The line config did not load: ' + esc(e && e.message || e) + '. Check data/meta/wire-line.json and that npm start is running.', 'crit');
+      return;
+    }
+    const problems = LE.checkConfig(G.config);
+    if (problems.length) banner('config', '<b>data/meta/wire-line.json has problems:</b> ' + problems.map(esc).join(' '), 'crit');
+    try { G.setup = await (await fetch('/api/line/setup', { cache: 'no-store' })).json() || {}; } catch (e) { G.setup = {}; }
+    G.qaId = (G.config.stations.find(s => s.qa) || {}).id || null;
+    LIST = G.config.stations.map((cfg, i) => (ST[cfg.id] = makeStation(cfg, i)));
+    const grid = $('grid');
+    LIST.forEach(st => grid.appendChild(st.el));
+    $('kLast').textContent = LIST.length;
+    $('hdrNote').textContent = (G.config.name || 'Line') + ': ' + (G.config.product || '') + ' ' + LIST.length + ' stations, one overhead camera each.';
+    renderToolbar(); renderSession(); rebuildPickers();
+    LIST.forEach(st => { sizeCanvas(st); emit({ type: 'source_change', station: st.id, t: now(), input: 'none', note: st.source.label }); });
+    await loadClips();
+    // Camera labels need permission. Only ask when it was given before; else the Find cameras button asks.
+    try {
+      const perm = navigator.permissions ? await navigator.permissions.query({ name: 'camera' }) : null;
+      if (perm && perm.state === 'granted') await findCameras(false);
+    } catch (e) { /* no permissions API */ }
+    await restoreSources(false);
+  })();
+})();
+</script>
+</body>
+</html>
