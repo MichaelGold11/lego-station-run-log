@@ -52,8 +52,9 @@
   // Raw YOLO output [1, 4 + classes, N]: rows cx, cy, w, h (model pixels), then one score per class. Needs NMS.
   // (This model's NMS-free head was not the trained one, so the plain head plus NMS is what matches best.pt.)
   // Returns detections in frame pixels, highest confidence first. Same rules as ultralytics: best class per anchor, class-wise NMS at iou.
-  function decode(data, n, lb, srcW, srcH, minConf, iou) {
-    const nc = CLASSES.length, cand = [];
+  // classes (optional): class names in model order for another model (the /line page). Defaults to the LEGO classes.
+  function decode(data, n, lb, srcW, srcH, minConf, iou, classes) {
+    const names = classes || CLASSES, nc = names.length, cand = [];
     for (let i = 0; i < n; i++) {
       let best = -1, score = 0;
       for (let c = 0; c < nc; c++) { const v = data[(4 + c) * n + i]; if (v > score) { score = v; best = c; } }
@@ -80,9 +81,33 @@
       const x1 = clampX((k.b[0] - lb.padX) / lb.scale), y1 = clampY((k.b[1] - lb.padY) / lb.scale);
       const x2 = clampX((k.b[2] - lb.padX) / lb.scale), y2 = clampY((k.b[3] - lb.padY) / lb.scale);
       if (x2 - x1 < 2 || y2 - y1 < 2) continue;
-      out.push({ cls: CLASSES[k.c], conf: k.s, box: [x1, y1, x2, y2], nbox: [x1 / srcW, y1 / srcH, x2 / srcW, y2 / srcH] });
+      out.push({ cls: names[k.c], conf: k.s, box: [x1, y1, x2, y2], nbox: [x1 / srcW, y1 / srcH, x2 / srcW, y2 / srcH] });
     }
     return out;
+  }
+
+  // Any supported output tensor: the raw head [1, 4 + nc, N] (decoded above, nc read from the shape) or an end-to-end
+  // head [1, N, 6] with rows x1, y1, x2, y2, score, class (model pixels, NMS already done). classes: names in model order;
+  // a class the list does not name is called class_<i>.
+  function decodeOutput(data, dims, lb, srcW, srcH, minConf, iou, classes) {
+    const names = classes || CLASSES;
+    const name = i => names[i] || ('class_' + i);
+    if (dims.length === 3 && dims[2] === 6 && dims[1] > 6) {
+      const n = dims[1], out = [];
+      const clampX = v => Math.max(0, Math.min(srcW, v)), clampY = v => Math.max(0, Math.min(srcH, v));
+      for (let i = 0; i < n; i++) {
+        const o = i * 6, s = data[o + 4];
+        if (!(s >= minConf)) continue;
+        const x1 = clampX((data[o] - lb.padX) / lb.scale), y1 = clampY((data[o + 1] - lb.padY) / lb.scale);
+        const x2 = clampX((data[o + 2] - lb.padX) / lb.scale), y2 = clampY((data[o + 3] - lb.padY) / lb.scale);
+        if (x2 - x1 < 2 || y2 - y1 < 2) continue;
+        out.push({ cls: name(Math.round(data[o + 5])), conf: s, box: [x1, y1, x2, y2], nbox: [x1 / srcW, y1 / srcH, x2 / srcW, y2 / srcH] });
+      }
+      return out.sort((a, b) => b.conf - a.conf);
+    }
+    const nc = Math.max(1, dims[1] - 4), list = [];
+    for (let i = 0; i < nc; i++) list.push(name(i));
+    return decode(data, dims[2], lb, srcW, srcH, minConf, iou, list);
   }
 
   // Median brightness (V of HSV = max channel) of a box in an RGBA image. The plate is white, so a dark box is not it.
@@ -361,7 +386,7 @@
 
   return {
     CLASSES, PLATE, PINK, BLUE, PART_NAME, STEPS, TUNING,
-    letterbox, fillTensor, decode, medianV, bestPerClass,
+    letterbox, fillTensor, decode, decodeOutput, medianV, bestPerClass,
     expandBox, handInZone, mapSignals, globalMotion,
     landscape, onPlate, relative, refVariants, checkBuild, makeReference, createChecker
   };
