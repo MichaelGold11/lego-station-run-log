@@ -129,7 +129,11 @@ function serveFile(req, res, file, type, extra) {
   fs.createReadStream(file).pipe(res);
 }
 
+// Local-only guard: a rebinding page has a foreign Host, a cross-site POST has a foreign Origin.
+const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'].map(h => h + ':' + PORT);
 async function handle(req, res) {
+  if (!LOCAL_HOSTS.includes(req.headers.host)) return fail(res, 403, 'bad_host', 'This server only answers on localhost.');
+  if (req.method !== 'GET' && req.method !== 'HEAD' && req.headers.origin !== undefined && !LOCAL_HOSTS.some(h => req.headers.origin === 'http://' + h)) return fail(res, 403, 'bad_origin', 'Cross-site requests are not allowed.');
   const url = new URL(req.url, 'http://localhost');
   const p = decodeURIComponent(url.pathname);
 

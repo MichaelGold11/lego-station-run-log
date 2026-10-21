@@ -155,6 +155,17 @@ try {
   check('ids and station names with dots or slashes get 400, nothing is read or written outside', codes.every(c => c === 400) && !fs.existsSync(outside) && !fs.existsSync(path.join(ROOT, 'evil.webm')), codes.join(','));
   const missing = await req('GET', '/api/sessions/20261015-120000-abcd');
   check('a well-formed id that does not exist is a 404', missing.status === 404);
+  console.log('local-only guard');
+  const sessBefore = fs.existsSync(path.join(DATA, 'sessions')) ? fs.readdirSync(path.join(DATA, 'sessions')).length : 0;
+  const badHost = await req('POST', '/api/sessions', { title: 'x' }, Object.assign({ Host: 'evil.example:' + PORT }, jsonHdr));
+  const badHostGet = await req('GET', '/api/sessions', null, { Host: 'evil.example' });
+  const badOrigin = await req('POST', '/api/sessions', { title: 'x' }, Object.assign({ Origin: 'http://evil.example' }, jsonHdr));
+  const sessAfter = fs.existsSync(path.join(DATA, 'sessions')) ? fs.readdirSync(path.join(DATA, 'sessions')).length : 0;
+  check('a foreign Host gets 403 (GET and POST) and nothing is written', badHost.status === 403 && badHostGet.status === 403 && sessAfter === sessBefore);
+  check('a POST with a foreign Origin gets 403 and nothing is written', badOrigin.status === 403 && sessAfter === sessBefore);
+  const okOrigin = await req('POST', '/api/sessions', { title: 'origin ok', stations: { s4: { input: 'none' } } }, Object.assign({ Origin: 'http://localhost:' + PORT }, jsonHdr));
+  check('a POST with the matching Origin still works', okOrigin.status < 300 && okOrigin.json && okOrigin.json.id, okOrigin.text);
+
 } catch (e) {
   fails++;
   console.log('  FAIL  ' + (e && e.stack || e));
