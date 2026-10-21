@@ -46,6 +46,37 @@ console.log('config');
   check('a rule that names a missing zone is reported', LE.checkConfig(bad).some(m => /nowhere/.test(m)));
 }
 
+console.log('per-station models');
+{
+  const m = (file, classes) => ({ file: '/models/' + file, classes, imgsz: 640 });
+  const withModels = (models, shared) => Object.assign(JSON.parse(JSON.stringify(CFG)), { models, model: shared || null });
+  check('one model per station passes the config check', LE.checkConfig(withModels({ s1: m('s1.onnx', ['cutter', 'stripper']), s4: m('s4.onnx', ['bulb_on']) })).length === 0);
+  check('a models key that is not a station is reported', LE.checkConfig(withModels({ s9: m('x.onnx', ['wire']) })).some(e => /"s9" is not a station/.test(e)));
+  check('a bad file path is reported for that station', LE.checkConfig(withModels({ s2: m('../x.onnx', ['wire']) })).some(e => /^models\.s2 must look like/.test(e)));
+  check('an empty class list is reported', LE.checkConfig(withModels({ s2: m('s2.onnx', []) })).some(e => /models\.s2: classes must be a non-empty/.test(e)));
+  check('a repeated class name is reported', LE.checkConfig(withModels({ s3: m('s3.onnx', ['splice', 'splice']) })).some(e => /models\.s3: classes must not repeat/.test(e)));
+  check('models as a list is reported', LE.checkConfig(withModels([m('s1.onnx', ['wire'])])).some(e => /models must be an object/.test(e)));
+  const cfg = withModels({ s1: m('s1.onnx', ['cutter']) }, m('shared.onnx', ['wire']));
+  check('a station uses its own model first', LE.modelFor(cfg, 's1').file === '/models/s1.onnx');
+  check('a station without its own model falls back to the shared one', LE.modelFor(cfg, 's2').file === '/models/shared.onnx');
+  check('no models at all means zones', LE.modelFor(CFG, 's1') === null);
+}
+
+console.log('class-count check');
+{
+  const raw = LE.checkModelOutput([1, 7, 8400], 3);
+  check('raw head [1, 7, 8400] with 3 classes listed is ok', raw.kind === 'raw' && raw.found === 3 && raw.ok);
+  const bad = LE.checkModelOutput([1, 7, 8400], 10);
+  check('raw head with 3 classes but 10 listed is refused (the QA bug)', bad.kind === 'raw' && bad.found === 3 && !bad.ok);
+  check('raw head with 3 classes but 2 listed is refused', !LE.checkModelOutput([1, 7, 8400], 2).ok);
+  const e2e = LE.checkModelOutput([1, 300, 6], 4);
+  check('end-to-end head [1, 300, 6] cannot be counted from the shape', e2e.kind === 'e2e' && e2e.found === null && e2e.ok);
+  check('an unknown output shape is refused', !LE.checkModelOutput([1, 8400], 3).ok && !LE.checkModelOutput(null, 3).ok);
+  const rows = new Float32Array([10, 10, 50, 50, 0.9, 1, 20, 20, 60, 60, 0.2, 7]);
+  check('end-to-end rows: a weak row with a class past the list is ignored', !LE.e2eBadClass(rows, 2, 2, 0.4));
+  check('end-to-end rows: a confident row with a class past the list is caught', LE.e2eBadClass(rows, 2, 1, 0.4));
+}
+
 console.log('normal cycle (s2, zones)');
 {
   const r = rig('s2');
