@@ -19,3 +19,10 @@ From the `vision/` folder of the student's branch, with its venv:
 
 Copy `best.onnx` here as `lego-parts.onnx`. The page reads the input size from the model, so an `imgsz=480` or
 `imgsz=416` export also works if the laptop is slow.
+
+## Wire line: one model per station
+
+`/line` runs one model per station. Copy each station's exported `.onnx` here and add its entry under
+`models` in `data/meta/wire-line.json` (see "For the model team" in `docs/wire-line-process.md`). The page
+checks the file's class count against the config's class list and falls back to zones for a station that
+does not match.

@@ -14,8 +14,8 @@ not have).
 Two wires joined by one crimped butt splice, then tested by lighting a bulb from a battery.
 
 "Camera today" means the substep is seen with zones alone (motion in a drawn box, or the bulb
-zone going bright). "Needs the model" means it is greyed out until a trained model is loaded; its
-time is added to the substep before it.
+zone going bright). "Needs the model" means it is greyed out until that station's trained model is
+loaded; its time is added to the substep before it.
 
 | Station | Substep | Camera today | With the model |
 |---|---|---|---|
@@ -145,13 +145,25 @@ uses detected counts where a station has any, else manual.
 
 ## For the model team
 
+**One model per station.** Each station gets its own model, trained from that station's footage and
+labeled with that station's SOP substeps (the substep table above). The four trainers work
+separately and do not need to agree on a class list.
+
 **What to label.** States and tools you can see in one still frame, never motions. "Crimping" is
-not a class; a `crimp_tool` in the crimp area is. Suggested classes:
-`wire, stripped_end, splice, crimped_splice, cutter, stripper, crimp_tool, bulb_on, bulb_off, battery`.
+not a class; a `crimp_tool` in the crimp area is. Suggested classes per station
+(`suggestedClasses` in `data/meta/wire-line.json`):
+
+| Station | Classes |
+|---|---|
+| S1 Cut and strip | `wire, cutter, stripper, stripped_end` |
+| S2 Crimp side A | `wire, splice, crimp_tool, crimped_splice` |
+| S3 Crimp side B | `wire, splice, crimp_tool, crimped_splice` |
+| S4 QA test | `battery, bulb_on, bulb_off` |
 
 **Where the data is.** Every session folder has one video per station and `events.jsonl`. Use
-`videoT` to jump to detected moments, and the manual Cycle done, Pass and Fail presses as the
-answer key. Split training and test data by session, never by frame.
+`s1.mp4` for the S1 trainer, `s2.mp4` for S2, and so on. Use `videoT` to jump to detected moments,
+and the manual Cycle done, Pass and Fail presses as the answer key. Split training and test data by
+session, never by frame.
 
 **Export the page expects.** ONNX, opset 12, square input (640 by default; 416 or 320 run faster on
 this laptop):
@@ -164,19 +176,33 @@ shapes work:
   the NMS), or
 - an end-to-end head `[1, N, 6]` with rows x1, y1, x2, y2, score, class.
 
-**Dropping it in.** Copy the file to `app/models/<name>.onnx` and set in `data/meta/wire-line.json`:
+**Dropping it in.** Copy the file to `app/models/<name>.onnx` and add your station's entry under
+`models` in `data/meta/wire-line.json`, keyed by the station id:
 
-    "model": { "file": "/models/<name>.onnx", "classes": ["wire", "stripped_end", "..."], "imgsz": 640 }
+    "models": {
+      "s1": { "file": "/models/s1-cut-strip.onnx", "classes": ["wire", "cutter", "stripper", "stripped_end"], "imgsz": 640 }
+    }
 
-List the classes in training order. Reload `/line` and press **Model: on**. Each substep whose
-model rule uses only classes the model knows switches to the model; the rest keep their zones rule.
-"Unclip" has no rule yet: pick a class and add `"model": { "zone": "fixture", "class": "<class>" }`
+List the classes in training order. Only add your own station's entry, so four people can edit the
+file without clashing. A station with no entry uses the top-level `"model"` if there is one (a
+shared fallback, `null` by default), else it stays on zones. Two stations can point at the same
+file; the page loads it once. Reload `/line` and press **Model: on**: every station that has a
+model runs it, and each station tile shows the file name it runs (or `zones`). Each substep whose
+model rule uses only classes that station's model knows switches to the model; the rest keep their
+zones rule. "Unclip" has no rule yet: pick a class and add `"model": { "zone": "fixture", "class": "<class>" }`
 to `s4_disconnect`.
+
+**Class-count check.** When the model loads, the page runs it once on a blank image and compares the
+output to your class list. For a raw head, the number of classes in the file must equal the number in
+your list. If not, a red banner says for example "lego-parts.onnx outputs 3 classes but the config
+lists 10 for S2", and that station stays on its zones rules (other stations keep their models). An
+end-to-end head does not show its class count, so there the page checks while it runs: a detection
+with a class number beyond your list drops that station back to zones with the same kind of banner.
 
 ## Known limits
 
 - **Performance (i7-1355U, Iris Xe).** With four 640x480 streams the zone signals run at about 6 to
-  7 frames a second per station. With the model on (WASM, in a worker) each station gets a model
+  7 frames a second per station. With the models on (WASM, in a worker; one inference at a time for all stations) each station gets a model
   result only every 2 to 4 seconds (about 0.5 s per 640 px inference shared by four cameras); with
   hands on too, about every 4 to 5 seconds. The page stays responsive (short stalls under 0.25 s).
   `?gpu` tries WebGPU, which froze this laptop on `/live`.

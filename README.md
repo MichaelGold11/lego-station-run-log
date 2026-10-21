@@ -113,7 +113,7 @@ Times are approximate to about ±0.1 s.
 | `app/` | The web app. `lego-station-run-log.html` is the same page that runs as a claude.ai artifact. |
 | `server.mjs` | Local server (`npm start`). |
 | `app/live-detect.js`, `app/models/` | Live page: YOLO pre and post processing, signal mapping, build check, and the models (see `app/models/README.md`). |
-| `app/line.html`, `app/line-engine.js` | Wire line dashboard (`/line`) and its config-driven engine. The process is `data/meta/wire-line.json`. |
+| `app/line.html`, `app/line-engine.js` | Wire line dashboard (`/line`) and its config-driven engine. The process is `data/meta/wire-line.json`, which also lists one ONNX model per station under `models`. |
 | `data/sessions/` | Wire line sessions: events, CSVs and one video per station. Not committed (about 1 GB per hour). |
 | `scripts/runlog.mjs` | Command-line helper: `npm run runlog -- help`. |
 | `data/runs/` | One JSON file per run. |
