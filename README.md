@@ -32,9 +32,10 @@ npm start
 
 Open http://localhost:4173. `npm install` fetches two browser libraries for the live page (onnxruntime-web and MediaPipe). The main app needs nothing; the live page at http://localhost:4173/live falls back to the same pinned libraries on the jsdelivr CDN if `node_modules` is missing.
 
-The wire line dashboard (four stations, four cameras, one laptop) is at http://localhost:4173/line. It records
-cycle and substep times, QA results and every camera's video for training a model. Process, run-day steps and the
-data it writes: [docs/wire-line-process.md](docs/wire-line-process.md).
+The wire line dashboard (four stations, four cameras, one laptop, one model per station) is at
+http://localhost:4173/line. It records cycle and substep times, QA results and every camera's video for training.
+**Team step-by-step** (run day, training your station's model, adding it, testing it):
+[docs/team-guide.md](docs/team-guide.md). Technical reference: [docs/wire-line-process.md](docs/wire-line-process.md).
 
 **Or let your agent do it.** Paste this into Claude Code or Codex:
 

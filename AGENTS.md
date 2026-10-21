@@ -27,6 +27,32 @@ become process data without the operator entering anything.
 
 Requirements: Node 18+ and ffmpeg/ffprobe on PATH. Do not add npm dependencies.
 
+## Wire line platform (`/line`)
+
+The team's main tool now: four stations, four overhead cameras, one laptop, and one trained
+model per station. The person's workflow (setup, run day, sharing footage, training, adding a
+model, testing) is [docs/team-guide.md](docs/team-guide.md); walk them through the matching
+section when they ask how to do any of it. The technical reference (config rules, event fields,
+CSV columns, model export contract) is [docs/wire-line-process.md](docs/wire-line-process.md).
+
+| Path | What it is |
+|---|---|
+| `app/line.html`, `app/line-engine.js` | The 4-station page and its config-driven engine |
+| `data/meta/wire-line.json` | The process: stations, zones, substeps, fail reasons, and `models` (one entry per station) |
+| `app/models/` | Model files (`.onnx`) the page loads |
+| `data/sessions/<id>/` | Recorded sessions (video per station, `events.jsonl`). Git-ignored, about 1 GB per hour |
+
+Rules for the wire line:
+
+- A station trainer adds or changes only their own station's entry under `models` (keyed `s1`
+  to `s4`) and their own file in `app/models/`. Never edit another station's entry.
+- `classes` lists the model's classes in training order. The page refuses a list whose length
+  does not match the model's output.
+- Change the process in `data/meta/wire-line.json`, not in code.
+- Never commit `data/sessions/` or `data/meta/wire-line-setup.json` (this laptop's zones).
+- Run `npm run test:line` before committing; it must pass. Share changes on a branch with a pull
+  request.
+
 ## Rules for agents
 
 - Edit run data through `scripts/runlog.mjs` (`add`, `claim`, `stills`, `closeup`, `finish`,
