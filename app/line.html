@@ -1064,7 +1064,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     if (st.source.type !== 'none') parts.push(st.fps.toFixed(1) + ' fps');
     const mc = modelOf(st);
     if (G.modelOn && st.mdl) parts.push(esc(baseName(st.mdl.file)) + ' ' + (st.source.type !== 'none' ? st.modelFps.toFixed(1) + '/s' : 'idle'));
-    else parts.push(mc ? 'zones (model ' + esc(baseName(mc.file)) + ' off)' : 'zones');
+    else parts.push(mc ? 'zones (' + (G.modelOn ? 'model not used' : 'model ' + esc(baseName(mc.file)) + ' off') + ')' : 'zones');
     parts.push('conf ' + (s.lastConf != null ? s.lastConf.toFixed(2) + ' ' + (s.lastSource || '') : '--'));
     const meta = parts.join(' | ') + (recNow ? ' | ' + recNow : '');
     if (meta !== st.lastMeta) { st.elMeta.innerHTML = meta; st.lastMeta = meta; }
