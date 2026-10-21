@@ -185,6 +185,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     <label>Crew / training group<input id="fCrew" maxlength="80" placeholder="Group B"></label>
     <label>Shift<input id="fShift" maxlength="40" placeholder="Morning"></label>
     <label>Notes<textarea id="fNotes" maxlength="2000" placeholder="What is different about this run"></textarea></label>
+    <div class="banner" id="recWarn" hidden>No station is recording video. Turn Rec on to keep footage for training.</div>
     <div class="acts"><button class="btn primary" type="submit">Start recording</button><button class="btn" id="btnCancelStart" type="button">Cancel</button>
       <span class="muted" id="startNote">Counts start from zero. Stations with Rec on record their video.</span></div>
   </form>
@@ -246,7 +247,8 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     modelOn: false, handsOn: false, cameras: [], clips: [], camAllowed: false, failPick: null, sending: false, summary: null, sumAt: 0, evSeen: -1,
     qaId: null, saveTimer: null, starting: false, stopping: false
   };
-  const Y = { status: 'off', backend: '', size: 640, session: null, ort: null, inName: '', outName: '', canvas: null, ctx: null, classes: [], error: '', loading: null, errs: 0 };
+  // Y.files: one entry per distinct model file ({ status, session, size, canvas, ctx, ... }); each station points at its file through st.mdl.
+  const Y = { status: 'off', backend: '', ort: null, files: {}, error: '', loading: null, errs: 0 };
   const H = { status: 'off', worker: null, wait: null, seq: 0, ms: 0, error: '', loading: null };
   const ST = {};
   let LIST = [];
@@ -323,7 +325,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       eng: LE.createStation(cfg, { holdFrames: G.config.holdFrames, defaults: G.config.defaults, qaGraceSec: G.config.qaGraceSec }),
       source: { type: 'none', key: 'none', label: 'None (manual only)' }, stream: null, recOn: false, rec: null, recBytes: 0,
       setup: normSetup(cfg, G.setup[cfg.id]), prevGray: null, sig: null, lastProc: 0, lastCT: 0, fps: 0, fpsN: 0, fpsT: now(), fresh: false,
-      dets: null, detsPrev: null, detT: 0, hands: null, handsT: 0, modelN: 0, modelFps: 0, modelT: now(),
+      mdl: null, dets: null, detsPrev: null, detT: 0, hands: null, handsT: 0, modelN: 0, modelFps: 0, modelT: now(),
       manualN: 0, setupOn: false, drawZone: null, drag: null, calib: null, err: '', clearArm: 0, lastCheck: '', token: 0
     };
     const el = document.createElement('section');
@@ -546,9 +548,9 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     if (st.calib) st.calib.samples.push(r.signals);
     const t = now();
     let cls = null, hp = null;
-    if (G.modelOn && Y.status === 'ready') {
+    if (G.modelOn && st.mdl) {
       const fresh = st.dets && t - st.detT < 3000;
-      cls = LE.steadyClasses(fresh && st.detsPrev ? LE.classSignals(st.detsPrev, zones, Y.classes) : null, LE.classSignals(fresh ? st.dets : [], zones, Y.classes));
+      cls = LE.steadyClasses(fresh && st.detsPrev ? LE.classSignals(st.detsPrev, zones, st.mdl.classes) : null, LE.classSignals(fresh ? st.dets : [], zones, st.mdl.classes));
     }
     if (G.handsOn && H.status === 'ready') hp = LE.handPresence(st.hands && t - st.handsT < 2000 ? st.hands : [], zones);
     st.sig = LE.mergeSignals(r.signals, cls, hp);
@@ -566,40 +568,60 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     for (const st of LIST) if (st.source.type === 'none' || st.video.paused) st.eng.tick(t).forEach(emit);
   }, 30);
 
-  // ---------- model and hands: one shared session each, round-robin over stations, never overlapping ----------
+  // ---------- model and hands: one session per model file (stations may share one), one inference at a time, round-robin over stations ----------
+  const baseName = f => String(f).split('/').pop();
+  const modelOf = st => LE.modelFor(G.config, st.id);
   async function loadModel() {
     if (Y.loading) return Y.loading;
-    const m = G.config.model;
-    if (!m) return null;
+    const need = {};
+    for (const st of LIST) { const m = modelOf(st); if (m) need[m.file] = m; }
+    if (!Object.keys(need).length) return null;
     Y.status = 'loading'; Y.error = '';
     Y.loading = (async () => {
       try {
-        const mod = await import(GPU ? '/vendor/ort/ort.webgpu.min.mjs' : '/vendor/ort/ort.wasm.min.mjs');
-        const ort = mod.InferenceSession ? mod : mod.default;
-        ort.env.wasm.wasmPaths = '/vendor/ort/';
-        const threads = self.crossOriginIsolated ? Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) >> 1)) : 1;
-        ort.env.wasm.numThreads = threads;
-        // WASM runs in onnxruntime's own worker (proxy), so a 0.5 to 1 s inference never freezes the page.
-        // WebGPU needs the main thread, so ?gpu turns the proxy off.
-        ort.env.wasm.proxy = !GPU;
-        const res = await fetch(m.file, { cache: 'reload' });
-        if (!res.ok) throw new Error('model file ' + m.file + ' not found (' + res.status + ')');
-        const bytes = new Uint8Array(await res.arrayBuffer());
-        let session = null, backend = '';
-        if (GPU && navigator.gpu) {
-          try { if (await navigator.gpu.requestAdapter()) { session = await ort.InferenceSession.create(bytes, { executionProviders: ['webgpu'] }); backend = 'WebGPU'; } }
-          catch (e) { console.warn('WebGPU unavailable, using WASM', e); session = null; }
+        if (!Y.ort) {
+          const mod = await import(GPU ? '/vendor/ort/ort.webgpu.min.mjs' : '/vendor/ort/ort.wasm.min.mjs');
+          const ort = mod.InferenceSession ? mod : mod.default;
+          ort.env.wasm.wasmPaths = '/vendor/ort/';
+          const threads = self.crossOriginIsolated ? Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) >> 1)) : 1;
+          ort.env.wasm.numThreads = threads;
+          // WASM runs in onnxruntime's own worker (proxy), so a 0.5 to 1 s inference never freezes the page.
+          // WebGPU needs the main thread, so ?gpu turns the proxy off.
+          ort.env.wasm.proxy = !GPU;
+          Y.ort = ort; Y.threads = threads;
         }
-        if (!session) { session = await ort.InferenceSession.create(bytes, { executionProviders: ['wasm'] }); backend = 'WASM x' + threads + (ort.env.wasm.proxy ? ' in a worker' : ''); }
-        Y.ort = ort; Y.session = session; Y.backend = backend; Y.classes = (m.classes || []).slice();
-        Y.inName = session.inputNames[0]; Y.outName = session.outputNames[0];
-        Y.size = m.imgsz || 640;
-        try { const md = session.inputMetadata; const sh = Array.isArray(md) ? md[0].shape : md[Y.inName].shape; if (sh && sh[2] > 0) Y.size = sh[2]; } catch (e) { /* keep imgsz */ }
-        Y.canvas = document.createElement('canvas'); Y.canvas.width = Y.canvas.height = Y.size;
-        Y.ctx = Y.canvas.getContext('2d', { willReadFrequently: true });
-        // A fresh input array per run: in worker (proxy) mode onnxruntime takes the buffer over.
-        await session.run({ [Y.inName]: new ort.Tensor('float32', new Float32Array(3 * Y.size * Y.size), [1, 3, Y.size, Y.size]) });
-        Y.status = 'ready';
+        const ort = Y.ort;
+        for (const file of Object.keys(need)) {
+          if (Y.files[file] && Y.files[file].status === 'ready') continue;
+          const f = Y.files[file] = { status: 'loading', error: '' };
+          try {
+            const res = await fetch(file, { cache: 'reload' });
+            if (!res.ok) throw new Error('model file ' + file + ' not found (' + res.status + ')');
+            const bytes = new Uint8Array(await res.arrayBuffer());
+            let session = null, backend = '';
+            if (GPU && navigator.gpu) {
+              try { if (await navigator.gpu.requestAdapter()) { session = await ort.InferenceSession.create(bytes, { executionProviders: ['webgpu'] }); backend = 'WebGPU'; } }
+              catch (e) { console.warn('WebGPU unavailable, using WASM', e); session = null; }
+            }
+            if (!session) { session = await ort.InferenceSession.create(bytes, { executionProviders: ['wasm'] }); backend = 'WASM x' + Y.threads + (ort.env.wasm.proxy ? ' in a worker' : ''); }
+            f.session = session; Y.backend = backend;
+            f.inName = session.inputNames[0]; f.outName = session.outputNames[0];
+            f.size = need[file].imgsz || 640;
+            try { const md = session.inputMetadata; const sh = Array.isArray(md) ? md[0].shape : md[f.inName].shape; if (sh && sh[2] > 0) f.size = sh[2]; } catch (e) { /* keep imgsz */ }
+            f.canvas = document.createElement('canvas'); f.canvas.width = f.canvas.height = f.size;
+            f.ctx = f.canvas.getContext('2d', { willReadFrequently: true });
+            // A fresh input array per run: in worker (proxy) mode onnxruntime takes the buffer over. The zero run also shows the output layout.
+            const out = await session.run({ [f.inName]: new ort.Tensor('float32', new Float32Array(3 * f.size * f.size), [1, 3, f.size, f.size]) });
+            f.dims = Array.from(out[f.outName].dims);
+            f.status = 'ready';
+          } catch (e) {
+            console.error('Model load failed', file, e);
+            f.status = 'failed'; f.error = String(e && e.message || e);
+          }
+        }
+        const files = Object.keys(need).map(k => Y.files[k]);
+        Y.status = files.some(f => f.status === 'ready') ? 'ready' : 'failed';
+        if (Y.status === 'failed') { Y.error = files.map(f => f.error).filter(Boolean).join('; '); Y.loading = null; }
       } catch (e) {
         console.error('Model load failed', e);
         Y.status = 'failed'; Y.error = String(e && e.message || e); Y.loading = null;
@@ -607,14 +629,34 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     })();
     return Y.loading;
   }
-  async function infer(v) {
-    const S = Y.size, sw = v.videoWidth, sh = v.videoHeight, lb = LD.letterbox(sw, sh, S), ctx = Y.ctx;
+  // Point each station at its model, or leave it on zones. Returns the problems (load failures, class-count mismatches) as banner lines.
+  function assignModels() {
+    const probs = [], bad = {};
+    for (const st of LIST) {
+      st.mdl = null;
+      const m = modelOf(st), f = m && Y.files[m.file];
+      if (!m || !f) continue;
+      if (f.status !== 'ready') { (bad[m.file + '|' + f.error] = bad[m.file + '|' + f.error] || { f: m.file, why: f.error, ids: [] }).ids.push(st.id.toUpperCase()); continue; }
+      const chk = LE.checkModelOutput(f.dims, m.classes.length);
+      if (!chk.ok) { const key = m.file + '|' + (chk.found != null ? chk.found + ' of ' + m.classes.length : 'unknown'); (bad[key] = bad[key] || { f: m.file, found: chk.found, k: m.classes.length, ids: [] }).ids.push(st.id.toUpperCase()); continue; }
+      st.mdl = { file: m.file, classes: m.classes.slice(), f };
+    }
+    for (const b of Object.values(bad)) probs.push(b.why != null ? esc(baseName(b.f)) + ' could not load for ' + b.ids.join(', ') + ': ' + esc(b.why)
+      : esc(baseName(b.f)) + (b.found != null ? ' outputs ' + b.found + ' classes but the config lists ' + b.k + ' for ' + b.ids.join(', ') : ' has an output shape this page cannot read (for ' + b.ids.join(', ') + ')') + '. Those stations stay on zones rules.');
+    return probs;
+  }
+  async function infer(v, mdl) {
+    const f = mdl.f, S = f.size, sw = v.videoWidth, sh = v.videoHeight, lb = LD.letterbox(sw, sh, S), ctx = f.ctx;
     ctx.fillStyle = 'rgb(114,114,114)'; ctx.fillRect(0, 0, S, S);
     ctx.drawImage(v, 0, 0, sw, sh, lb.padX, lb.padY, lb.nw, lb.nh);
     const input = LD.fillTensor(ctx.getImageData(0, 0, S, S).data, S);
-    const out = await Y.session.run({ [Y.inName]: new Y.ort.Tensor('float32', input, [1, 3, S, S]) });
-    const o = out[Y.outName];
-    return LD.decodeOutput(o.data, o.dims, lb, sw, sh, MIN_BOX, 0.7, Y.classes);
+    const out = await f.session.run({ [f.inName]: new Y.ort.Tensor('float32', input, [1, 3, S, S]) });
+    const o = out[f.outName];
+    // End-to-end heads do not show their class count in the shape: a class index outside the config list is a mismatch.
+    if (LE.checkModelOutput(o.dims, mdl.classes.length).kind === 'e2e' && LE.e2eBadClass(o.data, o.dims[1], mdl.classes.length, MIN_BOX)) {
+      const e = new Error(baseName(mdl.file) + ' returned a class number beyond the ' + mdl.classes.length + ' classes in the config'); e.classMismatch = true; throw e;
+    }
+    return LD.decodeOutput(o.data, o.dims, lb, sw, sh, MIN_BOX, 0.7, mdl.classes);
   }
   // One HandLandmarker (IMAGE mode, CPU) in a worker, shared by all stations: a call takes 100 to 200 ms on this laptop.
   function loadHands() {
@@ -651,15 +693,20 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     let k = 0;
     try {
       while (G.modelOn || G.handsOn) {
-        const live = LIST.filter(s => s.source.type !== 'none' && s.video.readyState >= 2 && s.video.videoWidth && !s.video.paused);
+        const live = LIST.filter(s => s.source.type !== 'none' && s.video.readyState >= 2 && s.video.videoWidth && !s.video.paused && ((G.modelOn && s.mdl) || G.handsOn));
         if (!live.length) { await sleep(250); continue; }
         const st = live[k++ % live.length];
-        if (G.modelOn && Y.status === 'ready') {
+        if (G.modelOn && st.mdl) {
           try {
-            const d = await infer(st.video);
+            const d = await infer(st.video, st.mdl);
             st.detsPrev = st.dets; st.dets = d; st.detT = now(); st.modelN++; Y.errs = 0;
           } catch (e) {
             console.error(e);
+            if (e && e.classMismatch) {   // this station's model is the wrong one: back to zones, the others keep going
+              banner('model-' + st.id, esc(e.message) + ' for ' + st.id.toUpperCase() + '. It stays on zones rules.', 'crit');
+              st.mdl = null; st.dets = st.detsPrev = null; st.eng.setModel(null);
+              continue;
+            }
             // Back off, and give up after a few failures in a row instead of spinning.
             if (++Y.errs >= 5) { Y.error = String(e && e.message || e); banner('model', 'The model stopped after repeated errors: ' + esc(Y.error), 'crit'); setModel(false); }
             await sleep(500);
@@ -673,15 +720,18 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     } finally { detecting = false; }
   }
   async function setModel(on) {
-    if (on && !G.config.model) return;
+    if (on && !LIST.some(modelOf)) return;
     G.modelOn = !!on;
     if (G.modelOn) {
       renderToolbar();
       await loadModel();
       if (Y.status !== 'ready') { G.modelOn = false; banner('model', 'The model could not load: ' + esc(Y.error), 'crit'); }
-      else banner('model', '');
+      else { const probs = assignModels(); banner('model', probs.join('<br>'), probs.length ? 'crit' : ''); }
     }
-    for (const st of LIST) { st.eng.setModel(G.modelOn ? Y.classes : null); if (!G.modelOn) { st.dets = st.detsPrev = null; } }
+    for (const st of LIST) {
+      st.eng.setModel(G.modelOn && st.mdl ? st.mdl.classes : null);
+      if (!G.modelOn) { st.dets = st.detsPrev = null; st.mdl = null; banner('model-' + st.id, ''); }
+    }
     renderToolbar();
     if (G.modelOn || G.handsOn) detectLoop();
   }
@@ -890,7 +940,8 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
   });
 
   // ---------- sessions ----------
-  function showStartForm(on) { $('startForm').hidden = !on; if (on) $('fTitle').focus(); }
+  function updateRecWarn() { $('recWarn').hidden = $('startForm').hidden || LIST.some(st => st.recOn && st.source.type !== 'none'); }
+  function showStartForm(on) { $('startForm').hidden = !on; updateRecWarn(); if (on) $('fTitle').focus(); }
   async function startSession(info) {
     if (G.session || G.starting) return;
     G.starting = true;
@@ -1011,7 +1062,9 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     const recNow = st.rec ? `<span class="recd">REC ${fmtMB(st.rec.bytes)}</span>` + (st.rec.dropped ? ` (${st.rec.dropped} chunks lost)` : '') : '';
     const parts = [];
     if (st.source.type !== 'none') parts.push(st.fps.toFixed(1) + ' fps');
-    if (G.modelOn && st.source.type !== 'none') parts.push('model ' + st.modelFps.toFixed(1) + '/s');
+    const mc = modelOf(st);
+    if (G.modelOn && st.mdl) parts.push(esc(baseName(st.mdl.file)) + ' ' + (st.source.type !== 'none' ? st.modelFps.toFixed(1) + '/s' : 'idle'));
+    else parts.push(mc ? 'zones (model ' + esc(baseName(mc.file)) + ' off)' : 'zones');
     parts.push('conf ' + (s.lastConf != null ? s.lastConf.toFixed(2) + ' ' + (s.lastSource || '') : '--'));
     const meta = parts.join(' | ') + (recNow ? ' | ' + recNow : '');
     if (meta !== st.lastMeta) { st.elMeta.innerHTML = meta; st.lastMeta = meta; }
@@ -1048,10 +1101,10 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     if (on) $('sessTitle').textContent = G.session.title || 'Session';
   }
   function renderToolbar() {
-    const m = G.config.model;
+    const m = LIST.some(modelOf);
     const bm = $('btnModel');
     bm.disabled = !m;
-    bm.title = m ? 'Run ' + m.file + ' on every camera in turn' : 'No model yet: set "model" in data/meta/wire-line.json when the model team delivers one';
+    bm.title = m ? 'Run each station\'s model on its camera, one at a time: ' + LIST.map(st => { const x = modelOf(st); return st.id.toUpperCase() + ' ' + (x ? baseName(x.file) : 'zones'); }).join(', ') : 'No model yet: add one under "models" in data/meta/wire-line.json when the model team delivers it';
     bm.textContent = 'Model: ' + (!m ? 'none yet' : Y.status === 'loading' ? 'loading...' : G.modelOn ? 'on' : 'off');
     bm.classList.toggle('on', G.modelOn);
     const bh = $('btnHands');
@@ -1069,6 +1122,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       renderSummary(G.summary);
     }
     for (const st of LIST) renderStation(st, G.summary, t);
+    updateRecWarn();
     if (G.session) {
       $('sessClock').textContent = fmtClock(t - G.session.startedAtMs);
       const bytes = LIST.reduce((a, s) => a + (s.rec ? s.rec.bytes : 0), 0);

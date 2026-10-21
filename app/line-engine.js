@@ -104,10 +104,38 @@
       }
     }
     for (const r of cfg.failReasons || []) if (r.cause != null && !seenSt[r.cause]) errs.push('Fail reason ' + r.id + ' names cause station "' + r.cause + '", which does not exist.');
-    if (cfg.model && (typeof cfg.model.file !== 'string' || !/^\/models\/[A-Za-z0-9_.-]+\.onnx$/.test(cfg.model.file) || !Array.isArray(cfg.model.classes))) {
-      errs.push('model must look like { "file": "/models/<name>.onnx", "classes": [...], "imgsz": 640 }.');
+    if (cfg.model) errs.push(...modelShapeErrors('model', cfg.model));
+    if (cfg.models != null) {
+      if (typeof cfg.models !== 'object' || Array.isArray(cfg.models)) errs.push('models must be an object keyed by station id: { "s1": { "file": "/models/<name>.onnx", "classes": [...] } }.');
+      else for (const id of Object.keys(cfg.models)) {
+        if (!seenSt[id]) { errs.push('models: "' + id + '" is not a station id.'); continue; }
+        if (cfg.models[id]) errs.push(...modelShapeErrors('models.' + id, cfg.models[id]));
+      }
     }
     return errs;
+  }
+
+  // One model entry: { file: "/models/<name>.onnx", classes: [unique strings], imgsz }.
+  function modelShapeErrors(name, m) {
+    const e = [], ex = name + ' must look like { "file": "/models/<name>.onnx", "classes": [...], "imgsz": 640 }.';
+    if (typeof m !== 'object' || Array.isArray(m) || typeof m.file !== 'string' || !/^\/models\/[A-Za-z0-9_.-]+\.onnx$/.test(m.file) || !Array.isArray(m.classes)) return [ex];
+    if (!m.classes.length || m.classes.some(c => typeof c !== 'string' || !c)) e.push(name + ': classes must be a non-empty list of names.');
+    else if (new Set(m.classes).size !== m.classes.length) e.push(name + ': classes must not repeat a name.');
+    return e;
+  }
+  // The model a station runs: its own entry in cfg.models, else the shared cfg.model, else null.
+  function modelFor(cfg, id) { return (cfg && cfg.models && cfg.models[id]) || (cfg && cfg.model) || null; }
+  // Class count from an output shape. Raw head [1, 4 + C, N] gives C; end-to-end [1, N, 6] does not (found null).
+  function checkModelOutput(dims, k) {
+    const d = Array.from(dims || []);
+    if (d.length === 3 && d[2] === 6 && d[1] > 6) return { kind: 'e2e', found: null, ok: true };
+    if (d.length === 3 && d[1] > 4) return { kind: 'raw', found: d[1] - 4, ok: d[1] - 4 === k };
+    return { kind: 'unknown', found: null, ok: false };
+  }
+  // End-to-end head rows (x1, y1, x2, y2, score, class): true if a row at or above minConf has a class index outside 0..k-1.
+  function e2eBadClass(data, n, k, minConf) {
+    for (let i = 0; i < n; i++) if (data[i * 6 + 4] >= minConf) { const c = Math.round(data[i * 6 + 5]); if (c < 0 || c >= k) return true; }
+    return false;
   }
 
   // ---------- QA decision (station 4) ----------
@@ -610,7 +638,7 @@
 
   return {
     DEFAULTS, MOTION, MISMATCH_NOTE, EVENT_TYPES, CYCLE_ACTIONS, SUBSTEP_COLS, CYCLE_COLS,
-    members, activeRule, evalRule, missingOf, ruleText, checkConfig, qaDecide, createStation,
+    members, activeRule, evalRule, missingOf, ruleText, checkConfig, modelFor, checkModelOutput, e2eBadClass, qaDecide, createStation,
     zoneSignals, calibrationFrom, classSignals, handPresence, steadyClasses, mergeSignals,
     sortEvents, detectedCycles, manualCycles, summarize, substepsCsv, cyclesCsv, csvCell
   };

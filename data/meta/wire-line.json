@@ -8,7 +8,13 @@
   "qaGraceSec": 5,
   "defaults": { "activity": 0.1, "bright": 0.5, "class": 0.4 },
   "model": null,
-  "suggestedClasses": ["wire", "stripped_end", "splice", "crimped_splice", "cutter", "stripper", "crimp_tool", "bulb_on", "bulb_off", "battery"],
+  "models": {},
+  "suggestedClasses": {
+    "s1": ["wire", "cutter", "stripper", "stripped_end"],
+    "s2": ["wire", "splice", "crimp_tool", "crimped_splice"],
+    "s3": ["wire", "splice", "crimp_tool", "crimped_splice"],
+    "s4": ["battery", "bulb_on", "bulb_off"]
+  },
   "failReasons": [
     { "id": "strip", "label": "Strip too short or long, or cut strands", "cause": "s1", "defect": true },
     { "id": "crimp_a", "label": "Side A crimp loose or off", "cause": "s2", "defect": true },
