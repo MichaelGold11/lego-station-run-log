@@ -67,6 +67,14 @@ try {
   check('setup with an unknown station name is refused', badSt.status === 400);
   const badZone = await req('PUT', '/api/line/setup', { s1: { zones: { supply: { x: 2, y: 0, w: 0.1, h: 0.1 } } } }, jsonHdr);
   check('setup with a zone outside 0..1 is refused', badZone.status === 400);
+  const ref = { anchor: 'work', classes: { cutter: { x: 0.5, y: 0.4, w: 0.3, h: 0.1, landscape: true } }, frames: 10, saved: '2026-10-21T12:00:00.000Z' };
+  const withRef = await req('PUT', '/api/line/setup', Object.assign({}, setup, { s1: Object.assign({}, setup.s1, { ref }) }), jsonHdr);
+  const gotRef = (await req('GET', '/api/line/setup')).json;
+  check('setup keeps a station\'s saved correct state (ref) for positionCheck', withRef.status === 200 && gotRef.s1.ref && gotRef.s1.ref.anchor === 'work' && gotRef.s1.ref.classes.cutter.y === 0.4 && gotRef.s1.zones.supply, JSON.stringify(gotRef));
+  const badRef = await req('PUT', '/api/line/setup', { s1: { zones: {}, ref: { anchor: 'work', classes: { cutter: { x: 'left' } } } } }, jsonHdr);
+  check('a ref with a box that is not numbers is refused', badRef.status === 400, badRef.text);
+  const oldRef = await req('PUT', '/api/line/setup', Object.assign({}, setup, { s1: Object.assign({}, setup.s1, { ref: Object.assign({}, ref, { anchor: 'gone' }) }) }), jsonHdr);
+  check('a ref on an anchor zone the config no longer has is dropped', oldRef.status === 200 && !oldRef.json.setup.s1.ref, oldRef.text);
 
   console.log('session lifecycle');
   const created = await req('POST', '/api/sessions', { title: 'Dry run', crew: 'Group B', shift: 'Morning', notes: 'test', stations: { s1: { input: 'clip', label: 'Run 1', record: true }, s4: { input: 'none' } } }, jsonHdr);
@@ -138,6 +146,36 @@ try {
   check('GET /api/sessions/:id returns the session with an event count', one.status === 200 && one.json.eventCount === 7);
   const clips = await req('GET', '/api/line/clips');
   check('the clip list offers the recorded session videos', clips.status === 200 && clips.json.clips.some(c => c.key === 'session:' + id + ':s1.webm'));
+
+  console.log('mistake alerts (verdicts)');
+  const v2 = await req('POST', '/api/sessions', { title: 'Checker', stations: { s2: { input: 'clip', label: 'Run 2' } } }, jsonHdr);
+  const vid = v2.json.id, v0 = v2.json.startedAtMs;
+  const vEvents = [
+    { type: 'session_start', t: v0, source: 'page' },
+    { type: 'substep', station: 's2', substep: 's2_pick', move: 'start', source: 'zones', conf: 0.5, t: v0 + 1000, cycle: 1 },
+    { type: 'verdict', station: 's2', t: v0 + 1250, cycle: 1, substep: 's2_pick', kind: 'verified', reason: 'progress', message: 'Step 1 verified: Take a wire pair from the in tray', conf: null, step_s: 0.25, cycle_s: null, videoT: 1.25, videoFile: 's2.mp4' },
+    { type: 'substep', station: 's2', substep: 's2_insert', from: 's2_pick', move: 'jump', source: 'zones', conf: 0.5, t: v0 + 3000, cycle: 1 },
+    { type: 'flag', station: 's2', substep: 's2_get_splice', note: 'skipped Take a splice', source: 'zones', t: v0 + 3000, cycle: 1 },
+    { type: 'verdict', station: 's2', t: v0 + 3250, cycle: 1, substep: 's2_get_splice', kind: 'mistake', reason: 'wrong_order', message: 'Wrong order: Push wire A into the splice before Take a splice (step 2 skipped)', conf: null, step_s: null, cycle_s: null, videoT: 3.25, videoFile: 's2.mp4' },
+    { type: 'verdict', station: 's2', t: v0 + 5000, cycle: 1, substep: 's2_crimp', kind: 'cleared', reason: 'cleared', message: 'Mistake cleared. Continue with Crimp side A', conf: null, step_s: null, cycle_s: null },
+    { type: 'substep', station: 's2', substep: 's2_handoff', from: 's2_insert', move: 'next', source: 'zones', conf: 0.5, t: v0 + 7000, cycle: 1 },
+    { type: 'cycle_end', station: 's2', substep: 's2_handoff', source: 'zones', conf: 0.5, t: v0 + 7000, cycle: 1, dur: 6 },
+    { type: 'verdict', station: 's2', t: v0 + 7250, cycle: 1, substep: 's2_handoff', kind: 'verified', reason: 'complete', message: 'Cycle complete', conf: null, step_s: 6, cycle_s: 6 }
+  ];
+  const vPost = await req('POST', `/api/sessions/${vid}/events`, { events: vEvents }, jsonHdr);
+  check('verdict events are accepted and appended to events.jsonl', vPost.status === 200 && vPost.json.appended === vEvents.length && fs.readFileSync(path.join(DATA, 'sessions', vid, 'events.jsonl'), 'utf8').includes('"type":"verdict"'), vPost.text);
+  const badV = await req('POST', `/api/sessions/${vid}/events`, { events: [{ type: 'verdict', station: 's9', t: v0 + 8000, kind: 'mistake' }] }, jsonHdr);
+  check('a verdict for an unknown station is refused', badV.status === 400);
+  await req('POST', `/api/sessions/${vid}/end`, {}, jsonHdr);
+  const vCsv = await req('GET', `/api/sessions/${vid}/verdicts.csv`);
+  const vLines = vCsv.text.trim().split('\n');
+  check('verdicts.csv downloads with live_check.py\'s columns plus session, station, ts and video', vCsv.status === 200 && /text\/csv/.test(vCsv.headers['content-type']) && /verdicts\.csv/.test(vCsv.headers['content-disposition']) && vLines[0] === 'session_id,station,time,ts,cycle,step,event,message,confidence,step_seconds,cycle_seconds,video_file,video_t', vLines[0]);
+  check('one row per verdict: verified, mistake, cleared, verified', vLines.length === 5 && vLines.slice(1).map(l => l.split(',')[6]).join() === 'verified,mistake,cleared,verified', vCsv.text);
+  check('the mistake row has its step number, message and video position', vLines[2] === `${vid},s2,${new Date(v0 + 3250).toISOString().slice(0, 19)}Z,3.25,1,2,mistake,Wrong order: Push wire A into the splice before Take a splice (step 2 skipped),,,,s2.mp4,3.25`, vLines[2]);
+  const vCyc = (await req('GET', `/api/sessions/${vid}/cycles.csv`)).text.trim().split('\n'), vHead = vCyc[0].split(','), vRow = vCyc[1].split(',');
+  check('cycles.csv counts the cycle\'s mistakes and reviews', vHead.includes('mistakes') && vRow[vHead.indexOf('mistakes')] === '1' && vRow[vHead.indexOf('reviews')] === '0', vCyc.join(' / '));
+  const noV = await req('GET', `/api/sessions/${id}/verdicts.csv`);
+  check('a session without verdicts gives just the header', noV.status === 200 && noV.text.trim().split('\n').length === 1);
 
   console.log('path tricks are refused');
   const outside = path.join(DATA, 'evil.webm');
