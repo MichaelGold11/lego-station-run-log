@@ -559,6 +559,17 @@ let REF = null;
   r.see([r.det('splice', 'crimp', 0.3, { cy: 0.8 })]).busy().play(1500);
   check('a box under 0.35 is ignored (the review clears)', r.last().kind === 'cleared', r.kinds());
 }
+{
+  const r = crig(posStation(), { model: S2_CLASSES });
+  r.chk.setRef(REF);
+  const far = c => [r.det('splice', 'crimp', c, { cx: 0.9 })];
+  r.see(far(0.5)).play(1500);
+  check('dedupe across kinds: a review first ...', r.verdicts.length === 1 && r.last().kind === 'review', r.kinds());
+  r.see(far(0.8)).play(1500);
+  check('...that becomes sure is a new verdict (mistake, sounded)', r.verdicts.length === 2 && r.last().kind === 'mistake', r.kinds());
+  r.see(far(0.55)).play(1500).see(far(0.7)).play(1500).see(far(0.5)).play(1500);
+  check('a showing mistake is not turned back into a review by a less sure look (confidence hovering at 0.60: no new verdicts)', r.verdicts.length === 2 && r.chk.current.kind === 'mistake', r.kinds());
+}
 
 console.log('checker: vote, flicker, clear-view gate, recheck');
 {

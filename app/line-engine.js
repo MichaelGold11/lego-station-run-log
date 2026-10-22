@@ -531,8 +531,9 @@
       return verdict('review', 'flicker', 'Results flickered between checks, take a look', C.pending ? C.pending.idx : st.pos, null, null);
     }
 
-    // Show a verdict and return its event. The same mistake or review again keeps showing, with no new event (so no new sound).
-    // waiting after a mistake or review: "Mistake cleared".
+    // Show a verdict and return its event. The same mistake or review again keeps showing, with no new event (so no new sound),
+    // and a less sure look at a showing mistake (same message, review) does not turn it back into a review: a box whose
+    // confidence hovers around sureConf would otherwise buzz on every flip. waiting after a mistake or review: "Mistake cleared".
     function apply(v, t, st, cycle, extra) {
       const bad = C.show && (C.show.kind === 'mistake' || C.show.kind === 'review');
       if (v.kind === 'waiting') {
@@ -541,7 +542,7 @@
         C.show = null; C.cleared = Object.assign({ t, until: t + o.clearedMs }, c);
         return [event(c, t, cycle)];
       }
-      if (bad && C.show.kind === v.kind && C.show.message === v.message) { C.show.box = v.box || C.show.box; return []; }
+      if (bad && C.show.message === v.message && (C.show.kind === v.kind || (C.show.kind === 'mistake' && v.kind === 'review'))) { C.show.box = v.box || C.show.box; return []; }
       C.show = Object.assign({ t }, v); C.cleared = null;
       const e = event(v, t, cycle, extra);
       if (v.kind === 'verified') { if (C.lastOk != null) e.step_s = round((t - C.lastOk) / 1000, 2); C.lastOk = t; }
