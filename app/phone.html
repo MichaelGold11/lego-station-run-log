@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Wire line camera</title>
+<style>
+:root {
+  --bg: #eef0ee; --surface: #fcfcfb; --ink: #15181b; --ink-2: #4a4f56; --muted: #767b83; --line: #dcdfdc; --line-2: #c5c9c5;
+  --accent: #a3522a; --on-accent: #ffffff; --good: #0ca30c; --good-ink: #006300; --warn: #fab219; --warn-ink: #7a5200; --crit: #d03b3b; --crit-ink: #b02e2e;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #101214; --surface: #181a1d; --ink: #eff1ef; --ink-2: #bfc3c8; --muted: #8a8f96; --line: #2a2e33; --line-2: #3a3f45;
+    --accent: #dc8b55; --on-accent: #15181b; --good-ink: #3fbf3f; --warn-ink: #fab219; --crit-ink: #e66767; }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.4 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; -webkit-text-size-adjust: 100%; }
+.wrap { max-width: 520px; margin: 0 auto; padding: max(14px, env(safe-area-inset-top)) 16px 28px; display: grid; gap: 12px; }
+header { display: flex; align-items: center; gap: 10px; }
+.badge { font: 600 15px ui-monospace, Menlo, monospace; background: var(--ink); color: var(--surface); border-radius: 5px; padding: 2px 8px; }
+h1 { font-size: 21px; margin: 0; font-weight: 650; line-height: 1.15; }
+.status { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 10px; border: 2px solid var(--line-2); background: var(--surface); }
+.status b { font-size: 22px; line-height: 1.15; }
+.status .dot { width: 16px; height: 16px; border-radius: 50%; background: var(--line-2); flex: none; }
+.status[data-k="live"] { border-color: var(--good); background: color-mix(in srgb, var(--good) 12%, var(--surface)); }
+.status[data-k="live"] .dot { background: var(--good); box-shadow: 0 0 0 4px color-mix(in srgb, var(--good) 30%, transparent); animation: blink 1.6s ease-in-out infinite; }
+.status[data-k="wait"] { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--surface)); }
+.status[data-k="wait"] .dot { background: var(--warn); }
+.status[data-k="bad"] { border-color: var(--crit); background: color-mix(in srgb, var(--crit) 9%, var(--surface)); }
+.status[data-k="bad"] .dot { background: var(--crit); }
+@keyframes blink { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .status .dot { animation: none !important; } }
+.sub { margin: -4px 2px 0; color: var(--ink-2); min-height: 1.4em; }
+.btn { font: inherit; font-weight: 600; padding: 12px 16px; border-radius: 9px; border: 1px solid var(--line-2); background: var(--surface); color: var(--ink); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.prev { position: relative; aspect-ratio: 4 / 3; background: #0b0c0d; border-radius: 8px; overflow: hidden; }
+.prev video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.prev .res { position: absolute; left: 8px; bottom: 8px; font: 600 12.5px ui-monospace, Menlo, monospace; color: #fff; background: rgba(15, 17, 19, .72); padding: 2px 7px; border-radius: 4px; }
+.row { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+.row select { flex: 1; min-width: 0; font: inherit; font-weight: 400; padding: 8px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.notes { margin: 0; padding: 0 0 0 20px; display: grid; gap: 6px; color: var(--ink-2); font-size: 15px; }
+.notes .warn { color: var(--warn-ink); font-weight: 600; }
+details { color: var(--ink-2); font-size: 15px; border-top: 1px solid var(--line); padding-top: 10px; }
+summary { font-weight: 600; color: var(--ink); }
+details ol { padding-left: 20px; margin: 8px 0 0; display: grid; gap: 4px; }
+a { color: var(--accent); font-weight: 600; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header><span class="badge" id="badge">--</span><h1 id="title">Station camera</h1></header>
+  <div class="status" id="status" data-k="wait" role="status" aria-live="polite"><span class="dot"></span><b id="stText">Starting...</b></div>
+  <p class="sub" id="stSub"></p>
+  <button class="btn primary" id="btnStart" type="button" hidden>Start the camera</button>
+  <button class="btn primary" id="btnTake" type="button" hidden>Use this phone instead</button>
+  <div class="prev"><video id="prev" muted playsinline autoplay></video><span class="res" id="res" hidden></span></div>
+  <label class="row">Camera <select id="cam" aria-label="Camera"></select></label>
+  <ul class="notes">
+    <li id="wake">Keeping the screen on...</li>
+    <li>Plug the phone in and keep Safari in front on this page. iPhone stops the camera when you switch apps or the screen locks.</li>
+    <li>Mounted flat over the table? Turn on Portrait Orientation Lock in Control Center first, so the picture does not turn.</li>
+  </ul>
+  <details>
+    <summary>Certificate warning every time?</summary>
+    <p>Trust this laptop once and Safari stops warning:</p>
+    <ol>
+      <li><a href="/ca.crt">Download this laptop's certificate</a> and tap Allow.</li>
+      <li>Settings &gt; General &gt; VPN &amp; Device Management: tap the profile, then Install.</li>
+      <li>Settings &gt; General &gt; About &gt; Certificate Trust Settings: turn it on.</li>
+    </ol>
+  </details>
+</main>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* private mode */ } }
+  };
+  const q = new URLSearchParams(location.search), S = (q.get('s') || '').toLowerCase(), K = q.get('k') || '', SID = S.toUpperCase();
+  // This page's id: the server tells "another phone took the station" apart from "your own older offer".
+  const CLIENT = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => (b % 36).toString(36)).join('');
+  const api = (p, extra) => '/phone/' + p + '?s=' + encodeURIComponent(S) + '&k=' + encodeURIComponent(K) + (extra || '');
+  // P: the camera, the connection to /line and what to show. id: the current offer (null = send a new one).
+  const P = { stream: null, pc: null, id: null, applied: false, answeredAt: 0, discAt: 0, live: false, laptop: '', net: true, netHint: false,
+    looping: false, offering: false, replaced: false, expired: false, camErr: '', lock: null, wake: '', label: '' };
+
+  // ---------- status ----------
+  function show(kind, text, sub) { $('status').dataset.k = kind; $('stText').textContent = text; $('stSub').textContent = sub || ''; }
+  function render() {
+    $('btnStart').hidden = !P.camErr; $('btnTake').hidden = !P.replaced;
+    if (P.camErr) show('bad', 'The camera did not open', P.camErr);
+    else if (P.replaced) show('bad', 'Another phone is now ' + SID + '\'s camera', 'This phone stopped sending. Tap below to take the station back.');
+    else if (P.expired) show('bad', 'This link is old', 'The laptop has a new pairing code. Scan the QR code on /line again.');
+    else if (!P.net) show('bad', 'Cannot reach the laptop', 'Is this phone on the same Wi-Fi as the laptop, and is npm start running? Trying again...');
+    else if (P.live) show('live', 'LIVE: ' + SID + ' is streaming', 'Keep Safari open on this page.');
+    else if (P.discAt) show('wait', 'Connection unstable', 'Reconnecting...');
+    else if (P.netHint) show('bad', 'The video cannot get through', 'The laptop found this phone, but the network blocks video between devices (common on campus Wi-Fi). Use a home router or a Personal Hotspot. Trying again...');
+    else if (P.laptop === 'closed') show('wait', 'Waiting for the laptop', 'Open /line on the laptop.');
+    else if (P.laptop === 'not_picked') show('wait', 'Waiting for the laptop', 'On /line, pick iPhone as the source for ' + SID + '.');
+    else if (P.applied) show('wait', 'Connecting...', '');
+    else show('wait', 'Connecting to the laptop...', '');
+    const tr = P.stream && P.stream.getVideoTracks()[0], s = tr ? tr.getSettings() : {};
+    $('res').hidden = !tr;
+    if (tr) $('res').textContent = (s.width && s.height ? s.width + 'x' + s.height : '') + (s.frameRate ? ' | ' + Math.round(s.frameRate) + ' fps' : '');
+  }
+  function renderWake() {
+    const el = $('wake');
+    el.className = P.wake === 'on' ? '' : 'warn';
+    el.textContent = P.wake === 'on' ? 'The screen stays on while this page is open. Auto-Lock set to Never is the safe bet.'
+      : P.wake === 'tap' ? 'Tap the screen once so it stays on, or set Settings > Display & Brightness > Auto-Lock to Never.'
+      : 'Set Settings > Display & Brightness > Auto-Lock to Never: this iPhone cannot keep the screen on by itself.';
+  }
+
+  // ---------- camera ----------
+  // Ask for what /line asks of its cameras: 640x480 at 15 fps. The back wide camera unless one was picked here.
+  async function startCamera(deviceId) {
+    if (P.stream) { P.stream.getTracks().forEach(t => t.stop()); P.stream = null; }    // iPhone opens one camera at a time
+    const base = { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 15 } };
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ video: Object.assign(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: 'environment' } }, base), audio: false }); }
+    catch (e) {
+      if (!deviceId || (e.name !== 'OverconstrainedError' && e.name !== 'NotFoundError')) throw e;
+      stream = await navigator.mediaDevices.getUserMedia({ video: Object.assign({ facingMode: { ideal: 'environment' } }, base), audio: false });
+    }
+    P.stream = stream; P.camErr = '';
+    const track = stream.getVideoTracks()[0];
+    track.onended = () => { if (P.stream === stream) setTimeout(() => recover(), 500); };
+    P.label = track.label || 'Camera';
+    $('prev').srcObject = stream;
+    $('prev').play().catch(() => {});
+    try {
+      const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput'), cur = track.getSettings().deviceId;
+      $('cam').innerHTML = devs.map((d, i) => `<option value="${esc(d.deviceId)}">${esc(d.label || 'Camera ' + (i + 1))}</option>`).join('');
+      if (cur) $('cam').value = cur;
+    } catch (e) { /* the list is a nicety */ }
+    return track;
+  }
+  function camError(e) {
+    const n = e && e.name;
+    P.camErr = n === 'NotAllowedError' ? 'Camera access is off. Tap aA in the address bar, Website Settings, Camera: Allow. Then tap Start.'
+      : n === 'NotReadableError' ? 'Another app is using the camera. Close it, then tap Start.'
+      : 'Error: ' + (n || e) + '. Tap Start to try again.';
+    render();
+  }
+  // A camera that stopped (a call, Safari in the background): open it again and hand the new track to the connection.
+  async function recover() {
+    try {
+      const track = await startCamera(store.get('wire-line-phone:cam'));
+      const snd = P.pc && P.live && P.pc.getSenders()[0];
+      if (snd) await snd.replaceTrack(track); else P.id = null;
+    } catch (e) { camError(e); }
+    render();
+  }
+  $('cam').onchange = async () => {
+    store.set('wire-line-phone:cam', $('cam').value);
+    await recover();
+  };
+  $('btnStart').onclick = () => { keepAwake(); boot(); };
+  $('btnTake').onclick = () => { P.replaced = false; P.id = null; render(); loop(); };
+
+  // ---------- connection to /line (WebRTC, sendonly; the server only passes the offer and the answer) ----------
+  function closePc() {
+    if (P.pc) { const pc = P.pc; P.pc = null; pc.onconnectionstatechange = pc.oniceconnectionstatechange = null; try { pc.close(); } catch (e) { /* closed */ } }
+    P.live = false; P.applied = false; P.discAt = 0;
+  }
+  // Non-trickle: wait until the candidates are gathered (no STUN: only this phone's own addresses), then send the whole offer.
+  function gathered(pc, ms) {
+    return new Promise(resolve => {
+      if (pc.iceGatheringState === 'complete') return resolve();
+      const done = () => { if (pc.iceGatheringState === 'complete') resolve(); };
+      pc.addEventListener('icegatheringstatechange', done);
+      setTimeout(resolve, ms);
+    });
+  }
+  function onState(pc) {
+    if (pc !== P.pc) return;
+    const cs = pc.connectionState || ({ checking: 'connecting', completed: 'connected' }[pc.iceConnectionState] || pc.iceConnectionState);
+    if (cs === 'connected') { P.live = true; P.discAt = 0; P.netHint = false; }
+    else if (cs === 'disconnected') { if (!P.discAt) P.discAt = Date.now(); }
+    else P.live = false;
+    render();
+  }
+  async function offer() {
+    if (P.offering) return;
+    P.offering = true;
+    try {
+      closePc();
+      let track = P.stream && P.stream.getVideoTracks()[0];
+      if (!track || track.readyState !== 'live') {
+        try { track = await startCamera(store.get('wire-line-phone:cam')); } catch (e) { throw Object.assign(new Error('camera'), { camera: e }); }
+      }
+      const pc = P.pc = new RTCPeerConnection({ iceServers: [] });
+      pc.addTransceiver(track, { direction: 'sendonly', streams: [P.stream] });
+      pc.onconnectionstatechange = pc.oniceconnectionstatechange = () => onState(pc);
+      await pc.setLocalDescription(await pc.createOffer());
+      await gathered(pc, 3000);
+      if (P.pc !== pc) return;
+      const s = track.getSettings();
+      const r = await fetch(api('offer'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client: CLIENT, sdp: pc.localDescription.sdp, camera: P.label, settings: { width: s.width, height: s.height, frameRate: s.frameRate } }) });
+      if (r.status === 403) { P.expired = true; return; }
+      if (!r.ok) throw new Error('offer ' + r.status);
+      const j = await r.json();
+      P.id = j.id; P.laptop = j.laptop; P.net = true;
+    } finally { P.offering = false; }
+  }
+  // One loop: send an offer when there is none, else poll for the answer (fast) or as a heartbeat (every 2 s when live).
+  async function loop() {
+    if (P.looping) return;
+    P.looping = true;
+    try {
+      while (!P.replaced && !P.expired && !P.camErr) {
+        let wait = 500;
+        try {
+          if (!P.id) await offer();
+          else {
+            const r = await fetch(api('poll', '&id=' + P.id + '&c=' + CLIENT), { cache: 'no-store' });
+            if (r.status === 403) { P.expired = true; break; }
+            const j = await r.json();
+            P.net = true; P.laptop = j.laptop;
+            if (j.state === 'replaced') { P.replaced = true; closePc(); if (P.stream) P.stream.getTracks().forEach(t => t.stop()); P.stream = null; break; }
+            // /line let go (a reload, another source picked): send a new offer. 'unknown' means the laptop's server
+            // restarted and forgot this offer; a live connection does not need the server, so it keeps going.
+            if (j.state === 'dropped' || (j.state === 'unknown' && !P.live)) { P.id = null; wait = 200; }
+            else if (j.state === 'answered' && !P.applied && P.pc) { P.applied = true; P.answeredAt = Date.now(); await P.pc.setRemoteDescription({ type: 'answer', sdp: j.answer }); }
+            const t = Date.now(), cs = P.pc ? P.pc.connectionState : '';
+            if (P.applied && !P.live && !P.discAt && t - P.answeredAt > 20000) { P.netHint = true; P.id = null; }    // answered, never connected: the network blocks it
+            if (cs === 'failed' || (P.discAt && t - P.discAt > 6000)) P.id = null;
+            if (P.id && P.live) wait = 2000;
+          }
+        } catch (e) {
+          if (e && e.camera) { camError(e.camera); break; }
+          // fetch fails with a TypeError when the laptop cannot be reached: keep the offer and try again. Anything else
+          // (a bad answer, a connection that would not start) gets a new offer.
+          if (e instanceof TypeError) P.net = false; else { console.warn(e); P.id = null; }
+          wait = 2000;
+        }
+        render();
+        await sleep(wait);
+      }
+    } finally { P.looping = false; render(); }
+  }
+
+  // ---------- screen on, Safari in front ----------
+  async function keepAwake() {
+    if (!('wakeLock' in navigator)) { P.wake = 'none'; return renderWake(); }
+    if (P.lock && !P.lock.released) return;
+    try {
+      P.lock = await navigator.wakeLock.request('screen');
+      P.wake = 'on';
+      P.lock.addEventListener('release', () => { P.wake = 'tap'; renderWake(); });
+    } catch (e) { P.wake = 'tap'; }
+    renderWake();
+  }
+  window.addEventListener('pointerdown', () => { if (P.wake !== 'on') keepAwake(); }, true);
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState !== 'visible') return;
+    keepAwake();
+    // iPhone pauses the camera while Safari is in the background; give it a moment to resume, else open it again.
+    await sleep(1500);
+    const tr = P.stream && P.stream.getVideoTracks()[0];
+    if (!P.replaced && !P.camErr && (!tr || tr.readyState === 'ended' || tr.muted)) recover();
+  });
+  window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); });    // back from the page cache: its connection is gone
+
+  // ---------- start ----------
+  async function boot() {
+    if (!window.isSecureContext || !navigator.mediaDevices || !window.RTCPeerConnection) {
+      show('bad', 'This browser cannot send the camera from here', 'Open the link from the QR code in Safari (iOS 15 or newer).');
+      return;
+    }
+    try {
+      const r = await fetch(api('hello'), { cache: 'no-store' });
+      if (r.status === 403) { P.expired = true; render(); return; }
+      const j = await r.json();
+      $('badge').textContent = SID; $('title').textContent = j.label || 'Station ' + SID; document.title = SID + ' camera';
+      P.laptop = j.laptop;
+    } catch (e) { P.net = false; }
+    try { await startCamera(store.get('wire-line-phone:cam')); } catch (e) { camError(e); return; }
+    render();
+    loop();
+  }
+  $('badge').textContent = SID;
+  keepAwake();
+  boot();
+
+  // tests and the console
+  window.__phone = { P, get state() { return P.pc ? P.pc.connectionState : 'none'; } };
+})();
+</script>
+</body>
+</html>
