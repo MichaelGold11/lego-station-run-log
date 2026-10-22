@@ -98,6 +98,7 @@
           }
         }
         if (sub.model && sub.model.mustStay != null && typeof sub.model.mustStay !== 'boolean') errs.push(sub.id + ': mustStay must be true or false.');
+        if (sub.standardSec != null && !(isNum(sub.standardSec) && sub.standardSec > 0)) errs.push(sub.id + ': standardSec must be a number of seconds above 0.');
       }
       const pc = st.positionCheck;
       if (pc != null) {
@@ -116,6 +117,16 @@
     }
     for (const r of cfg.failReasons || []) if (r.cause != null && !seenSt[r.cause]) errs.push('Fail reason ' + r.id + ' names cause station "' + r.cause + '", which does not exist.');
     if (cfg.sounds != null && (typeof cfg.sounds !== 'object' || Array.isArray(cfg.sounds) || (cfg.sounds.verified != null && typeof cfg.sounds.verified !== 'boolean'))) errs.push('sounds must look like { "verified": true }.');
+    if (cfg.taktSec != null && !(isNum(cfg.taktSec) && cfg.taktSec > 0)) errs.push('taktSec must be a number of seconds above 0, or null.');
+    const db = cfg.dashboard;
+    if (db != null) {
+      if (typeof db !== 'object' || Array.isArray(db)) errs.push('dashboard must look like { "slowFactor": 1.3, "photoConf": 0.6, "reviewDays": 7, "mediaCapMB": 1024 }.');
+      else {
+        if (db.slowFactor != null && !(isNum(db.slowFactor) && db.slowFactor > 1)) errs.push('dashboard.slowFactor must be a number above 1.');
+        if (db.photoConf != null && !(isNum(db.photoConf) && db.photoConf > 0 && db.photoConf <= 1)) errs.push('dashboard.photoConf must be a number above 0 and at most 1.');
+        for (const k of ['reviewDays', 'mediaCapMB']) if (db[k] != null && !(isNum(db[k]) && db[k] > 0)) errs.push('dashboard.' + k + ' must be a number above 0.');
+      }
+    }
     if (cfg.model) errs.push(...modelShapeErrors('model', cfg.model));
     if (cfg.models != null) {
       if (typeof cfg.models !== 'object' || Array.isArray(cfg.models)) errs.push('models must be an object keyed by station id: { "s1": { "file": "/models/<name>.onnx", "classes": [...] } }.');

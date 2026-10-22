@@ -44,6 +44,14 @@ console.log('config');
   const bad = JSON.parse(JSON.stringify(CFG));
   bad.stations[1].substeps[1].zones.zone = 'nowhere';
   check('a rule that names a missing zone is reported', LE.checkConfig(bad).some(m => /nowhere/.test(m)));
+  const dash = JSON.parse(JSON.stringify(CFG));
+  dash.taktSec = 12; dash.stations[1].substeps[2].standardSec = 4;
+  check('taktSec, standardSec and the dashboard block pass the config check', LE.checkConfig(dash).length === 0, LE.checkConfig(dash).join(' | '));
+  dash.taktSec = -1; dash.stations[1].substeps[2].standardSec = 'fast';
+  dash.dashboard = { slowFactor: 0.9, photoConf: 2, reviewDays: 0, mediaCapMB: 'lots' };
+  const de = LE.checkConfig(dash).join(' | ');
+  check('bad taktSec, standardSec and dashboard values are reported', /taktSec must be/.test(de) && /standardSec must be/.test(de) && /slowFactor must be/.test(de) && /photoConf must be/.test(de) && /reviewDays must be/.test(de) && /mediaCapMB must be/.test(de), de);
+  check('a dashboard block that is a list is reported', LE.checkConfig(Object.assign({}, CFG, { dashboard: [] })).some(m => /dashboard must look like/.test(m)));
 }
 
 console.log('per-station models');
