@@ -1,7 +1,7 @@
 # Team guide: using the wire line platform
 
-Everything runs in one page on a laptop, http://localhost:4173/line. It records all four stations
-at once, keeps the answer key, exports the data, runs each station's own trained model once you
+Everything runs in one page on a laptop, http://localhost:4173/line. The cameras are four USB
+cameras or four iPhones (or a mix). It records all four stations at once, keeps the answer key, exports the data, runs each station's own trained model once you
 add it, and alerts the operator to mistakes. This guide is the step-by-step for the team. The technical reference (event fields,
 CSV columns, config rules, known limits) is [wire-line-process.md](wire-line-process.md). The
 "why" behind each stage is the Station Vision Playbook doc.
@@ -63,6 +63,29 @@ the matching section here.
 
 Keep the page in the front tab the whole time; a background tab slows to about one check per
 second.
+
+### iPhones instead of USB cameras
+
+Steps 1 and 2 change; everything after them is the same.
+
+1. **Get each phone ready.** Settings > Display & Brightness > Auto-Lock: **Never**. Plug it in.
+   If it will lie flat over the table, turn on **Portrait Orientation Lock** in Control Center.
+2. **Same network.** The laptop and all four phones join the same Wi-Fi. If that is campus Wi-Fi
+   and the phones say "The video cannot get through", use a home router or one phone's Personal
+   Hotspot instead (that phone can be one of the cameras).
+3. **Pick iPhone.** On `/line`, set each station's source to **iPhone (scan a QR code)**. The
+   tile shows a QR code for that station.
+4. **Scan.** Point the station's iPhone Camera app at its tile's QR code and tap the link. Safari
+   warns that the connection is not private: tap **Show Details**, then **visit this website**.
+   Allow the camera. The phone says **LIVE** in green and the tile shows its video.
+5. **Mount it** straight above the station and keep Safari open on that page. Then draw the
+   zones and go on with step 3 above.
+
+Each station has its own QR code, and the codes keep working after a restart, so you scan once.
+**New pairing code** (toolbar, two clicks) makes new ones and cuts off every phone; use it if a
+link got out. A phone that drops reconnects by itself; its tile says "Phone lost" until it is back.
+Trusting the laptop's certificate on a phone is optional (the phone page shows how); it stops the
+warning, and it only lets this laptop vouch for itself, never for other websites.
 
 ## 4. Mistake alerts
 
@@ -183,6 +206,12 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions and expor
 | No alert sounds | Click anywhere on the page once, check that **Sound** is on and the station is not on **Mute** |
 | A MISTAKE at the start of many units | The first step's zone missed the hand: make that zone cover where the hand goes |
 | A MISTAKE card never clears | Take your hands fully out of view, and check that nothing moves in the zones (a fan, a screen, a shadow) |
+| The phone cannot open the link | Phone and laptop on the same Wi-Fi? `npm start` running? On an iPhone hotspot use the `.local` link (the default). Try another address from the **Address** list under the QR code |
+| The phone says "The video cannot get through" | The network blocks devices from reaching each other (common on campus Wi-Fi). Use a home router or a Personal Hotspot |
+| The phone says "This link is old" | Someone pressed **New pairing code**. Scan the station's QR code again |
+| A tile says "Phone lost" | Bring Safari back to the front on that phone and unlock it. It reconnects by itself |
+| The Mac asks about incoming connections for `node` | Allow it, or the phones cannot reach the laptop |
+| The phone picture turns sideways | Turn on Portrait Orientation Lock on the phone, then reload its page |
 
 ## 10. Still open
 
@@ -190,3 +219,5 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions and expor
 - Who owns the run-day laptop.
 - A model class for the S4 "Unclip" step.
 - Four real USB cameras on one laptop have not been tested yet.
+- iPhones: one real iPhone reached the camera page over a hotspot; a real iPhone streaming into
+  `/line`, four at once, and campus Wi-Fi are not tested yet.

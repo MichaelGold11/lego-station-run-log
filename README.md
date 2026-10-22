@@ -34,6 +34,8 @@ Open http://localhost:4173. `npm install` fetches two browser libraries for the 
 
 The wire line dashboard (four stations, four cameras, one laptop, one model per station) is at
 http://localhost:4173/line. It records cycle and substep times, QA results and every camera's video for training.
+The cameras can be USB cameras or iPhones: `npm start` also runs an HTTPS page for phones on port 4174, and each
+station's tile shows a QR code for its phone (needs `openssl`, which macOS and Git for Windows include).
 **Team step-by-step** (run day, training your station's model, adding it, testing it):
 [docs/team-guide.md](docs/team-guide.md). Technical reference: [docs/wire-line-process.md](docs/wire-line-process.md).
 
@@ -115,6 +117,7 @@ Times are approximate to about ±0.1 s.
 | `server.mjs` | Local server (`npm start`). |
 | `app/live-detect.js`, `app/models/` | Live page: YOLO pre and post processing, signal mapping, build check, and the models (see `app/models/README.md`). |
 | `app/line.html`, `app/line-engine.js` | Wire line dashboard (`/line`) and its config-driven engine. The process is `data/meta/wire-line.json`, which also lists one ONNX model per station under `models`. |
+| `app/phone.html`, `scripts/phone-cert.mjs` | iPhone camera page (HTTPS, port 4174) and its local certificate. The certificate and pairing secret live in `data/phone-cert/` (not committed). |
 | `data/sessions/` | Wire line sessions: events, CSVs and one video per station. Not committed (about 1 GB per hour). |
 | `scripts/runlog.mjs` | Command-line helper: `npm run runlog -- help`. |
 | `data/runs/` | One JSON file per run. |
@@ -124,6 +127,7 @@ Times are approximate to about ±0.1 s.
 ## Troubleshooting
 
 - **Port 4173 is busy:** `PORT=5000 npm start` (PowerShell: `$env:PORT=5000; npm start`).
+- **Port 4174 (iPhone cameras) is busy:** `PHONE_PORT=4175 npm start`, or `PHONE_PORT=off npm start` without iPhones.
 - **"ffmpeg is not installed or not on PATH":** install it (table above), then open a new
   terminal.
 - **The page says the local server isn't answering:** `npm start` stopped; start it again.

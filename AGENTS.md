@@ -41,6 +41,9 @@ CSV columns, model export contract) is [docs/wire-line-process.md](docs/wire-lin
 | `data/meta/wire-line.json` | The process: stations, zones, substeps, fail reasons, and `models` (one entry per station) |
 | `app/models/` | Model files (`.onnx`) the page loads |
 | `data/sessions/<id>/` | Recorded sessions (video per station, `events.jsonl`). Git-ignored, about 1 GB per hour |
+| `app/phone.html` | iPhone camera page, served over HTTPS on port 4174 (`PHONE_PORT`) by `server.mjs`; streams to `/line` over WebRTC |
+| `scripts/phone-cert.mjs` | Local name-constrained CA and HTTPS certificate for the phone page (`node scripts/phone-cert.mjs` checks them) |
+| `data/phone-cert/` | This laptop's CA key, certificate and iPhone pairing secret. Git-ignored |
 
 Rules for the wire line:
 
@@ -49,7 +52,10 @@ Rules for the wire line:
 - `classes` lists the model's classes in training order. The page refuses a list whose length
   does not match the model's output.
 - Change the process in `data/meta/wire-line.json`, not in code.
-- Never commit `data/sessions/` or `data/meta/wire-line-setup.json` (this laptop's zones).
+- Never commit `data/sessions/`, `data/meta/wire-line-setup.json` (this laptop's zones) or
+  `data/phone-cert/` (the CA key and the iPhone pairing secret).
+- The phone port serves only the phone page, `/ca.crt` and `/phone/*`. Keep everything else
+  (data, sessions, models, `/api/*`) on the localhost server.
 - Run `npm run test:line` before committing; it must pass. Share changes on a branch with a pull
   request.
 

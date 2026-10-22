@@ -155,13 +155,74 @@ First-pass yield = passes / (passes + defect fails). Test setup fails are left o
 No camera handy? Pick a **recorded clip** as a station's source (they loop at normal speed). Past
 session recordings are in the same list, which is also how a new model can re-score old footage.
 
+## iPhones as station cameras
+
+Any station can use an iPhone instead of a USB camera, so four iPhones can run the whole line with
+nothing plugged into the laptop. Pick **iPhone (scan a QR code)** as the station's source: the tile
+shows a QR code. Scan it with that station's iPhone (the Camera app), open the link in Safari, allow
+the camera, and within a few seconds the tile shows the phone's video. From then on the phone is
+the station's camera like any other: zones, Calibrate, the model, mistake alerts and Rec all work
+the same.
+
+How it works:
+
+- `npm start` runs a second, HTTPS listener for the phones on port **4174** (`PHONE_PORT`; set
+  `PHONE_PORT=off` to turn it off). iPhone Safari only opens the camera on a secure page, so it has
+  its own certificate. It answers on every network address (IPv6 and IPv4) but serves only the
+  phone page, its certificate download and the phone half of the connection setup. The app, the
+  data, the sessions and the models stay on http://localhost:4173, which the network cannot reach.
+- The video goes straight from the phone to the laptop's browser over the local network (WebRTC).
+  It never leaves the network; the server only passes one offer and one answer per connection.
+- The phone sends its back camera at 640x480 and 15 fps, the same as the USB cameras. The tile's
+  chip and footer show what it actually sends ("iPhone sends 640x480 at 15 fps").
+- **Each station has its own link and key** (`k=` in the link), so S1's link cannot be edited into
+  S2's. The keys come from a secret saved in `data/phone-cert/pairing-secret`, so links and QR codes
+  keep working when `npm start` restarts: phones only scan again after **New pairing code** (the
+  toolbar; two clicks). That makes new keys for every station, cuts off every phone, and the old
+  links stop working.
+- If a phone drops (Safari closed, the phone locked, the network hiccups), its tile says "Phone
+  lost" after about 10 to 15 seconds and shows the QR code again. The station counts as no video
+  (a `source_change` to `none` with the note "iPhone lost"), its open cycle is dropped, and Rec
+  stops that part. The phone page reconnects by itself as soon as it can; Rec then starts a new part
+  (`s1-2.mp4`). Reloading the phone page or `/line` also reconnects by itself.
+- Another phone that opens the same station's link takes over that station; the first one stops
+  and offers "Use this phone instead".
+
+The link: the QR code uses the laptop's Bonjour name, like
+`https://michaels-macbook-pro.local:4174/phone?s=s1&k=...`. That name keeps working when the
+laptop's address changes. The **Address** list under the QR code also offers the laptop's raw
+addresses (an IPv6 address shows in brackets) in case a phone cannot find the name.
+
+**The certificate warning.** The first time, Safari says the connection is not private: tap **Show
+Details**, then **visit this website**, and confirm. That is the normal path. Optionally, a phone
+can trust the laptop's certificate once instead (the phone page explains how: download it, install
+the profile, turn it on in Certificate Trust Settings). Trusting it only lets this laptop vouch for
+its own `.local` name and private network addresses, never for any other website. It only stops the
+warning on the `.local` link; links by a public address (like a hotspot's IPv6 address) always warn.
+The certificate files are in `data/phone-cert/` (git-ignored; `ca.key` never leaves the laptop).
+`node scripts/phone-cert.mjs` checks them and prints what they cover. The server certificate is
+remade by itself when the laptop's addresses change.
+
+**Phone setup.** On each iPhone: Settings > Display & Brightness > Auto-Lock: **Never**; keep it
+plugged in; keep Safari in front on the camera page (iPhone stops the camera when Safari goes to the
+background or the screen locks); and if it is mounted flat over the table, turn on **Portrait
+Orientation Lock** in Control Center first so the picture does not turn.
+
+**The network.** The phones and the laptop must be on the same network, and that network must let
+devices reach each other. Campus Wi-Fi often blocks that: the phone then says "The video cannot get
+through". Free fallbacks: a home router, or a phone's Personal Hotspot that the laptop and the other
+phones join. Michael's carrier gives an IPv6-only hotspot, so use the `.local` link there (the
+laptop's IPv4 address on it is a placeholder that phones cannot reach). The hotspot iPhone can also
+be one of the four cameras; it reaches the laptop the same way. Test the network the day before.
+On a Mac, allow incoming connections for `node` if the firewall asks.
+
 ## What a session produces
 
 Folder `data/sessions/<id>/` (git-ignored), id like `20261015-233956-7509`:
 
 | File | What it holds |
 |---|---|
-| `session.json` | title, crew, shift, notes, start and end, which source each station had, a copy of the config and of the zones, per-station recordings (start time, chunks, bytes, any gaps), and a summary at the end |
+| `session.json` | title, crew, shift, notes, start and end, which source each station had (`camera`, `clip`, `phone` or `none`), a copy of the config and of the zones, per-station recordings (start time, chunks, bytes, any gaps), and a summary at the end |
 | `events.jsonl` | one event per line, appended as they happen (sort by `t`) |
 | `s1.mp4` ... `s4.mp4` | each station's video (`.webm` on browsers without MP4 recording). `s1-2.mp4` is a second part if the source changed or Rec was switched off and on |
 
@@ -185,7 +246,7 @@ Exports: `/api/sessions/<id>/substeps.csv`, `/cycles.csv`, `/verdicts.csv` and `
 | `result`, `reason` | QA result (`pass`, `fail`, `unknown`) and fail reason id |
 | `light`, `bin` | bulb seen lit (`true`, `false`, `null` = bulb zone not usable), bin seen (`pass`, `fail`, `null`) |
 | `action` | manual button: `cycle_done`, `pass`, `fail` |
-| `input` | on `source_change`: `camera`, `clip` or `none` |
+| `input` | on `source_change`: `camera`, `clip`, `phone` or `none`. An iPhone counts as `phone` only while it is connected: picking it, losing it or cutting it off is `none` (the note says "iPhone (waiting for the phone)", "iPhone lost" or "iPhone cut off: new pairing code") |
 | `note` | flag text ("skipped ...", "quality mismatch, review the video"), or the source label |
 | `kind` | on a verdict: `verified`, `mistake`, `review` or `cleared` |
 | `reason` | on a verdict: `progress`, `complete`, `low_confidence`, `wrong_order`, `missing`, `wrong_position`, `turned`, `flicker` or `cleared` |
@@ -294,3 +355,9 @@ with a class number beyond your list drops that station back to zones with the s
   it with `ffmpeg -i s1.webm -c copy s1-fixed.webm` if a player cannot seek.
 - WIP counts start at zero, so units already sitting in trays when the session starts are not
   counted, and a missed detection shows up as a negative WIP.
+- iPhones: tested with Chrome's fake cameras as four phones (two by the `.local` name, two by the
+  IPv6 address), including reloads, a lost phone and an 8 second recording. A real iPhone has been
+  tested up to the camera page (over the IPv6-only hotspot, by the `.local` name); a real iPhone
+  streaming into `/line`, four at once, and the picture's orientation when a phone lies flat are
+  not tested yet.
+- A lost iPhone takes about 10 to 15 seconds to show as lost (WebRTC waits that long before giving up).
