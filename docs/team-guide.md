@@ -1,8 +1,8 @@
 # Team guide: using the wire line platform
 
 Everything runs in one page on a laptop, http://localhost:4173/line. It records all four stations
-at once, keeps the answer key, exports the data, and runs each station's own trained model once
-you add it. This guide is the step-by-step for the team. The technical reference (event fields,
+at once, keeps the answer key, exports the data, runs each station's own trained model once you
+add it, and alerts the operator to mistakes. This guide is the step-by-step for the team. The technical reference (event fields,
 CSV columns, config rules, known limits) is [wire-line-process.md](wire-line-process.md). The
 "why" behind each stage is the Station Vision Playbook doc.
 
@@ -64,7 +64,48 @@ the matching section here.
 Keep the page in the front tab the whole time; a background tab slows to about one check per
 second.
 
-## 4. Share the footage
+## 4. Mistake alerts
+
+Each station checks the steps as they happen (Ruza's step checker, built into the page) and says
+so with a sound and on its tile.
+
+| You hear | You see | What it means |
+|---|---|---|
+| One short high chirp | A green box for 2 seconds | A step was seen done right. At the end of a unit: "Cycle complete" |
+| Three beeps | A red box and a flashing **MISTAKE** card | A step was skipped or done out of order, a part that must stay went missing, or a part is in the wrong spot or turned |
+| One low beep | An amber box and a **NEEDS REVIEW** card | The model is not sure (under 60%), or its last checks disagreed. Take a look |
+| Nothing | A green **CLEARED** card for about 3 seconds | The problem is gone: "Mistake cleared. Continue with" the next step |
+
+On a MISTAKE:
+
+1. Fix it: do the skipped step, put the part back, or move or turn it.
+2. Move your hands out of the camera view and hold still for a moment. The station checks again
+   once its view is clear (no hand in view when Hands is on, nothing moving in its zones), and
+   every second while the card shows. The checklist row it is about says "Mistake - fix and clear
+   the view".
+3. The card stays until a check finds it fixed (CLEARED) or the next step replaces it. The same
+   mistake does not beep twice.
+
+Sound: **Sound** in the toolbar turns every station's sounds on or off (on by default). **Mute** on
+a station silences only that station. Sound starts after the first click on the page, because
+browsers block it before that. To keep the beeps but drop the chirp on every correct step, set
+`"sounds": { "verified": false }` in `data/meta/wire-line.json`.
+
+Without its model a station only catches skipped steps. "Looks done but I'm not sure", a missing
+part and a part in the wrong spot need **Model: on** and that station's model, and only a station
+whose config has a position check gets the **Save correct state** button:
+
+1. Build one unit correctly and turn the model on.
+2. Take your hands away, open **Setup** on that station and press **Save correct state**. It
+   saves where each listed part sits in the station's anchor zone, on this laptop, like the zones.
+3. Live, a part more than 14% of the zone away from its saved spot is "in the wrong position", and
+   one that turned from lying wide to standing tall (or the reverse) is "turned the wrong way".
+   Redrawing the anchor zone drops the saved state: press Save correct state again.
+
+Every alert goes into the session's **verdicts.csv** (under **Sessions and exports**), and
+**cycles.csv** counts the mistakes and reviews of each unit.
+
+## 5. Share the footage
 
 - Each session saves a folder `data/sessions/<id>/`: one video per station (`s1.mp4` to `s4.mp4`),
   `events.jsonl` (every detected step and key press, with the time into each video) and
@@ -73,7 +114,7 @@ second.
   commit it to git (the folder is git-ignored).
 - Each trainer takes their own station's video: `s1.mp4` for S1, `s2.mp4` for S2, and so on.
 
-## 5. Train your station's model
+## 6. Train your station's model
 
 1. **Use your station's classes.** Label states and tools you can see in one still frame, never
    motions: `crimp_tool` is a class, "crimping" is not. Hands are not labeled.
@@ -101,7 +142,7 @@ second.
 
    Use `imgsz=416` or `320` if the laptop runs slowly.
 
-## 6. Add your model to the platform
+## 7. Add your model to the platform
 
 1. Copy the file into `app/models/`, for example `app/models/s1-cut-strip.onnx` (letters,
    numbers, dots, dashes and underscores only).
@@ -120,7 +161,7 @@ second.
    branch and open a pull request. Anyone can do this from a fork; ask Michael for direct write
    access.
 
-## 7. Test your model against the answer key
+## 8. Test your model against the answer key
 
 1. On your station, pick a past session's video as the source (past recordings are in the clip
    list).
@@ -129,7 +170,7 @@ second.
    session's key presses (`basis` = `manual`). The go-live targets are in Stage 5 of the Playbook:
    95% or more of steps confirmed, timing within 0.3 s.
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 | Problem | Fix |
 |---|---|
@@ -139,8 +180,11 @@ second.
 | The page is slow | Keep it in the front tab; export your model at 416 or 320 |
 | A `.webm` video will not seek | `ffmpeg -i s1.webm -c copy s1-fixed.webm` |
 | Unit counts go negative | Units were already in the trays when the session started |
+| No alert sounds | Click anywhere on the page once, check that **Sound** is on and the station is not on **Mute** |
+| A MISTAKE at the start of many units | The first step's zone missed the hand: make that zone cover where the hand goes |
+| A MISTAKE card never clears | Take your hands fully out of view, and check that nothing moves in the zones (a fan, a screen, a shadow) |
 
-## 9. Still open
+## 10. Still open
 
 - Which shared Drive folder the footage goes in.
 - Who owns the run-day laptop.

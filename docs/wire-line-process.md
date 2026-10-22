@@ -56,6 +56,67 @@ How the page counts:
 - Signal thresholds are in `defaults` (activity 0.1, bright 0.5, model class 0.4). Any rule can
   set its own `min`.
 
+## Mistake alerts (step checker)
+
+Each station runs the step checker from Ruza's `vision/live_check.py` (branch
+`vision-step-checker`) on top of the substep tracking. It runs no inference of its own: it reads
+the tracker's events, the station's latest model result, the hands and the zone motion the page
+already has. The verdict shows on the station's tile (a card and a box) and sounds once.
+
+| Verdict | When | Message |
+|---|---|---|
+| `verified` | a substep confirmed by its zones rule (at once, no confidence), or by its model rule at 0.60 or more (at the next clear-view check) | "Step N verified: <label>"; the closing substep says "Cycle complete" |
+| `review` | a substep confirmed by its model rule under 0.60 | "<label> looks done but I'm not sure" |
+| `mistake` | a jump past a substep the camera could see (the "skipped" flag), also when a cycle starts past one | "Wrong order: <label> before <skipped label> (step N skipped)" |
+| `mistake` | `mustStay`: a verified substep's class is gone from its zone before the cycle ends | "<Class> is missing (step N)" |
+| `mistake` | `positionCheck`: a listed class is off its saved spot by more than the tolerance, or turned | "<Class> is in the wrong position", "<Class> is turned the wrong way" |
+| `review` | the last 3 checks do not agree | "Results flickered between checks, take a look" |
+| `cleared` | a check finds nothing wrong while a mistake or review shows | "Mistake cleared. Continue with <next substep>" |
+
+Rules (the thresholds are live_check.py's):
+
+- Model boxes under 0.35 are ignored. A mistake that rests on a model box under 0.60 becomes a
+  review, and so does a wrong-order jump confirmed by a model rule under 0.60. A missing part is
+  always a mistake.
+- Model checks (confidence, missing, position) only use model results taken while the station's
+  view is clear: no hand in its tile (when Hands is on; a hand result counts for 5 s) and every
+  drawn zone's activity under 0.05, for 0.3 s. The last 3 such results vote, and the kind 2 of
+  them agree on wins. A check runs once per clear spell, again when the tracker confirms a new
+  model substep, and every 1.0 s while a mistake or review shows. A station without a model checks
+  the clear view alone, so for it a clear view clears a wrong-order mistake.
+- If several model substeps are confirmed before a check, only the newest gets a verdict; the
+  older ones count as done (as in live_check.py).
+- The same mistake or review again keeps showing and does not sound again. A less sure look at a
+  showing mistake (the same message as a review) does not turn it back into a review; a review
+  that becomes sure is a new mistake and sounds.
+- The box: red (mistake) or amber (review), 5 px, around the model box it rests on, else around
+  the zone; green for 2 s after a verified step. The card: MISTAKE (flashing at 4 Hz) or NEEDS
+  REVIEW, the station and the message (up to 3 lines); CLEARED shows for about 3 s. The checklist
+  row the verdict is about says "Mistake - fix and clear the view" or "Needs review".
+- Sounds (Web Audio, live_check.py's tones): mistake 3 beeps of 880 Hz for 220 ms each, review
+  600 Hz for 300 ms, verified 1320 Hz for 120 ms. One per new verdict, none for cleared. The
+  toolbar's **Sound** switches all stations, each tile has **Mute**, and the audio starts after
+  the first click on the page.
+
+Config (all optional):
+
+- `mustStay` in a substep's model rule, default off:
+  `"model": { "zone": "crimp", "class": "crimped_splice", "mustStay": true }`. Once that substep
+  is verified, its class must stay visible in its zone until the cycle ends. Off on every wire
+  substep for now.
+- `positionCheck` on a station, default none:
+  `"positionCheck": { "anchor": "<zone id>", "classes": ["<class>", ...], "tolerance": 0.14 }`.
+  It needs the station's model. **Save correct state** in that station's Setup panel takes the
+  last 10 clear-view model results (at least 3) and stores, for each listed class, its median box
+  relative to the anchor zone (center x and y, width and height, as shares of the zone; plus
+  landscape or portrait) in `data/meta/wire-line-setup.json` under that station as `ref`, next to
+  the zones. Live, a listed class inside the anchor zone that is off by more than `tolerance` of
+  the zone in x or y is in the wrong position, and one that turned between landscape and portrait
+  is turned the wrong way. Redrawing the anchor zone or **Clear zones** drops the saved state. No
+  wire station has a `positionCheck` yet.
+- `sounds` at the top level: `{ "verified": false }` silences the chirp on verified steps;
+  mistakes and reviews still sound. Default `true`.
+
 ## Fail reasons
 
 | Id | Reason | Cause station | Counts as a defect |
@@ -104,8 +165,8 @@ Folder `data/sessions/<id>/` (git-ignored), id like `20261015-233956-7509`:
 | `events.jsonl` | one event per line, appended as they happen (sort by `t`) |
 | `s1.mp4` ... `s4.mp4` | each station's video (`.webm` on browsers without MP4 recording). `s1-2.mp4` is a second part if the source changed or Rec was switched off and on |
 
-Exports: `/api/sessions/<id>/substeps.csv`, `/cycles.csv` and `/events.jsonl` (also linked from
-**Sessions and exports**).
+Exports: `/api/sessions/<id>/substeps.csv`, `/cycles.csv`, `/verdicts.csv` and `/events.jsonl`
+(also linked from **Sessions and exports**).
 
 ### Event fields
 
@@ -114,11 +175,11 @@ Exports: `/api/sessions/<id>/substeps.csv`, `/cycles.csv` and `/events.jsonl` (a
 | `t` | time, epoch milliseconds (for a substep: when its signal started, not when it was confirmed) |
 | `ts` | seconds since the session started |
 | `station` | `s1` to `s4` |
-| `type` | `substep`, `cycle_end`, `qa_result`, `flag`, `manual`, `session_start`, `session_end`, `source_change` |
+| `type` | `substep`, `cycle_end`, `qa_result`, `flag`, `manual`, `session_start`, `session_end`, `source_change`, `verdict` |
 | `substep`, `from` | the substep entered, and the one before it |
 | `move` | `start` (first of a cycle), `next`, `jump` (skipped a visible substep), `repeat` |
 | `source` | `zones`, `model` or `manual` |
-| `conf` | mean signal over the 3 confirming frames, 0 to 1 |
+| `conf` | mean signal over the 3 confirming frames, 0 to 1. On a verdict: the model confidence it rests on (empty for zones) |
 | `cycle` | cycle number at that station (manual presses keep their own count) |
 | `dur` | cycle length in seconds (on `cycle_end`) |
 | `result`, `reason` | QA result (`pass`, `fail`, `unknown`) and fail reason id |
@@ -126,6 +187,11 @@ Exports: `/api/sessions/<id>/substeps.csv`, `/cycles.csv` and `/events.jsonl` (a
 | `action` | manual button: `cycle_done`, `pass`, `fail` |
 | `input` | on `source_change`: `camera`, `clip` or `none` |
 | `note` | flag text ("skipped ...", "quality mismatch, review the video"), or the source label |
+| `kind` | on a verdict: `verified`, `mistake`, `review` or `cleared` |
+| `reason` | on a verdict: `progress`, `complete`, `low_confidence`, `wrong_order`, `missing`, `wrong_position`, `turned`, `flicker` or `cleared` |
+| `message` | on a verdict: what the card said |
+| `step_s` | on a verified verdict: seconds since that station's previous verified step (or the cycle start) |
+| `cycle_s` | on "Cycle complete": the cycle time in seconds |
 | `videoT`, `videoFile` | seconds into that station's recording, and which file: jump there to see the moment |
 
 ### substeps.csv (one row per detected substep, repeats are separate rows)
@@ -136,12 +202,23 @@ dur_s, conf, closes_cycle, video_file, video_t`
 ### cycles.csv (one row per finished cycle)
 
 `session_id, crew, shift, station, basis, cycle, source, start_ts, end_ts, cycle_s, substeps,
-repeats, flags, result, reason, cause_station, defect, light, bin, mismatch, video_file,
-video_start_t, video_end_t, notes`
+repeats, flags, mistakes, reviews, result, reason, cause_station, defect, light, bin, mismatch,
+video_file, video_start_t, video_end_t, notes`
+
+`mistakes` and `reviews` count the cycle's mistake and review verdicts (an alert that stays on screen counts once).
 
 `basis` is `detected` (from the cameras) or `manual` (from the buttons; `cycle_s` is the time since
 the previous press). The dashboard's **Count** switch picks which one the line numbers use; **Auto**
 uses detected counts where a station has any, else manual.
+
+### verdicts.csv (one row per verdict, in time order)
+
+`session_id, station, time, ts, cycle, step, event, message, confidence, step_seconds,
+cycle_seconds, video_file, video_t`
+
+The columns of live_check.py's session log, plus the session, the station, `ts` and the video
+position. `time` is UTC, `step` is the substep's number at its station, `event` is the verdict
+kind. A verdict from a check between cycles counts toward the next cycle.
 
 ## For the model team
 
@@ -207,6 +284,10 @@ with a class number beyond your list drops that station back to zones with the s
   hands on too, about every 4 to 5 seconds. The page stays responsive (short stalls under 0.25 s).
   `?gpu` tries WebGPU, which froze this laptop on `/live`.
 - Keep the page in front: a background tab slows its timers to about 1 Hz.
+- Mistake alerts that need the model wait for 3 model results in a clear view: about 6 to 12 s with
+  four stations on models (one result per station every 2 to 4 s), well under 1 s with one. A
+  cycle whose first substep the zones missed starts with a wrong-order mistake, the same moment
+  that raises the "skipped" flag.
 - Activity is motion. A hand resting still is not activity unless **Hands** is on; a person walking
   through a zone is. Zones should cover the tray or bin, not the walkway.
 - MP4 chunks arrive every 2 to 5 seconds (on keyframes). A `.webm` file has no duration header; fix
