@@ -235,7 +235,7 @@ const num01 = v => typeof v === 'number' && isFinite(v) && v >= 0 && v <= 1;
 const numIn = (v, lo, hi) => typeof v === 'number' && isFinite(v) && v >= lo && v <= hi;
 const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
-// Zones and calibration per station. Unknown stations are refused; zones the config no longer has are dropped.
+// Zones, calibration and the saved correct state per station. Unknown stations are refused; zones the config no longer has are dropped.
 function cleanSetup(body, cfg) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return { error: 'Body must be a JSON object keyed by station.' };
   const out = {};
@@ -259,8 +259,25 @@ function cleanSetup(body, cfg) {
       if (Object.keys(e).length) bright[zid] = e;
     }
     out[sid] = { zones, calib: { motion, bright }, updatedAt: text(v.updatedAt, 40) || new Date().toISOString() };
+    if (v.ref != null) {
+      const ref = cleanRef(v.ref);
+      if (!ref) return { error: sid + ': ref (the saved correct state) must look like { "anchor": "<zone id>", "classes": { "<class>": { "x", "y", "w", "h" } } }.' };
+      if (zoneIds.includes(ref.anchor)) out[sid].ref = ref;    // an anchor zone the config no longer has: dropped like its zone
+    }
   }
   return { setup: out };
+}
+// The saved correct state for positionCheck: per class, its box relative to the anchor zone (Save correct state on /line).
+function cleanRef(r) {
+  if (!r || typeof r !== 'object' || Array.isArray(r) || typeof r.anchor !== 'string' || !r.classes || typeof r.classes !== 'object' || Array.isArray(r.classes)) return null;
+  const classes = {}, names = Object.keys(r.classes);
+  if (!names.length || names.length > 50) return null;
+  for (const c of names) {
+    const b = r.classes[c];
+    if (!/^[A-Za-z0-9_.\- ]{1,64}$/.test(c) || c === '__proto__' || !b || typeof b !== 'object' || ![b.x, b.y, b.w, b.h].every(v => numIn(v, -10, 10))) return null;
+    classes[c] = { x: b.x, y: b.y, w: b.w, h: b.h, landscape: b.w >= b.h };
+  }
+  return { anchor: r.anchor, classes, frames: numIn(r.frames, 0, 1000) ? r.frames : null, saved: text(r.saved, 40) };
 }
 
 // Labels for the recorded LEGO runs, so the clip list says "Run 1" instead of a hash.
@@ -440,10 +457,11 @@ async function sessionsApi(req, res, p, url) {
     if (what === 'events.jsonl' && req.method === 'GET') {
       return send(res, 200, fs.readFileSync(path.join(dir, 'events.jsonl')), 'application/x-ndjson; charset=utf-8', { 'Content-Disposition': `attachment; filename="${id}-events.jsonl"` });
     }
-    if ((what === 'substeps.csv' || what === 'cycles.csv') && req.method === 'GET') {
+    if ((what === 'substeps.csv' || what === 'cycles.csv' || what === 'verdicts.csv') && req.method === 'GET') {
       const meta = { id, crew: doc.crew, shift: doc.shift, startedAtMs: doc.startedAtMs };
       const cfg = doc.config || lineConfig();
-      const csv = what === 'substeps.csv' ? LineEngine.substepsCsv(readEvents(id), cfg, meta) : LineEngine.cyclesCsv(readEvents(id), cfg, meta);
+      const fn = { 'substeps.csv': LineEngine.substepsCsv, 'cycles.csv': LineEngine.cyclesCsv, 'verdicts.csv': LineEngine.verdictsCsv }[what];
+      const csv = fn(readEvents(id), cfg, meta);
       return send(res, 200, csv, 'text/csv; charset=utf-8', { 'Content-Disposition': `attachment; filename="${id}-${what}"` });
     }
     return fail(res, 400, 'invalid_argument', 'Bad session path.');
