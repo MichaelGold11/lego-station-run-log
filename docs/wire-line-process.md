@@ -5,51 +5,50 @@ Right now its job is to **collect data**: cycle and substep times, QA pass or fa
 step detections with a confidence, and the raw video from every camera so the model team can label
 and train. Start it with `npm start` and open http://localhost:4173/line in Chrome.
 
-The process lives in `data/meta/wire-line.json` (draft v1). Edit that file, not the code. The page
+The process lives in `data/meta/wire-line.json` (draft v2). Edit that file, not the code. The page
 shows a red banner if the file has a problem (for example a rule that names a zone the station does
-not have).
+not have). The engine and server tests run against a frozen copy of the v1 process
+(`scripts/fixtures/wire-line-v1.json`), so editing the real process does not break them; they also
+check that the shipped file has no problems.
 
 ## The product and the stations
 
-Two wires joined by one crimped butt splice, then tested by lighting a bulb from a battery.
+Three wires (red, white, black) cut to length against a ruler, laid in color order (red top, white
+middle, black bottom) and closed in a 3-port lever connector. A second lever connector joins the
+other end of the red wire to a separate black wire. QA is a pull test: no wire may come out of either
+connector. There are no trays or bins; each station's last substep ends its cycle.
 
-"Camera today" means the substep is seen with zones alone (motion in a drawn box, or the bulb
-zone going bright). "Needs the model" means it is greyed out until that station's trained model is
-loaded; its time is added to the substep before it.
+"Camera today" means the substep is seen with zones alone (motion in a drawn box). "With the model"
+is the rule that takes over once that station's trained model is loaded.
 
 | Station | Substep | Camera today | With the model |
 |---|---|---|---|
-| S1 Cut and strip (one cycle = a pair of wires) | Pull wire from supply | activity in Wire supply | same |
-| | Measure to the mark and cut | activity in Cut and strip area | `cutter` in Cut and strip area |
-| | Strip both ends | needs the model | `stripper` in Cut and strip area |
-| | Check strands and strip length | needs the model | `stripped_end` in Cut and strip area |
-| | Place the pair in the out tray (ends the cycle) | activity in Out tray | same |
-| S2 Crimp side A | Take a wire pair from the in tray | activity in In tray | same |
-| | Take a splice | activity in Splice bin | `splice` in Splice bin |
-| | Push wire A into the splice | activity in Crimp area | `splice` in Crimp area |
-| | Crimp side A | needs the model | `crimp_tool` in Crimp area |
-| | Tug test side A | needs the model | `crimped_splice` in Crimp area |
-| | Pass to station 3 (ends the cycle) | activity in Out tray | same |
-| S3 Crimp side B (join) | Take the half-done unit | activity in In tray | same |
-| | Push wire B into the splice | activity in Crimp area | `splice` in Crimp area |
-| | Crimp side B | needs the model | `crimp_tool` in Crimp area |
-| | Tug test both sides | needs the model | `crimped_splice` in Crimp area |
-| | Pass to QA (ends the cycle) | activity in Out tray | same |
-| S4 QA test | Take unit from the in tray | activity in In tray | same |
-| | Clip the ends to the battery and bulb | activity in Test fixture | same |
-| | Bulb test | Bulb zone goes bright | `bulb_on` in Bulb |
-| | Unclip | needs a model rule (no class picked yet) | to be defined |
-| | Sort into pass or fail bin (ends the cycle) | activity in Pass bin or Fail bin | same |
+| S1 Cut (one cycle = one wire, three per unit) | Cut the wire | activity in Cut area | `cutter` in Cut area |
+| | Check for correct length against the ruler (ends the cycle) | activity in Ruler | same |
+| S2 Arrange and clamp | Open the lever connector | activity in Lever connectors | `connector_open` in Work area |
+| | Arrange the wires: red top, white middle, black bottom | activity in Cut wires | same; the color order is the position check |
+| | Close the levers on the wires (ends the cycle) | activity in Work area | `connector_closed` in Work area |
+| S3 Second connector | Add a new lever connector to the other end of the red wire | activity in Lever connectors | `connector_open` in Work area |
+| | Get a black wire | activity in Black wires | same |
+| | Insert the black wire into the new connector (ends the cycle) | activity in Work area | `connector_closed` in Work area |
+| S4 QA pull test | Pull test: no wire comes out of either connector | activity in Test area | `connector_closed` in Test area |
+| | Pass or fail (ends the cycle) | the P or F key | same |
+
+S2 has a `positionCheck` on `red_wire`, `white_wire` and `black_wire` in its Work area: with S2's model
+on and its correct state saved, a wire off its spot (for example red and black swapped) is a
+mistake at S2, not a QA fail. S4 has an empty `qa` block, so it gets the Pass and Fail buttons; with
+no bulb and no bins the result is the P or F press (else `unknown`), and S4's cycle count comes from
+those presses.
 
 How the page counts:
 
 - A substep counts after its signal holds for 3 frames in a row (`holdFrames`, about 0.4 s).
-- Going back to an earlier substep inside a cycle is a **repeat**, not an error (S1 does pick, cut
-  and strip twice per cycle).
+- Going back to an earlier substep inside a cycle is a **repeat**, not an error.
 - Jumping forward past a substep the camera could have seen raises a **flag**: "skipped <substep>".
 - A cycle runs from its first detected substep to the moment the closing substep starts. The time
   between cycles is idle time.
-- QA (S4): **light** = the bulb zone went bright during the cycle. **Bin** = which bin got the
+- QA: the engine can also read a bulb and bins (`qa.lightSubstep`, `qa.sortSubstep`, `qa.bins`, as in
+  the v1 fixture); the v2 process uses neither. **light** = the bulb zone went bright during the cycle. **Bin** = which bin got the
   activity at the sort. **Result** = the manual Pass or Fail if someone pressed it (during the cycle
   or up to `qaGraceSec` = 5 s after the sort), else the bin. If light and bin disagree, a flag says
   "quality mismatch, review the video". No light and no bin seen = result `unknown`.
@@ -101,7 +100,7 @@ Rules (the thresholds are live_check.py's):
 Config (all optional):
 
 - `mustStay` in a substep's model rule, default off:
-  `"model": { "zone": "crimp", "class": "crimped_splice", "mustStay": true }`. Once that substep
+  `"model": { "zone": "work", "class": "connector_closed", "mustStay": true }`. Once that substep
   is verified, its class must stay visible in its zone until the cycle ends. Off on every wire
   substep for now.
 - `positionCheck` on a station, default none:
@@ -112,37 +111,38 @@ Config (all optional):
   landscape or portrait) in `data/meta/wire-line-setup.json` under that station as `ref`, next to
   the zones. Live, a listed class inside the anchor zone that is off by more than `tolerance` of
   the zone in x or y is in the wrong position, and one that turned between landscape and portrait
-  is turned the wrong way. Redrawing the anchor zone or **Clear zones** drops the saved state. No
-  wire station has a `positionCheck` yet.
+  is turned the wrong way. Redrawing the anchor zone or **Clear zones** drops the saved state. S2 has
+  one (the color order); the other stations have none.
 - `sounds` at the top level: `{ "verified": false }` silences the chirp on verified steps;
   mistakes and reviews still sound. Default `true`.
 
 ## Fail reasons
 
+QA is only the pull test, so the reasons are about which connector let go. Wrong length, wrong color
+order and skipped steps are caught live at their own station, not here.
+
 | Id | Reason | Cause station | Counts as a defect |
 |---|---|---|---|
-| `strip` | Strip too short or long, or cut strands | S1 | yes |
-| `crimp_a` | Side A crimp loose or off | S2 | yes |
-| `crimp_b` | Side B crimp loose or off | S3 | yes |
-| `wire_damage` | Wire damaged | S1 | yes |
-| `test_setup` | Test setup problem (battery, bulb, clips) | S4 | no, retest |
+| `pulled_c1` | Wire pulled out of connector 1 (the 3-wire connector) | S2 | yes |
+| `pulled_c2` | Wire pulled out of connector 2 (red to black) | S3 | yes |
 | `other` | Other | none | yes |
 
-First-pass yield = passes / (passes + defect fails). Test setup fails are left out.
+First-pass yield = passes / (passes + defect fails). A reason with `"defect": false` (none in v2) would
+be left out.
 
 ## Run day: cameras and zones
 
-1. Mount each camera straight above its station so every tray, bin and work area is in view. Plug
+1. Mount each camera straight above its station so every parts pile, the ruler (S1) and the work
+   area are in view. Plug
    all four into the laptop, spread over different USB ports (a powered hub helps). Close any other
    app that uses a camera.
 2. `npm start`, open http://localhost:4173/line in Chrome, press **Find cameras** and allow access.
    Pick one camera per station (a camera can only serve one station). To tell them apart, cover one
    lens and see which tile goes dark. The page asks for 640x480 at 15 fps.
-3. On each station press **Setup**. Pick a zone and drag a box on the video around that tray, bin or
-   work area. The next zone is picked for you. Zones save to the laptop
+3. On each station press **Setup**. Pick a zone and drag a box on the video around that parts pile,
+   ruler or work area. The next zone is picked for you. Zones save to the laptop
    (`data/meta/wire-line-setup.json`) and come back after a reload.
-4. With the work area empty and still, press **Calibrate empty** (2 seconds). On S4, with the bulb
-   dark press **Bulb off**, then light the bulb in the fixture and press **Bulb on**.
+4. With the work area empty and still, press **Calibrate empty** (2 seconds).
 5. Leave **Rec** on (it is on by default for cameras). Press **Start session** and fill in the title,
    the crew / training group and the shift. Counts start from zero.
 6. While the line runs, one person keeps the answer key: keys **1** to **4** when a unit leaves that
@@ -226,16 +226,16 @@ kind. A verdict from a check between cycles counts toward the next cycle.
 labeled with that station's SOP substeps (the substep table above). The four trainers work
 separately and do not need to agree on a class list.
 
-**What to label.** States and tools you can see in one still frame, never motions. "Crimping" is
-not a class; a `crimp_tool` in the crimp area is. Suggested classes per station
+**What to label.** States and tools you can see in one still frame, never motions. "Closing the
+levers" is not a class; a `connector_closed` in the work area is. Suggested classes per station
 (`suggestedClasses` in `data/meta/wire-line.json`):
 
 | Station | Classes |
 |---|---|
-| S1 Cut and strip | `wire, cutter, stripper, stripped_end` |
-| S2 Crimp side A | `wire, splice, crimp_tool, crimped_splice` |
-| S3 Crimp side B | `wire, splice, crimp_tool, crimped_splice` |
-| S4 QA test | `battery, bulb_on, bulb_off` |
+| S1 Cut | `red_wire, white_wire, black_wire, cutter, ruler` |
+| S2 Arrange and clamp | `red_wire, white_wire, black_wire, connector_open, connector_closed` |
+| S3 Second connector | `red_wire, black_wire, connector_open, connector_closed` |
+| S4 QA pull test | `connector_closed, wire_out` |
 
 **Where the data is.** Every session folder has one video per station and `events.jsonl`. Use
 `s1.mp4` for the S1 trainer, `s2.mp4` for S2, and so on. Use `videoT` to jump to detected moments,
@@ -257,7 +257,7 @@ shapes work:
 `models` in `data/meta/wire-line.json`, keyed by the station id:
 
     "models": {
-      "s1": { "file": "/models/s1-cut-strip.onnx", "classes": ["wire", "cutter", "stripper", "stripped_end"], "imgsz": 640 }
+      "s1": { "file": "/models/s1-cut.onnx", "classes": ["red_wire", "white_wire", "black_wire", "cutter", "ruler"], "imgsz": 640 }
     }
 
 List the classes in training order. Only add your own station's entry, so four people can edit the
@@ -266,8 +266,7 @@ shared fallback, `null` by default), else it stays on zones. Two stations can po
 file; the page loads it once. Reload `/line` and press **Model: on**: every station that has a
 model runs it, and each station tile shows the file name it runs (or `zones`). Each substep whose
 model rule uses only classes that station's model knows switches to the model; the rest keep their
-zones rule. "Unclip" has no rule yet: pick a class and add `"model": { "zone": "fixture", "class": "<class>" }`
-to `s4_disconnect`.
+zones rule.
 
 **Class-count check.** When the model loads, the page runs it once on a blank image and compares the
 output to your class list. For a raw head, the number of classes in the file must equal the number in
@@ -289,8 +288,8 @@ with a class number beyond your list drops that station back to zones with the s
   cycle whose first substep the zones missed starts with a wrong-order mistake, the same moment
   that raises the "skipped" flag.
 - Activity is motion. A hand resting still is not activity unless **Hands** is on; a person walking
-  through a zone is. Zones should cover the tray or bin, not the walkway.
+  through a zone is. Zones should cover the parts pile or work area, not the walkway.
 - MP4 chunks arrive every 2 to 5 seconds (on keyframes). A `.webm` file has no duration header; fix
   it with `ffmpeg -i s1.webm -c copy s1-fixed.webm` if a player cannot seek.
-- WIP counts start at zero, so units already sitting in trays when the session starts are not
+- WIP counts start at zero, so units already sitting in the work areas when the session starts are not
   counted, and a missed detection shows up as a negative WIP.

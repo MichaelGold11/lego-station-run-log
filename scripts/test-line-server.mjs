@@ -55,6 +55,12 @@ try {
   console.log('config and setup');
   const cfg = await req('GET', '/api/line/config');
   check('GET /api/line/config falls back to the repo config (4 stations)', cfg.status === 200 && cfg.json.stations.length === 4);
+  // The rest runs against a frozen copy of the v1 process (data folder's own config wins over the repo's), so these
+  // tests do not change every time the team edits data/meta/wire-line.json.
+  fs.mkdirSync(path.join(DATA, 'meta'), { recursive: true });
+  fs.copyFileSync(path.join(ROOT, 'scripts', 'fixtures', 'wire-line-v1.json'), path.join(DATA, 'meta', 'wire-line.json'));
+  const own = await req('GET', '/api/line/config');
+  check('a wire-line.json in the data folder wins over the repo config', own.status === 200 && own.json.draft === 'v1' && own.json.stations[1].substeps[1].id === 's2_get_splice', own.text.slice(0, 120));
   const page = await req('GET', '/line');
   check('GET /line serves the page with cross-origin isolation headers', page.status === 200 && page.headers['cross-origin-embedder-policy'] === 'credentialless' && /<title>/.test(page.text));
   const setup = { s1: { zones: { supply: { x: 0.1, y: 0.1, w: 0.2, h: 0.3 }, ghost: { x: 0, y: 0, w: 0.1, h: 0.1 } }, calib: { motion: { supply: 0.02 }, bright: { supply: { off: 80 } } } } };

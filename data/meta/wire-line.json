@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "name": "Wire splice line",
-  "draft": "v1",
-  "product": "Two wires joined by one crimped butt splice, then tested by lighting a bulb from a battery.",
+  "name": "Wire lever-connector line",
+  "draft": "v2",
+  "product": "Three wires (red, white, black) cut to length against a ruler, laid in color order (red top, white middle, black bottom) and closed in a 3-port lever connector. A second lever connector joins the other end of the red wire to a separate black wire. QA is a pull test: no wire may come out of either connector.",
   "taktSec": null,
   "holdFrames": 3,
   "qaGraceSec": 5,
@@ -10,101 +10,78 @@
   "model": null,
   "models": {},
   "suggestedClasses": {
-    "s1": ["wire", "cutter", "stripper", "stripped_end"],
-    "s2": ["wire", "splice", "crimp_tool", "crimped_splice"],
-    "s3": ["wire", "splice", "crimp_tool", "crimped_splice"],
-    "s4": ["battery", "bulb_on", "bulb_off"]
+    "s1": ["red_wire", "white_wire", "black_wire", "cutter", "ruler"],
+    "s2": ["red_wire", "white_wire", "black_wire", "connector_open", "connector_closed"],
+    "s3": ["red_wire", "black_wire", "connector_open", "connector_closed"],
+    "s4": ["connector_closed", "wire_out"]
   },
   "failReasons": [
-    { "id": "strip", "label": "Strip too short or long, or cut strands", "cause": "s1", "defect": true },
-    { "id": "crimp_a", "label": "Side A crimp loose or off", "cause": "s2", "defect": true },
-    { "id": "crimp_b", "label": "Side B crimp loose or off", "cause": "s3", "defect": true },
-    { "id": "wire_damage", "label": "Wire damaged", "cause": "s1", "defect": true },
-    { "id": "test_setup", "label": "Test setup problem (battery, bulb, clips)", "cause": "s4", "defect": false },
+    { "id": "pulled_c1", "label": "Wire pulled out of connector 1 (the 3-wire connector)", "cause": "s2", "defect": true },
+    { "id": "pulled_c2", "label": "Wire pulled out of connector 2 (red to black)", "cause": "s3", "defect": true },
     { "id": "other", "label": "Other", "cause": null, "defect": true }
   ],
   "stations": [
     {
       "id": "s1",
-      "label": "Cut and strip",
-      "output": "a pair of wires per cycle",
-      "note": "The operator repeats pick, cut and strip for the second wire inside one cycle, so going back to an earlier substep is a normal repeat.",
+      "label": "Cut",
+      "output": "one wire cut to length per cycle (three cycles per unit: red, white, black)",
+      "note": "One cycle is one wire. The operator cuts and checks the red, white and black wire in turn, so a unit is three S1 cycles.",
       "zones": [
-        { "id": "supply", "label": "Wire supply" },
-        { "id": "work", "label": "Cut and strip area" },
-        { "id": "out", "label": "Out tray" }
+        { "id": "cut", "label": "Cut area" },
+        { "id": "ruler", "label": "Ruler (length check)" }
       ],
-      "cycleEnds": "s1_handoff",
+      "cycleEnds": "s1_check_length",
       "substeps": [
-        { "id": "s1_pick_wire", "label": "Pull wire from supply", "zones": { "zone": "supply", "signal": "activity" }, "model": null },
-        { "id": "s1_measure_cut", "label": "Measure to the mark and cut", "zones": { "zone": "work", "signal": "activity" }, "model": { "zone": "work", "class": "cutter" } },
-        { "id": "s1_strip", "label": "Strip both ends", "zones": null, "model": { "zone": "work", "class": "stripper" } },
-        { "id": "s1_check", "label": "Check strands and strip length", "zones": null, "model": { "zone": "work", "class": "stripped_end" } },
-        { "id": "s1_handoff", "label": "Place the pair in the out tray", "zones": { "zone": "out", "signal": "activity" }, "model": null }
+        { "id": "s1_cut", "label": "Cut the wire", "zones": { "zone": "cut", "signal": "activity" }, "model": { "zone": "cut", "class": "cutter" } },
+        { "id": "s1_check_length", "label": "Check for correct length against the ruler", "zones": { "zone": "ruler", "signal": "activity" }, "model": null }
       ]
     },
     {
       "id": "s2",
-      "label": "Crimp side A",
-      "output": "a wire pair with the splice crimped on wire A",
+      "label": "Arrange and clamp",
+      "output": "the three wires closed in lever connector 1, red top, white middle, black bottom",
       "zones": [
-        { "id": "in", "label": "In tray" },
-        { "id": "parts", "label": "Splice bin" },
-        { "id": "crimp", "label": "Crimp area" },
-        { "id": "out", "label": "Out tray" }
+        { "id": "connectors", "label": "Lever connectors" },
+        { "id": "wires", "label": "Cut wires" },
+        { "id": "work", "label": "Work area" }
       ],
-      "cycleEnds": "s2_handoff",
+      "cycleEnds": "s2_close",
+      "positionCheck": { "anchor": "work", "classes": ["red_wire", "white_wire", "black_wire"], "tolerance": 0.14 },
       "substeps": [
-        { "id": "s2_pick", "label": "Take a wire pair from the in tray", "zones": { "zone": "in", "signal": "activity" }, "model": null },
-        { "id": "s2_get_splice", "label": "Take a splice", "zones": { "zone": "parts", "signal": "activity" }, "model": { "zone": "parts", "class": "splice" } },
-        { "id": "s2_insert", "label": "Push wire A into the splice", "zones": { "zone": "crimp", "signal": "activity" }, "model": { "zone": "crimp", "class": "splice" } },
-        { "id": "s2_crimp", "label": "Crimp side A", "zones": null, "model": { "zone": "crimp", "class": "crimp_tool" } },
-        { "id": "s2_pull_test", "label": "Tug test side A", "zones": null, "model": { "zone": "crimp", "class": "crimped_splice" } },
-        { "id": "s2_handoff", "label": "Pass to station 3", "zones": { "zone": "out", "signal": "activity" }, "model": null }
+        { "id": "s2_open", "label": "Open the lever connector", "zones": { "zone": "connectors", "signal": "activity" }, "model": { "zone": "work", "class": "connector_open" } },
+        { "id": "s2_arrange", "label": "Arrange the wires: red top, white middle, black bottom", "zones": { "zone": "wires", "signal": "activity" }, "model": null },
+        { "id": "s2_close", "label": "Close the levers on the wires", "zones": { "zone": "work", "signal": "activity" }, "model": { "zone": "work", "class": "connector_closed" } }
       ]
     },
     {
       "id": "s3",
-      "label": "Crimp side B (join)",
-      "output": "one joined unit",
+      "label": "Second connector",
+      "output": "a second lever connector joining the other end of the red wire to a black wire",
       "zones": [
-        { "id": "in", "label": "In tray" },
-        { "id": "parts", "label": "Splice bin" },
-        { "id": "crimp", "label": "Crimp area" },
-        { "id": "out", "label": "Out tray" }
+        { "id": "connectors", "label": "Lever connectors" },
+        { "id": "wires", "label": "Black wires" },
+        { "id": "work", "label": "Work area" }
       ],
-      "cycleEnds": "s3_handoff",
+      "cycleEnds": "s3_insert",
       "substeps": [
-        { "id": "s3_pick", "label": "Take the half-done unit", "zones": { "zone": "in", "signal": "activity" }, "model": null },
-        { "id": "s3_insert", "label": "Push wire B into the splice", "zones": { "zone": "crimp", "signal": "activity" }, "model": { "zone": "crimp", "class": "splice" } },
-        { "id": "s3_crimp", "label": "Crimp side B", "zones": null, "model": { "zone": "crimp", "class": "crimp_tool" } },
-        { "id": "s3_pull_test", "label": "Tug test both sides", "zones": null, "model": { "zone": "crimp", "class": "crimped_splice" } },
-        { "id": "s3_handoff", "label": "Pass to QA", "zones": { "zone": "out", "signal": "activity" }, "model": null }
+        { "id": "s3_add_connector", "label": "Add a new lever connector to the other end of the red wire", "zones": { "zone": "connectors", "signal": "activity" }, "model": { "zone": "work", "class": "connector_open" } },
+        { "id": "s3_get_black", "label": "Get a black wire", "zones": { "zone": "wires", "signal": "activity" }, "model": null },
+        { "id": "s3_insert", "label": "Insert the black wire into the new connector", "zones": { "zone": "work", "signal": "activity" }, "model": { "zone": "work", "class": "connector_closed" } }
       ]
     },
     {
       "id": "s4",
-      "label": "QA test",
-      "output": "one tested unit, sorted into the pass or fail bin",
+      "label": "QA pull test",
+      "output": "one tested unit, pass or fail",
+      "note": "The cameras see the pull test; the result comes from the P or F key. S4's cycle count comes from those presses.",
       "zones": [
-        { "id": "in", "label": "In tray" },
-        { "id": "fixture", "label": "Test fixture: battery + bulb clips" },
-        { "id": "bulb", "label": "Bulb" },
-        { "id": "pass_bin", "label": "Pass bin" },
-        { "id": "fail_bin", "label": "Fail bin" }
+        { "id": "test", "label": "Test area" }
       ],
-      "cycleEnds": "s4_sort",
-      "qa": {
-        "lightSubstep": "s4_test",
-        "sortSubstep": "s4_sort",
-        "bins": { "pass_bin": "pass", "fail_bin": "fail" }
-      },
+      "cycleEnds": "s4_result",
+      "qa": {},
       "substeps": [
-        { "id": "s4_pick", "label": "Take unit from the in tray", "zones": { "zone": "in", "signal": "activity" }, "model": null },
-        { "id": "s4_connect", "label": "Clip the ends to the battery and bulb", "zones": { "zone": "fixture", "signal": "activity" }, "model": null },
-        { "id": "s4_test", "label": "Bulb test", "zones": { "zone": "bulb", "signal": "bright" }, "model": { "zone": "bulb", "class": "bulb_on" } },
-        { "id": "s4_disconnect", "label": "Unclip", "zones": null, "model": null, "note": "Model only. The model team picks the class that shows the clips coming off." },
-        { "id": "s4_sort", "label": "Sort into pass or fail bin", "zones": { "anyOf": [ { "zone": "pass_bin", "signal": "activity" }, { "zone": "fail_bin", "signal": "activity" } ] }, "model": null }
+        { "id": "s4_pull_test", "label": "Pull test: no wire comes out of either connector", "zones": { "zone": "test", "signal": "activity" }, "model": { "zone": "test", "class": "connector_closed" } },
+        { "id": "s4_result", "label": "Pass or fail (P or F key)", "zones": null, "model": null, "note": "No camera rule: the answer-key keeper presses P or F." }
       ]
     }
   ]

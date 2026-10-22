@@ -29,7 +29,24 @@ the matching section here.
    closing it stops the page.
 4. To get updates later: Ctrl+C, `git pull`, then `npm start` again.
 
-## 2. Roles
+## 2. The process (v2: lever connectors)
+
+Three wires (red, white, black) are cut to length, laid in color order and closed in a 3-port lever
+connector; a second lever connector joins the other end of the red wire to a separate black wire. QA
+is a pull test. The steps are in `data/meta/wire-line.json`; the table is in
+[wire-line-process.md](wire-line-process.md).
+
+| Station | Steps | Work areas (zones) |
+|---|---|---|
+| S1 Cut | 1. Cut the wire 2. Check for correct length against the ruler. One cycle is one wire, so a unit is three S1 cycles (red, white, black) | Cut area, Ruler |
+| S2 Arrange and clamp | 1. Open the lever connector 2. Arrange the wires: red top, white middle, black bottom 3. Close the levers on the wires | Lever connectors, Cut wires, Work area |
+| S3 Second connector | 1. Add a new lever connector to the other end of the red wire 2. Get a black wire 3. Insert the black wire into the new connector | Lever connectors, Black wires, Work area |
+| S4 QA pull test | 1. Pull test: no wire comes out of either connector 2. Pass or fail (P or F key) | Test area |
+
+There are no trays or bins: each station's last step ends its cycle. Mistakes are caught at the station
+where they happen (wrong order, skipped step, wrong color order at S2); QA only does the pull test.
+
+## 3. Roles
 
 | Role | What they do |
 |---|---|
@@ -38,25 +55,24 @@ the matching section here.
 | Answer-key keeper | Presses the keys as units leave each station and at QA. This is the ground truth every model is scored against |
 | Station trainer (one per station) | Labels that station's footage, trains its model, adds it to the platform, tests it |
 
-## 3. Run day (recording)
+## 4. Run day (recording)
 
-1. **Mount the cameras.** One camera straight above each station, with every tray, bin and work
-   area in view. Plug all four into the laptop, spread over different USB ports (a powered hub
+1. **Mount the cameras.** One camera straight above each station, with every parts pile, the ruler
+   (S1) and the work area in view. Plug all four into the laptop, spread over different USB ports (a powered hub
    helps). Close any other app that uses a camera.
 2. **Connect them.** Open `/line`, press **Find cameras** and allow access. Pick one camera per
    station. To tell them apart, cover one lens and see which tile goes dark.
-3. **Draw the zones.** On each station press **Setup**. Drag a box around each tray, bin or work
+3. **Draw the zones.** On each station press **Setup**. Drag a box around each parts pile or work
    area it asks for; the next zone is picked for you. Keep boxes off walkways, because a hand
    passing through counts as activity. Zones are saved on the laptop and come back after a reload.
-4. **Calibrate.** With each work area empty and still, press **Calibrate empty** (2 seconds). On
-   S4, press **Bulb off** with the bulb dark, then light the bulb in the fixture and press
-   **Bulb on**.
+4. **Calibrate.** With each work area empty and still, press **Calibrate empty** (2 seconds).
 5. **Check Rec.** Leave **Rec** ticked on every station (on by default for cameras). Without video
    there is nothing to train on. The start form warns you if no station is recording.
-6. **Start.** Clear the trays (counts start from zero), press **Start session**, and fill in the
+6. **Start.** Clear the work areas (counts start from zero), press **Start session**, and fill in the
    title, the crew or training group, and the shift.
 7. **Keep the answer key** while the line runs:
-   - Keys **1** to **4** when a unit leaves that station.
+   - Keys **1** to **3** when that station finishes a cycle. On S1 that is after each wire, so three
+     presses per unit.
    - At QA, **P** for pass or **F** for fail, then pick the fail reason. P or F also counts as
      S4's unit done, so do not press 4 as well.
 8. **Stop.** Press **Stop session**. The banner links the session's two CSV files.
@@ -64,7 +80,7 @@ the matching section here.
 Keep the page in the front tab the whole time; a background tab slows to about one check per
 second.
 
-## 4. Mistake alerts
+## 5. Mistake alerts
 
 Each station checks the steps as they happen (Ruza's step checker, built into the page) and says
 so with a sound and on its tile.
@@ -91,6 +107,10 @@ a station silences only that station. Sound starts after the first click on the 
 browsers block it before that. To keep the beeps but drop the chirp on every correct step, set
 `"sounds": { "verified": false }` in `data/meta/wire-line.json`.
 
+S2 checks the color order this way: its position check covers `red_wire`, `white_wire` and
+`black_wire` in the Work area, so build one unit correctly there and press **Save correct state**
+on S2.
+
 Without its model a station only catches skipped steps. "Looks done but I'm not sure", a missing
 part and a part in the wrong spot need **Model: on** and that station's model, and only a station
 whose config has a position check gets the **Save correct state** button:
@@ -105,7 +125,7 @@ whose config has a position check gets the **Save correct state** button:
 Every alert goes into the session's **verdicts.csv** (under **Sessions and exports**), and
 **cycles.csv** counts the mistakes and reviews of each unit.
 
-## 5. Share the footage
+## 6. Share the footage
 
 - Each session saves a folder `data/sessions/<id>/`: one video per station (`s1.mp4` to `s4.mp4`),
   `events.jsonl` (every detected step and key press, with the time into each video) and
@@ -114,17 +134,20 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions and expor
   commit it to git (the folder is git-ignored).
 - Each trainer takes their own station's video: `s1.mp4` for S1, `s2.mp4` for S2, and so on.
 
-## 6. Train your station's model
+## 7. Train your station's model
 
 1. **Use your station's classes.** Label states and tools you can see in one still frame, never
-   motions: `crimp_tool` is a class, "crimping" is not. Hands are not labeled.
+   motions: `connector_closed` is a class, "closing the levers" is not. Hands are not labeled.
 
    | Station | Classes |
    |---|---|
-   | S1 Cut and strip | `wire, cutter, stripper, stripped_end` |
-   | S2 Crimp side A | `wire, splice, crimp_tool, crimped_splice` |
-   | S3 Crimp side B | `wire, splice, crimp_tool, crimped_splice` |
-   | S4 QA test | `battery, bulb_on, bulb_off` |
+   | S1 Cut | `red_wire, white_wire, black_wire, cutter, ruler` |
+   | S2 Arrange and clamp | `red_wire, white_wire, black_wire, connector_open, connector_closed` |
+   | S3 Second connector | `red_wire, black_wire, connector_open, connector_closed` |
+   | S4 QA pull test | `connector_closed, wire_out` |
+
+   `connector_open` is a lever connector with its levers up; `connector_closed` has them pressed
+   down. `wire_out` is a wire end that came out of a connector during the pull test.
 
 2. **Pull frames**, about 3 per second:
 
@@ -142,26 +165,26 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions and expor
 
    Use `imgsz=416` or `320` if the laptop runs slowly.
 
-## 7. Add your model to the platform
+## 8. Add your model to the platform
 
-1. Copy the file into `app/models/`, for example `app/models/s1-cut-strip.onnx` (letters,
+1. Copy the file into `app/models/`, for example `app/models/s1-cut.onnx` (letters,
    numbers, dots, dashes and underscores only).
 2. In `data/meta/wire-line.json`, add **only your own station's** entry under `"models"`:
 
        "models": {
-         "s1": { "file": "/models/s1-cut-strip.onnx", "classes": ["wire", "cutter", "stripper", "stripped_end"], "imgsz": 640 }
+         "s1": { "file": "/models/s1-cut.onnx", "classes": ["red_wire", "white_wire", "black_wire", "cutter", "ruler"], "imgsz": 640 }
        }
 
    List the classes in exactly the order you trained them.
 3. Reload `/line` and press **Model: on**. Your station's tile shows your file name, and each
    substep your model can see switches to it.
-4. A red banner such as "s1-cut-strip.onnx outputs 3 classes but the config lists 4 for S1" means
+4. A red banner such as "s1-cut.onnx outputs 4 classes but the config lists 5 for S1" means
    your class list does not match the model. Fix the list; the station stays on zones until then.
 5. Run `npm run test:line` (it must pass), then commit the `.onnx` file and your config line on a
    branch and open a pull request. Anyone can do this from a fork; ask Michael for direct write
    access.
 
-## 8. Test your model against the answer key
+## 9. Test your model against the answer key
 
 1. On your station, pick a past session's video as the source (past recordings are in the clip
    list).
@@ -170,7 +193,7 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions and expor
    session's key presses (`basis` = `manual`). The go-live targets are in Stage 5 of the Playbook:
    95% or more of steps confirmed, timing within 0.3 s.
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 | Problem | Fix |
 |---|---|
@@ -179,14 +202,15 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions and expor
 | Red banner after Model: on | The class list does not match the model file, or the file is missing from `app/models/` |
 | The page is slow | Keep it in the front tab; export your model at 416 or 320 |
 | A `.webm` video will not seek | `ffmpeg -i s1.webm -c copy s1-fixed.webm` |
-| Unit counts go negative | Units were already in the trays when the session started |
+| Unit counts go negative | Units were already in the work areas when the session started |
 | No alert sounds | Click anywhere on the page once, check that **Sound** is on and the station is not on **Mute** |
 | A MISTAKE at the start of many units | The first step's zone missed the hand: make that zone cover where the hand goes |
 | A MISTAKE card never clears | Take your hands fully out of view, and check that nothing moves in the zones (a fan, a screen, a shadow) |
 
-## 10. Still open
+## 11. Still open
 
 - Which shared Drive folder the footage goes in.
 - Who owns the run-day laptop.
-- A model class for the S4 "Unclip" step.
+- The wire length in cm: S1 only sees that the wire went to the ruler, it does not measure it yet.
+- The QA process beyond the pull test.
 - Four real USB cameras on one laptop have not been tested yet.

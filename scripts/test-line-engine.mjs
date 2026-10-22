@@ -4,7 +4,10 @@ import fs from 'node:fs';
 const load = f => { const mod = { exports: {} }; new Function('module', fs.readFileSync(new URL('../app/' + f, import.meta.url), 'utf8'))(mod); return mod.exports; };
 const LE = load('line-engine.js');
 const LD = load('live-detect.js');
-const CFG = JSON.parse(fs.readFileSync(new URL('../data/meta/wire-line.json', import.meta.url), 'utf8'));
+// Engine behavior is tested against a frozen copy of the v1 process (crimped butt splice), so the tests do not
+// change every time the team edits the real process. The shipped data/meta/wire-line.json is checked separately below.
+const CFG = JSON.parse(fs.readFileSync(new URL('./fixtures/wire-line-v1.json', import.meta.url), 'utf8'));
+const SHIPPED = JSON.parse(fs.readFileSync(new URL('../data/meta/wire-line.json', import.meta.url), 'utf8'));
 
 const FRAME = 125;   // the page samples each station at about 8 Hz
 let fails = 0, passes = 0;
@@ -40,7 +43,9 @@ const act = v => ({ activity: v == null ? 0.5 : v });
 
 console.log('config');
 {
-  check('the shipped wire-line.json has no problems', LE.checkConfig(CFG).length === 0, LE.checkConfig(CFG).join(' | '));
+  check('the v1 fixture has no problems', LE.checkConfig(CFG).length === 0, LE.checkConfig(CFG).join(' | '));
+  check('the shipped wire-line.json has no problems', LE.checkConfig(SHIPPED).length === 0, LE.checkConfig(SHIPPED).join(' | '));
+  check('every shipped station can start a cycle (2+ substeps, cycle end not first)', SHIPPED.stations.every(s => s.substeps.length >= 2 && s.substeps[0].id !== s.cycleEnds));
   const bad = JSON.parse(JSON.stringify(CFG));
   bad.stations[1].substeps[1].zones.zone = 'nowhere';
   check('a rule that names a missing zone is reported', LE.checkConfig(bad).some(m => /nowhere/.test(m)));
@@ -647,6 +652,31 @@ console.log('checker: logs (verdicts.csv, cycles.csv counts)');
   const c = LE.cyclesCsv(ev, CFG, { id: 'sess' }).trim().split('\n'), h = c[0].split(','), row = (c.find(l => l.includes(',s2,detected,1,')) || '').split(',');
   check('cycles.csv gains mistakes and reviews per cycle (1 and 1 here)', h.indexOf('mistakes') === h.indexOf('flags') + 1 && row[h.indexOf('mistakes')] === '1' && row[h.indexOf('reviews')] === '1', c.join(' / '));
   check('the server accepts verdict events (EVENT_TYPES)', LE.EVENT_TYPES.includes('verdict'));
+}
+
+console.log('shipped process (v2, lever connectors)');
+{
+  const run = (id, seq) => {
+    const st = SHIPPED.stations.find(s => s.id === id);
+    const eng = LE.createStation(st, { holdFrames: SHIPPED.holdFrames, defaults: SHIPPED.defaults, qaGraceSec: SHIPPED.qaGraceSec });
+    const cur = {}; for (const z of st.zones) cur[z.id] = { activity: 0, bright: 0 };
+    let t = 0; const out = [];
+    const play = (zone, ms) => { for (const z of Object.keys(cur)) cur[z].activity = 0; if (zone) cur[zone].activity = 0.5; const end = t + ms; while (t < end) { out.push(...eng.update(JSON.parse(JSON.stringify(cur)), t)); t += FRAME; } };
+    play(null, 500); for (const z of seq) play(z, 500); play(null, 500);
+    return out;
+  };
+  const subsOf = ev => ev.filter(e => e.type === 'substep').map(e => e.substep).join();
+  const s1 = run('s1', ['cut', 'ruler', 'cut', 'ruler']);
+  check('S1: cut then ruler is one wire; two wires make two cycles', subsOf(s1) === 's1_cut,s1_check_length,s1_cut,s1_check_length' && s1.filter(e => e.type === 'cycle_end').length === 2, subsOf(s1));
+  const s2 = run('s2', ['connectors', 'wires', 'work']);
+  check('S2: connectors, wires, work = open, arrange, close and the cycle ends at close', subsOf(s2) === 's2_open,s2_arrange,s2_close' && s2.some(e => e.type === 'cycle_end' && e.substep === 's2_close'), subsOf(s2));
+  const s2skip = run('s2', ['connectors', 'work']);
+  check('S2: closing without arranging flags "skipped Arrange the wires..."', s2skip.some(e => e.type === 'flag' && /skipped Arrange the wires/.test(e.note)), JSON.stringify(s2skip.filter(e => e.type === 'flag')));
+  const s3 = run('s3', ['connectors', 'wires', 'work']);
+  check('S3: connector, black wire, insert and the cycle ends at insert', subsOf(s3) === 's3_add_connector,s3_get_black,s3_insert' && s3.some(e => e.type === 'cycle_end' && e.substep === 's3_insert'), subsOf(s3));
+  const s4 = run('s4', ['test']);
+  check('S4: the pull test is seen; the result comes from the P or F key', subsOf(s4) === 's4_pull_test' && !s4.some(e => e.type === 'cycle_end'), subsOf(s4));
+  check('S2 checks the color order (positionCheck on red, white, black in the work area)', JSON.stringify(SHIPPED.stations[1].positionCheck.classes) === '["red_wire","white_wire","black_wire"]');
 }
 
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
