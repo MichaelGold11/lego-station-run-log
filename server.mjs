@@ -1,18 +1,22 @@
 // Local server for the LEGO Station Run Log.
 // Serves the app, a small JSON document store (data/<collection>/<id>.json) and the
 // uploaded files (data/assets/<id>.<ext>). No dependencies; Node 18 or newer.
-// Also serves the wire line page (/line) and its session store (data/sessions/<id>/).
+// Also serves the wire line page (/line) and its session store (data/sessions/<id>/), and on a second port, over HTTPS
+// on the local network, the iPhone camera page (/phone) that streams a phone's camera into /line.
 //
-//   npm start                  -> http://localhost:4173
+//   npm start                  -> http://localhost:4173, and https://<this laptop>:4174/phone for iPhones
 //   PORT=5000 npm start        -> another port
+//   PHONE_PORT=4175 npm start  -> another port for the iPhone page (PHONE_PORT=off: no iPhone page)
 //   DATA_DIR=/tmp/x npm start  -> another data folder (the tests use this)
 
 import http from 'node:http';
+import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { ensurePhoneCert, lanAddresses, localNames } from './scripts/phone-cert.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DATA = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(ROOT, 'data');
@@ -40,6 +44,8 @@ const LineEngine = (() => { const mod = { exports: {} }; new Function('module', 
 const SESSION_ID = /^\d{8}-\d{6}-[a-f0-9]{4}$/;
 const STATION_ID = /^[a-z][a-z0-9_]{0,15}$/;
 const VIDEO_EXT = { 'video/mp4': '.mp4', 'video/webm': '.webm', 'video/x-matroska': '.mkv' };
+const PHONE_PORT = process.env.PHONE_PORT === 'off' ? 0 : Number(process.env.PHONE_PORT) || 4174;
+const CERT_DIR = path.join(DATA, 'phone-cert');
 
 // The same minimal page skeleton the claude.ai artifact viewer wraps around the app.
 const HEAD = '<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">'
@@ -156,7 +162,9 @@ async function handle(req, res) {
   if (p === '/line') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'line.html')), 'text/html; charset=utf-8', ISOLATE);
   if (p === '/line-engine.js') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'line-engine.js')), 'text/javascript; charset=utf-8', ISOLATE);
   if (p === '/line-hands-worker.js') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'line-hands-worker.js')), 'text/javascript; charset=utf-8', ISOLATE);
+  if (p === '/vendor/qrcode.js') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'vendor', 'qrcode.js')), 'text/javascript; charset=utf-8', ISOLATE);
   if (p.startsWith('/api/line/')) return lineApi(req, res, p);
+  if (p.startsWith('/api/phone/')) return phoneApi(req, res, p);
   if (p === '/api/sessions' || p.startsWith('/api/sessions/')) return sessionsApi(req, res, p, url);
   if (p === '/local-runtime.js') return send(res, 200, fs.readFileSync(RUNTIME_FILE), 'text/javascript; charset=utf-8');
   if (p === '/api/info') return send(res, 200, { ffmpeg: hasFfmpeg, root: ROOT });
@@ -399,7 +407,7 @@ async function sessionsApi(req, res, p, url) {
     const ids = stationIds(cfg), stations = {};
     for (const [sid, v] of Object.entries(body.stations || {})) {
       if (!ids.includes(sid)) return fail(res, 400, 'invalid_argument', 'Unknown station "' + String(sid).slice(0, 40) + '".');
-      const input = v && ['camera', 'clip', 'none'].includes(v.input) ? v.input : 'none';
+      const input = v && ['camera', 'clip', 'phone', 'none'].includes(v.input) ? v.input : 'none';
       stations[sid] = { input, label: text(v && v.label, 200), record: !!(v && v.record) };
     }
     let setup = {};
@@ -508,10 +516,199 @@ async function sessionsApi(req, res, p, url) {
   return fail(res, 400, 'invalid_argument', 'Bad session path.');
 }
 
+// ---------- iPhone cameras: the HTTPS listener for the phone page, and the WebRTC signaling ----------
+// iPhone Safari only opens the camera on a secure page, so phones get their own listener: HTTPS on every interface
+// (IPv6 and IPv4) on PHONE_PORT, with the certificate from scripts/phone-cert.mjs. It serves the phone page, the CA
+// download (/ca.crt) and the phone half of the signaling, nothing else: the data, session and model API stay on the
+// localhost server above. The video goes from the phone to /line directly over WebRTC on the local network (no STUN,
+// no TURN); this server only passes one offer and one answer per connection. Every phone request needs the pairing
+// token, which is new on each start and which only /line shows.
+//   phone: POST /phone/offer, then GET /phone/poll until the answer comes, then every 2 s as a heartbeat
+//   /line: POST /api/phone/poll (the stations that want a phone; returns their offers), /api/phone/answer, /drop, /bye
+// A new offer for a station replaces the one before it. The phone sends a new one by itself when its connection drops
+// or /line lets go of it (a reload, another source picked).
+// The pairing code (the k= in every phone link) is kept in <data>/phone-cert/pairing-token, so phones keep working
+// across restarts. "New pairing code" on /line (POST /api/phone/rotate) replaces it and cuts off every phone.
+const PH = { on: false, server: null, cert: null, error: '', token: null, slots: {}, laptops: new Map(), checkedAt: 0 };
+const TOKEN_FILE = path.join(CERT_DIR, 'pairing-token');
+const TOKEN_RE = /^[A-Za-z0-9_-]{12,64}$/;
+const PHONE_SEEN_MS = 10000;     // a phone that has not polled for this long is gone: /line does not get its offer
+const LAPTOP_SEEN_MS = 10000;    // likewise a /line page: what it answered is dropped, so its phones send new offers
+const CLIENT_ID = /^[A-Za-z0-9_-]{8,40}$/;
+const PHONE_HDR = { 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' };
+const PHONE_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; media-src blob: mediastream:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+
+function tokenOk(k) { if (!PH.token) return false; const a = Buffer.from(String(k || '')), b = Buffer.from(PH.token); return a.length === b.length && crypto.timingSafeEqual(a, b); }
+// Read the saved pairing code, or make one (new: true makes a new one). If it cannot be saved it still works until the next start.
+function loadToken(fresh) {
+  if (!fresh) { try { const t = fs.readFileSync(TOKEN_FILE, 'utf8').trim(); if (TOKEN_RE.test(t)) return (PH.token = t); } catch (e) { /* none yet */ } }
+  PH.token = crypto.randomBytes(12).toString('base64url');
+  try { fs.mkdirSync(CERT_DIR, { recursive: true }); fs.writeFileSync(TOKEN_FILE, PH.token + '\n', { mode: 0o600 }); }
+  catch (e) { console.error('iPhone cameras: could not save the pairing code in ' + TOKEN_FILE + ': ' + (e && e.message || e)); }
+  return PH.token;
+}
+// Where a phone can reach this laptop, best first. On a Mac the Bonjour name (<LocalHostName>.local) leads: it keeps
+// working when the address changes, and it is the only way in on an IPv6-only hotspot besides the raw IPv6 address.
+function phoneHosts() {
+  const named = localNames().map(n => ({ host: n, kind: 'name' }));
+  const addrs = lanAddresses().map(a => ({ host: a.family === 6 ? '[' + a.address + ']' : a.address, kind: a.kind, iface: a.iface }));
+  return process.platform === 'darwin' ? named.concat(addrs) : addrs.concat(named);
+}
+// Load or make the certificate. A new network gives the laptop new addresses: then it is reissued (same CA) and the
+// running listener switches to it, so a phone that trusted the CA keeps working.
+function loadPhoneCert() {
+  PH.checkedAt = Date.now();
+  try {
+    const c = ensurePhoneCert(CERT_DIR);
+    if (c.created) console.log('iPhone cameras: made a new local CA in ' + CERT_DIR + '. Phones that trusted an older one must install this one.');
+    else if (c.reissued) console.log('iPhone cameras: new certificate for ' + c.names.concat(c.ips).join(', '));
+    if (c.reissued || !PH.cert) { PH.cert = c; if (PH.server) PH.server.setSecureContext({ key: c.key, cert: c.cert }); }
+    PH.error = '';
+  } catch (e) { PH.error = String(e && e.message || e); console.error('iPhone cameras: ' + PH.error); }
+  return PH.cert;
+}
+function laptopsAlive() {
+  const t = Date.now();
+  for (const [id, c] of PH.laptops) if (t - c.seen > LAPTOP_SEEN_MS) { PH.laptops.delete(id); dropAnswered(id); }
+  return PH.laptops;
+}
+function dropAnswered(client, only) { for (const [sid, s] of Object.entries(PH.slots)) if (s.state === 'answered' && s.laptop === client && (!only || only === sid)) s.state = 'dropped'; }
+// For the phone's screen: a /line page wants this station's phone ('open'), /line is open with another source there
+// ('not_picked'), or no /line page is open ('closed').
+function laptopState(sid) {
+  const ls = laptopsAlive();
+  if (!ls.size) return 'closed';
+  for (const c of ls.values()) if (c.want.has(sid)) return 'open';
+  return 'not_picked';
+}
+const sdpOk = v => typeof v === 'string' && v.startsWith('v=0') && v.length <= 100000;
+const cleanSettings = v => (v && typeof v === 'object' ? { width: numIn(v.width, 1, 10000) ? v.width : null, height: numIn(v.height, 1, 10000) ? v.height : null, frameRate: numIn(v.frameRate, 0, 240) ? v.frameRate : null } : {});
+
+// /line's half (localhost only, behind the guard in handle()).
+async function phoneApi(req, res, p) {
+  if (p === '/api/phone/info') {
+    if (req.method !== 'GET') return fail(res, 405, 'invalid_argument', 'Method not allowed.');
+    if (PH.on && Date.now() - PH.checkedAt > 5000) loadPhoneCert();
+    return send(res, 200, { on: PH.on, port: PHONE_PORT, token: PH.on ? PH.token : null, hosts: PH.on ? phoneHosts() : [], error: PH.error || (PHONE_PORT ? null : 'The iPhone page is off (PHONE_PORT=off).'), validTo: PH.cert ? PH.cert.validTo : null });
+  }
+  if (req.method !== 'POST') return fail(res, 405, 'invalid_argument', 'Method not allowed.');
+  let b;
+  try { b = JSON.parse((await readBody(req, 256 * 1024)).toString('utf8') || '{}'); } catch (e) { return fail(res, 400, 'invalid_argument', 'Body must be JSON.'); }
+  if (!b || typeof b !== 'object' || !CLIENT_ID.test(String(b.client || ''))) return fail(res, 400, 'invalid_argument', 'client must be the page id.');
+  const t = Date.now(), ids = stationIds(lineConfig());
+  if (p === '/api/phone/bye') { dropAnswered(b.client); PH.laptops.delete(b.client); return send(res, 200, { ok: true }); }
+  if (p === '/api/phone/rotate') {
+    // A new pairing code: every phone link and QR code so far stops working, and the waiting offers are forgotten.
+    if (!PH.on) return fail(res, 409, 'unavailable', PH.error || 'The iPhone page is off.');
+    loadToken(true); PH.slots = {};
+    console.log('iPhone cameras: new pairing code. Phones must scan the QR code on /line again.');
+    return send(res, 200, { ok: true, token: PH.token });
+  }
+  if (p === '/api/phone/poll') {
+    const want = new Set((Array.isArray(b.want) ? b.want : []).filter(s => ids.includes(s)));
+    laptopsAlive();
+    const me = PH.laptops.get(b.client) || { want: new Set(), seen: t };
+    for (const sid of me.want) if (!want.has(sid)) dropAnswered(b.client, sid);    // this page picked another source there
+    me.want = want; me.seen = t; PH.laptops.set(b.client, me);
+    const offers = [], phones = {};
+    for (const sid of want) {
+      const s = PH.slots[sid];
+      if (!s) { phones[sid] = { state: 'none' }; continue; }
+      let busy = false;
+      // Another /line page has this phone. If that page is gone (a reload) this one takes over; else it waits.
+      if (s.state === 'answered' && s.laptop !== b.client) { if (PH.laptops.has(s.laptop)) busy = true; else s.state = 'dropped'; }
+      const seen = t - s.lastPoll;
+      if (s.state === 'waiting' && seen < PHONE_SEEN_MS) offers.push({ station: sid, id: s.id, sdp: s.sdp, camera: s.camera, settings: s.settings });
+      phones[sid] = { state: s.state, id: s.id, seen, busy, camera: s.camera };
+    }
+    return send(res, 200, { offers, phones });
+  }
+  const sid = String(b.station || ''), s = PH.slots[sid];
+  if (!ids.includes(sid)) return fail(res, 400, 'invalid_argument', 'Unknown station.');
+  if (p === '/api/phone/answer') {
+    if (!sdpOk(b.sdp)) return fail(res, 400, 'invalid_argument', 'sdp must be a session description.');
+    if (!s || s.id !== b.id || s.state === 'dropped') return send(res, 409, { code: 'replaced', message: 'That offer is gone; the phone sends a new one.' });
+    if (s.state === 'answered' && s.laptop !== b.client) return send(res, 409, { code: 'busy', message: 'Another /line page has this phone.' });
+    Object.assign(s, { state: 'answered', answer: b.sdp, laptop: b.client, answeredAt: t });
+    return send(res, 200, { ok: true });
+  }
+  if (p === '/api/phone/drop') {
+    // /line gave up on this connection (it never connected, or it was lost): the phone's next poll says so.
+    if (s && s.id === b.id && (s.state === 'waiting' || s.laptop === b.client)) s.state = 'dropped';
+    return send(res, 200, { ok: true });
+  }
+  return fail(res, 404, 'not_found', 'Nothing here.');
+}
+
+// The page a phone gets without a valid link (a restart makes a new token).
+function phoneGate() {
+  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Wire line camera</title>'
+    + '<style>body{margin:0;padding:24px 18px;font:17px/1.45 -apple-system,system-ui,sans-serif;background:#eef0ee;color:#15181b}h1{font-size:22px;margin:0 0 10px}a{color:#a3522a;font-weight:600}'
+    + '@media (prefers-color-scheme: dark){body{background:#101214;color:#eff1ef}a{color:#dc8b55}}</style></head><body>'
+    + '<h1>This link is old or incomplete</h1><p>The laptop makes new links each time it starts. On the laptop, open <b>/line</b>, pick <b>iPhone</b> as the station\'s source, '
+    + 'and scan the QR code it shows with this iPhone\'s camera.</p><p>Tired of the certificate warning? <a href="/ca.crt">Install this laptop\'s certificate</a>, '
+    + 'then turn it on in Settings &gt; General &gt; About &gt; Certificate Trust Settings.</p></body></html>';
+}
+
+// The phones' half (HTTPS on the local network). Nothing here reads or writes the data folder.
+async function phoneHandle(req, res) {
+  const url = new URL(req.url, 'https://phone'), p = url.pathname, get = req.method === 'GET' || req.method === 'HEAD';
+  const json = (code, body) => send(res, code, body, 'application/json', PHONE_HDR);
+  if (p === '/ca.crt' && get) return send(res, 200, PH.cert.caDer, 'application/x-x509-ca-cert', PHONE_HDR);
+  const cfg = lineConfig(), ids = stationIds(cfg), sid = String(url.searchParams.get('s') || '').toLowerCase(), ok = tokenOk(url.searchParams.get('k'));
+  if ((p === '/' || p === '/phone') && get) {
+    const html = ok && ids.includes(sid) ? fs.readFileSync(path.join(ROOT, 'app', 'phone.html')) : phoneGate();
+    return send(res, ok && ids.includes(sid) ? 200 : 403, html, 'text/html; charset=utf-8', Object.assign({ 'Content-Security-Policy': PHONE_CSP }, PHONE_HDR));
+  }
+  if (!p.startsWith('/phone/')) return json(404, { code: 'not_found', message: 'Nothing here.' });
+  if (!ok) return json(403, { code: 'bad_token', message: 'This link is old. Scan the QR code on the laptop again.' });
+  if (!ids.includes(sid)) return json(400, { code: 'invalid_argument', message: 'Unknown station.' });
+  if (p === '/phone/hello' && get) return json(200, { station: sid, label: text(cfg.stations.find(x => x.id === sid).label, 80), laptop: laptopState(sid) });
+  if (p === '/phone/offer' && req.method === 'POST') {
+    let b;
+    try { b = JSON.parse((await readBody(req, 128 * 1024)).toString('utf8')); } catch (e) { return json(400, { code: 'invalid_argument', message: 'Body must be JSON.' }); }
+    if (!b || typeof b !== 'object' || !CLIENT_ID.test(String(b.client || '')) || !sdpOk(b.sdp)) return json(400, { code: 'invalid_argument', message: 'Send { client, sdp } with the offer.' });
+    const id = crypto.randomBytes(8).toString('hex'), t = Date.now();
+    PH.slots[sid] = { id, client: b.client, sdp: b.sdp, camera: text(b.camera, 80), settings: cleanSettings(b.settings), at: t, lastPoll: t, state: 'waiting', answer: null, laptop: null };
+    return json(200, { id, laptop: laptopState(sid) });
+  }
+  if (p === '/phone/poll' && get) {
+    const s = PH.slots[sid], laptop = laptopState(sid);
+    // Not this phone's offer any more: another phone took the station ('replaced'), or the server forgot it ('unknown': send a new one).
+    if (!s || s.id !== url.searchParams.get('id')) return json(200, { state: s && s.client !== url.searchParams.get('c') ? 'replaced' : 'unknown', laptop });
+    s.lastPoll = Date.now();
+    return json(200, { state: s.state, answer: s.state === 'answered' ? s.answer : null, laptop });
+  }
+  return json(405, { code: 'invalid_argument', message: 'Method not allowed.' });
+}
+
+function startPhone() {
+  if (!PHONE_PORT || !loadPhoneCert()) return;    // no certificate: /line shows why next to each iPhone source
+  loadToken(false);
+  const server = https.createServer({ key: PH.cert.key, cert: PH.cert.cert }, (req, res) => {
+    phoneHandle(req, res).catch(e => { console.error(e); if (!res.headersSent) send(res, 500, { code: 'unavailable', message: 'The laptop had a problem.' }, 'application/json', PHONE_HDR); });
+  });
+  let host = '::';    // dual stack: IPv6 (an iPhone hotspot can be IPv6 only) and IPv4
+  server.on('error', e => {
+    if (host === '::' && (e.code === 'EAFNOSUPPORT' || e.code === 'EADDRNOTAVAIL')) { host = '0.0.0.0'; server.listen(PHONE_PORT, host); return; }    // no IPv6 here
+    PH.on = false;
+    PH.error = e.code === 'EADDRINUSE' ? 'Port ' + PHONE_PORT + ' is busy (another npm start?). Stop it, or start with PHONE_PORT=<another port>.' : String(e && e.message || e);
+    console.error('iPhone cameras: ' + PH.error);
+  });
+  PH.server = server;
+  server.listen(PHONE_PORT, host, () => {
+    PH.on = true;
+    const h = phoneHosts()[0], base = `https://${h ? h.host : 'localhost'}:${PHONE_PORT}`;
+    console.log(`iPhone cameras: ${base} (on /line, pick iPhone as a station's source and scan its QR code)`);
+    console.log(`  Phone link for a station: ${base}/phone?s=<s1 to s4>&k=${PH.token} (pairing code saved in ${TOKEN_FILE})`);
+  });
+}
+
 http.createServer((req, res) => {
   handle(req, res).catch(e => { console.error(e); if (!res.headersSent) fail(res, 500, 'unavailable', String(e && e.message || e)); });
 }).listen(PORT, '127.0.0.1', () => {
   console.log(`LEGO Station Run Log: http://localhost:${PORT}`);
   console.log(`Data folder: ${DATA}`);
   if (!hasFfmpeg) console.log('ffmpeg not found: uploads are stored as-is, and agents cannot analyze videos until it is installed.');
+  startPhone();
 });
