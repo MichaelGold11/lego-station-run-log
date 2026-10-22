@@ -541,7 +541,7 @@ function rolling(rows, w) { const a = rows.slice().sort((x, y) => x.n - y.n), ou
 const visItems = () => S.items.filter(i => S.view === 'manager' || i.kind !== 'suggestion');
 const pending = () => visItems().filter(i => i.status === 'pending');
 const kindLabel = { photo: 'Photo check', slow: 'Slow step', suggestion: 'Suggestion' };
-const itemTitle = i => i.kind === 'photo' ? i.stn.short + ': is "' + i.camera.toLowerCase() + '" right?' : i.kind === 'slow' ? SUB(i.sub).sub.label + ' took ' + f1(i.took) + ' s' : i.title;
+const itemTitle = i => i.kind === 'photo' ? i.stn.short + ': is "' + i.camera + '" right?' : i.kind === 'slow' ? SUB(i.sub).sub.label + ' took ' + f1(i.took) + ' s' : i.title;
 
 /* ============ Seed inbox and rules from the week's data ============ */
 function seed() {
