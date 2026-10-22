@@ -231,6 +231,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     <span class="muted" id="detNote"></span>
     <span class="sep"></span>
     <button class="btn sm" id="btnCams" type="button">Find cameras</button>
+    <button class="btn sm" id="btnPair" type="button" title="Make a new pairing code for the iPhone cameras. Every phone link and QR code so far stops working, and connected phones are cut off.">New pairing code</button>
     <span class="sep"></span>
     <span>Count</span><span class="seg" id="basisSeg"><button type="button" data-b="auto">Auto</button><button type="button" data-b="detected">Detected</button><button type="button" data-b="manual">Manual</button></span>
     <button class="btn sm" id="btnReset" type="button">Reset counts</button>
@@ -270,6 +271,8 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
   };
   // Y.files: one entry per distinct model file ({ status, session, size, canvas, ctx, ... }); each station points at its file through st.mdl.
   const Y = { status: 'off', backend: '', ort: null, files: {}, error: '', loading: null, errs: 0 };
+  // iPhone cameras: info from /api/phone/info (pairing code, addresses), and this page's id for the signaling.
+  const PHN = { info: null, client: Array.from(crypto.getRandomValues(new Uint8Array(12)), b => (b % 36).toString(36)).join(''), pairArm: 0 };
   const H = { status: 'off', worker: null, wait: null, seq: 0, ms: 0, error: '', loading: null };
   const ST = {};
   let LIST = [];
@@ -1246,6 +1249,19 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
   $('btnHands').onclick = () => setHands(!G.handsOn);
   $('btnSound').onclick = () => { G.soundOn = !G.soundOn; store.set('wire-line:sound', G.soundOn); unlockAudio(); renderToolbar(); };
   $('btnCams').onclick = async () => { await findCameras(true); await restoreSources(true); };
+  // Two clicks, no dialog: the first arms it for 3 seconds.
+  $('btnPair').onclick = async () => {
+    const b = $('btnPair');
+    if (now() - PHN.pairArm > 3000) { PHN.pairArm = now(); b.textContent = 'Click again: phones must rescan'; setTimeout(() => { b.textContent = 'New pairing code'; }, 3000); return; }
+    PHN.pairArm = 0; b.textContent = 'New pairing code';
+    try {
+      const r = await fetch('/api/phone/rotate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client: PHN.client }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.message || r.status);
+      banner('pair', 'New pairing code made. Scan each station\'s QR code again with its iPhone.', 'good');
+      setTimeout(() => banner('pair', ''), 6000);
+    } catch (e) { banner('pair', 'No new pairing code: ' + esc(e && e.message || e), 'crit'); }
+  };
   $('basisSeg').onclick = e => { const b = e.target.closest('button'); if (!b) return; G.basis = b.dataset.b; store.set('wire-line:basis', G.basis); G.evSeen = -1; renderToolbar(); };
   $('btnReset').onclick = () => {
     if (G.session) { banner('reset', 'Counts cannot be reset while a session records. Stop the session first.', ''); setTimeout(() => banner('reset', ''), 4000); return; }
