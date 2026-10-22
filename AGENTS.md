@@ -60,8 +60,11 @@ Rules for the wire line:
   timestamps, and never invent one.
 - Never change another run's file while analyzing a run. Never change `data/meta/settings.json`
   unless the person asks for a new baseline.
-- Describe hands and parts only. Never identify, describe or evaluate the person. No names,
-  faces or operator scores anywhere in the data. This is station-level process data.
+- Describe hands and parts only. Never identify, describe or evaluate the person. No names
+  or faces anywhere in the data. On the wire line, an anonymous operator code (Op-07) and a
+  training level (new, in training, certified) may tag cycles for coaching: no rankings, no
+  scores per person, and red is for process and quality problems only (2026-10-22, see
+  `docs/dashboard-plan.md`).
 - To share results, the person commits and pushes `data/`. Commit only when they ask; run
   `git pull` before adding a run so run numbers don't collide.
 

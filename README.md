@@ -105,6 +105,8 @@ every result before it is saved, so agents can't write a malformed run or a made
 
 What it will not do: identify or score the person. Runs describe the station's work, never
 the operator, and contain no names or faces (the case's "no individual surveillance" rule).
+The wire line dashboard tags cycles with an anonymous operator code and a training level for
+coaching only, with no rankings (see `docs/dashboard-plan.md`).
 Times are approximate to about ±0.1 s.
 
 ## What's in the repo
