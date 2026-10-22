@@ -174,6 +174,23 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
 .check li.review { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); }
 .check li.review .ic { border-color: var(--warn); background: var(--warn); }
 .check li.review small { color: var(--warn-ink); font-weight: 600; }
+/* iPhone cameras: the pairing panel over the stage (QR code, link, status) and the live chip */
+.phonep { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 44%) minmax(0, 1fr); gap: 10px; align-items: center; padding: 10px; background: #0b0c0d; color: #d6dade; font-size: 12px; line-height: 1.3; overflow: auto; }
+.phonep .qr { background: #fff; border-radius: 6px; aspect-ratio: 1; display: grid; place-items: center; color: #4a4f56; font-size: 12px; }
+.phonep .qr svg { width: 100%; height: 100%; display: block; }
+.phonep .ptxt { display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; align-content: center; min-width: 0; }
+.phonep .ptxt > b { font-size: 14px; color: #fff; }
+.phonep .pst { font-weight: 600; color: #fab219; }
+.phonep .pst.bad { color: #f08a8a; }
+.phonep .phost { display: grid; gap: 2px; font-size: 11px; color: #8a8f96; }
+.phonep select { font-size: 12px; padding: 2px 4px; border-radius: 5px; background: #1f2225; color: #eff1ef; border: 1px solid #3a3f45; width: 100%; min-width: 0; }
+.phonep .btn { background: #1f2225; color: #eff1ef; border-color: #4a4f56; }
+.phonep .btn:hover { border-color: #aab0b6; }
+.phonep .plink { font-family: var(--f-mono); font-size: 10.5px; color: #aab0b6; word-break: break-all; user-select: all; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.phonep .pbtns { display: flex; gap: 6px; flex-wrap: wrap; }
+.phonep .pnote { color: #8a8f96; font-size: 11px; }
+.pchip { position: absolute; top: 6px; right: 6px; display: flex; gap: 6px; align-items: center; font: 600 11px var(--f-mono); color: #fff; background: rgba(15, 17, 19, .78); border-radius: 4px; padding: 2px 3px 2px 7px; }
+.pchip button { font: inherit; border: 1px solid rgba(255, 255, 255, .35); background: transparent; color: #fff; border-radius: 3px; padding: 0 5px; cursor: pointer; }
 
 .sessions table { border-collapse: collapse; width: 100%; font-size: 13px; }
 .sessions th { text-align: left; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 4px 8px; border-bottom: 1px solid var(--line); }
@@ -241,6 +258,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
   <div class="grid" id="grid"></div>
 </div>
 
+<script src="/vendor/qrcode.js"></script>
 <script src="/line-engine.js"></script>
 <script src="/live-detect.js"></script>
 <script>
@@ -352,7 +370,8 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       setup: normSetup(cfg, G.setup[cfg.id]), prevGray: null, sig: null, lastProc: 0, lastCT: 0, fps: 0, fpsN: 0, fpsT: now(), fresh: false,
       mdl: null, dets: null, detsPrev: null, detT: 0, hands: null, handsT: 0, modelN: 0, modelFps: 0, modelT: now(),
       manualN: 0, setupOn: false, drawZone: null, drag: null, calib: null, err: '', clearArm: 0, lastCheck: '', token: 0,
-      chk: LE.createChecker(cfg), mute: store.get('wire-line:mute:' + cfg.id) === true, detSeq: 0, detCapT: 0, driven: false, lastCard: '', refMsg: '', px: 1
+      chk: LE.createChecker(cfg), mute: store.get('wire-line:mute:' + cfg.id) === true, detSeq: 0, detCapT: 0, driven: false, lastCard: '', refMsg: '', px: 1,
+      phone: null, phoneKey: '', lastChip: ''
     };
     st.chk.setRef(st.setup.ref || null);
     const el = document.createElement('section');
@@ -366,7 +385,8 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
         <button class="btn sm setupb" type="button">Setup</button>
       </div>
       <div class="st-body">
-        <div class="stage"><video muted playsinline></video><canvas></canvas><div class="nosrc">No video. Pick a camera or a clip above, or use the buttons below.</div>
+        <div class="stage"><video muted playsinline></video><canvas></canvas><div class="nosrc">No video. Pick a camera, an iPhone or a clip above, or use the buttons below.</div>
+          <div class="phonep" hidden></div><div class="pchip" hidden><span class="pchip-t"></span><button type="button" class="pqr" title="Show this station's iPhone QR code and link">QR</button></div>
           <div class="vcard" hidden role="status" aria-live="assertive"><div class="vc-top"><b class="vc-title"></b><span class="vc-st">${esc(cfg.id.toUpperCase())} ${esc(cfg.label)}</span></div><div class="vc-msg"></div></div></div>
         <div class="info">
           <div class="nowbox"><div><div class="eyebrow nowlab">Now</div><div class="cur">Waiting for the first step</div></div><div class="big mono"></div></div>
@@ -394,8 +414,9 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       el, video: q('video'), canvas: q('canvas'), stage: q('.stage'), nosrc: q('.nosrc'), sel: q('.src'), recBox: q('.rec'), setupBtn: q('.setupb'),
       elNow: q('.nowbox'), elNowLab: q('.nowlab'), elCur: q('.cur'), elBig: q('.big'), elKv: q('.kv'), elQa: q('.qa'), elCheck: q('.check'),
       elMeta: q('.meta'), elMsg: q('.stmsg'), setupPanel: q('.setup-panel'), zbtns: q('.zbtns'), calst: q('.calst'), reasons: q('.reasons'),
-      vcard: q('.vcard'), vcTitle: q('.vc-title'), vcMsg: q('.vc-msg'), refst: q('.refst')
+      vcard: q('.vcard'), vcTitle: q('.vc-title'), vcMsg: q('.vc-msg'), refst: q('.refst'), phoneEl: q('.phonep'), pchip: q('.pchip'), pchipT: q('.pchip-t')
     });
+    q('.pqr').onclick = () => { if (st.phone) { st.phone.showQr = !st.phone.showQr; renderPhone(st, true); } };
     st.ctx = st.canvas.getContext('2d');
     st.proc = document.createElement('canvas');
     st.pctx = st.proc.getContext('2d', { willReadFrequently: true });
@@ -426,6 +447,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     let html = '<option value="none">None (manual only)</option>';
     if (G.cameras.length) html += '<optgroup label="Cameras">' + G.cameras.map(c => `<option value="${esc(c.key)}"${used[c.key] ? ' disabled' : ''}>${esc(c.label)}${used[c.key] ? ' (on ' + used[c.key] + ')' : ''}</option>`).join('') + '</optgroup>';
     else html += '<optgroup label="Cameras"><option disabled>Press Find cameras</option></optgroup>';
+    html += '<optgroup label="iPhones"><option value="phone">iPhone (scan a QR code)</option></optgroup>';
     const a = G.clips.filter(c => c.group === 'assets'), s = G.clips.filter(c => c.group === 'sessions');
     if (a.length) html += '<optgroup label="Recorded clips">' + a.map(c => `<option value="clip:${esc(c.key)}">${esc(c.label)}</option>`).join('') + '</optgroup>';
     if (s.length) html += '<optgroup label="Session recordings">' + s.map(c => `<option value="clip:${esc(c.key)}">${esc(c.label)}</option>`).join('') + '</optgroup>';
@@ -459,6 +481,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
   async function stopSource(st) {
     st.token++;
     if (st.rec) await stopRecording(st);
+    if (st.phone) { closePhonePc(st, true); st.phone = null; }
     if (st.stream) { st.stream.getTracks().forEach(t => t.stop()); st.stream = null; }
     const v = st.video;
     v.pause(); v.removeAttribute('src'); v.srcObject = null; try { v.load(); } catch (e) { /* ignore */ }
@@ -471,13 +494,15 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     let src = { type: 'none', key: 'none', label: 'None (manual only)' };
     if (key.startsWith('cam:')) { const c = G.cameras.find(x => x.key === key); if (c) src = { type: 'camera', key, label: c.label, deviceId: c.deviceId }; }
     else if (key.startsWith('clip:')) { const c = G.clips.find(x => 'clip:' + x.key === key); if (c) src = { type: 'clip', key, label: c.label, url: c.url }; }
+    else if (key === 'phone') src = { type: 'phone', key: 'phone', label: 'iPhone' };
+    st.phone = src.type === 'phone' ? { state: 'waiting', pc: null, id: null, stream: null, camera: '', stats: null, server: null, error: '', lostAt: 0, showQr: false } : null;
     st.source = src; st.err = '';
     st.prevGray = null; st.sig = null; st.dets = st.detsPrev = null; st.hands = null; st.lastCT = 0;
     st.eng.abandon(t).forEach(emit);
     st.chk.restart();
-    emit({ type: 'source_change', station: st.id, t, input: src.type, note: src.label });
+    emit({ type: 'source_change', station: st.id, t, input: inputOf(st), note: noteOf(st) });
     if (!quiet) store.set('wire-line:source:' + st.id, src.key);
-    st.recOn = src.type === 'camera' ? (store.get('wire-line:rec:' + st.id) !== false) : src.type === 'clip' ? store.get('wire-line:recclip:' + st.id) === true : false;
+    st.recOn = src.type === 'camera' || src.type === 'phone' ? (store.get('wire-line:rec:' + st.id) !== false) : src.type === 'clip' ? store.get('wire-line:recclip:' + st.id) === true : false;
     st.recBox.checked = st.recOn; st.recBox.disabled = src.type === 'none';
     const v = st.video;
     try {
@@ -496,6 +521,8 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       emit({ type: 'source_change', station: st.id, t: now(), input: 'none', note: 'failed: ' + src.label });
     }
     st.nosrc.hidden = st.source.type !== 'none';
+    if (st.source.type === 'phone') { if (!PHN.info) await loadPhoneInfo(); phonePoll(); }
+    renderPhone(st, true);
     rebuildPickers();
     if (G.session && st.recOn && st.source.type !== 'none') startRecording(st);
     sizeCanvas(st); drawOverlay(st);
@@ -516,11 +543,12 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
   }
   function startRecording(st) {
     if (!G.session || st.rec || st.source.type === 'none') return;
+    if (st.source.type === 'phone' && !phoneLive(st)) return;    // it starts when the phone connects
     const mime = pickMime();
     if (!mime) { st.err = 'This browser cannot record video.'; return; }
     let tracks = [];
     try {
-      if (st.source.type === 'camera' && st.stream) tracks = st.stream.getVideoTracks();
+      if ((st.source.type === 'camera' || st.source.type === 'phone') && st.stream) tracks = st.stream.getVideoTracks();
       else if (st.source.type === 'clip' && st.video.captureStream) tracks = st.video.captureStream().getVideoTracks();
     } catch (e) { tracks = []; }
     if (!tracks.length) { st.err = 'No video track to record yet.'; return; }
@@ -648,6 +676,192 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     renderSetup(st);
   }
   function dropRef(st, why) { if (!st.setup.ref) return; delete st.setup.ref; st.chk.setRef(null); st.refMsg = why; }
+
+  // ---------- iPhone cameras: pairing (QR code), WebRTC from the phone, the live chip ----------
+  // The phone page (app/phone.html, served over HTTPS on the phone port) sends a WebRTC offer; this page answers it
+  // through the localhost server and the video comes straight from the phone over the local network. Once connected,
+  // the phone's stream is the station's source like a USB camera: zones, Calibrate, the model, the checker and Rec run
+  // on it unchanged. st.phone: { state: waiting | connecting | live | lost, pc, id (the offer), stream, camera, stats, ... }.
+  const PHONE_CONNECT_MS = 20000;    // answered but not connected by then: the network likely blocks it; the phone tries again
+  const PHONE_DISC_MS = 6000;        // a live phone disconnected this long is lost (its page sends a new offer by itself)
+  const PHONE_BLOCKED = 'The phone answered, but its video did not get through. The network may block devices from reaching each other (common on campus Wi-Fi). It keeps trying.';
+  const HOST_KIND = { name: 'name, keeps working when the address changes', ipv4: 'IPv4', ipv6: 'IPv6', ula: 'IPv6, local' };
+  const phoneLive = st => st.source.type === 'phone' && !!st.phone && st.phone.state === 'live';
+  // What source_change events say: a phone only counts as video while it is connected.
+  const inputOf = st => (st.source.type === 'phone' ? (phoneLive(st) ? 'phone' : 'none') : st.source.type);
+  const noteOf = st => (st.source.type === 'phone' ? (phoneLive(st) ? 'iPhone: ' + st.phone.camera : 'iPhone (waiting for the phone)') : st.source.label);
+  const postJson = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  function phoneHost() {
+    const hs = ((PHN.info && PHN.info.hosts) || []).map(h => h.host), pick = store.get('wire-line:phonehost');
+    return hs.includes(pick) ? pick : hs[0] || '';
+  }
+  function phoneLink(st, host) {
+    const i = PHN.info, k = i && i.keys && i.keys[st.id];
+    return i && i.on && host && k ? 'https://' + host + ':' + i.port + '/phone?s=' + st.id + '&k=' + k : '';
+  }
+  async function loadPhoneInfo() {
+    try { PHN.info = await (await fetch('/api/phone/info', { cache: 'no-store' })).json(); }
+    catch (e) { PHN.info = { on: false, hosts: [], keys: {}, error: 'the local server is not answering.' }; }
+    PHN.infoAt = now();
+    for (const st of LIST) if (st.phone) renderPhone(st, true);
+  }
+  function phoneStatus(st) {
+    const ph = st.phone, i = PHN.info, sv = ph.server || {};
+    if (!i) return ['Loading...', ''];
+    if (!i.on) return ['The iPhone page is off: ' + (i.error || 'see the npm start window.'), 'bad'];
+    if (sv.busy) return ['Another /line tab or window has this phone. Close it, or reload it.', 'bad'];
+    if (ph.error) return [ph.error, 'bad'];
+    if (ph.state === 'connecting' || (sv.state === 'waiting' && sv.seen < 10000)) return ['Phone found: connecting...', ''];
+    if (ph.state === 'lost') return ['Phone lost at ' + new Date(ph.lostAt).toLocaleTimeString() + '. Its page reconnects by itself: keep Safari open on it.', 'bad'];
+    return ['Waiting: scan the code with the iPhone\'s Camera app.', ''];
+  }
+  // The panel shows while the station waits for its phone (or when QR is pressed on the live chip).
+  function renderPhone(st, force) {
+    const ph = st.phone, on = st.source.type === 'phone' && !!ph, live = on && ph.state === 'live';
+    st.pchip.hidden = !live;
+    if (live) {
+      const s = ph.stats || {}, txt = 'iPhone' + (s.w ? ' ' + s.w + 'x' + s.h : '') + (s.fps != null ? ' ' + Math.round(s.fps) + ' fps' : '');
+      if (txt !== st.lastChip) { st.pchipT.textContent = txt; st.lastChip = txt; }
+    }
+    const show = on && (!live || ph.showQr);
+    st.phoneEl.hidden = !show;
+    if (!show) { st.phoneKey = ''; return; }
+    const i = PHN.info || {}, host = phoneHost(), link = phoneLink(st, host), [msg, bad] = phoneStatus(st), trusted = (i.trusted || []).includes(host);
+    const key = [link, (i.hosts || []).map(h => h.host).join(), msg, bad, live, trusted].join('|');
+    if (!force && key === st.phoneKey) return;
+    st.phoneKey = key;
+    let qr = '';
+    if (link && window.qrcode) {
+      try { const q = window.qrcode(0, 'M'); q.addData(link); q.make(); qr = q.createSvgTag({ cellSize: 4, margin: 3, scalable: true, alt: 'QR code with the iPhone link for ' + st.id.toUpperCase() }); } catch (e) { qr = ''; }
+    }
+    const opts = (i.hosts || []).map(h => `<option value="${esc(h.host)}"${h.host === host ? ' selected' : ''}>${esc(h.host)} (${esc(HOST_KIND[h.kind] || h.kind)}${(i.trusted || []).includes(h.host) ? '' : ', always warns'})</option>`).join('');
+    st.phoneEl.innerHTML = `<div class="qr">${qr || 'No QR code'}</div><div class="ptxt"><b>${esc(st.id.toUpperCase())}'s iPhone</b>` +
+      `<span class="pst${bad ? ' bad' : ''}">${esc(msg)}</span>` +
+      (opts ? `<label class="phost">Address<select>${opts}</select></label>` : '') +
+      (link ? `<span class="plink">${esc(link)}</span>` : '') +
+      `<span class="pbtns">${link ? '<button type="button" class="btn sm pcopy">Copy link</button>' : ''}${live ? '<button type="button" class="btn sm phide">Hide</button>' : ''}</span>` +
+      (link ? `<span class="pnote">${trusted ? 'Certificate warning the first time' : 'This address always warns'}: tap Show Details, then visit this website.</span>` : '') + '</div>';
+    const sel = st.phoneEl.querySelector('select');
+    if (sel) sel.onchange = () => { store.set('wire-line:phonehost', sel.value); sel.blur(); for (const s of LIST) renderPhone(s, true); };
+    const cp = st.phoneEl.querySelector('.pcopy');
+    if (cp) cp.onclick = async () => { try { await navigator.clipboard.writeText(link); cp.textContent = 'Copied'; } catch (e) { cp.textContent = 'Copy failed'; } setTimeout(() => { cp.textContent = 'Copy link'; }, 1500); };
+    const hd = st.phoneEl.querySelector('.phide');
+    if (hd) hd.onclick = () => { ph.showQr = false; renderPhone(st, true); };
+  }
+  // Every second while a station wants a phone: say which ones, get the phones' offers, answer the new ones.
+  async function phonePoll() {
+    const want = LIST.filter(st => st.source.type === 'phone').map(st => st.id);
+    if (PHN.polling || (!want.length && !PHN.wanted)) return;
+    PHN.polling = true;
+    try {
+      const r = await postJson('/api/phone/poll', { client: PHN.client, want }), j = await r.json();
+      if (!r.ok) throw new Error(j.message || r.status);
+      PHN.wanted = want.length > 0;
+      for (const st of LIST) if (st.phone) st.phone.server = (j.phones && j.phones[st.id]) || { state: 'none' };
+      for (const o of j.offers || []) { const st = ST[o.station]; if (st && st.phone && st.phone.id !== o.id) answerPhone(st, o); }
+    } catch (e) { /* the server is restarting: try again next second */ } finally { PHN.polling = false; }
+    const t = now();
+    for (const st of LIST) {
+      const ph = st.phone;
+      if (!ph) continue;
+      if (ph.state === 'connecting' && t - ph.since > PHONE_CONNECT_MS) phoneDrop(st, PHONE_BLOCKED);
+      else if (ph.state === 'live' && ph.discAt && t - ph.discAt > PHONE_DISC_MS) phoneLost(st);
+    }
+    if (want.length && t - (PHN.infoAt || 0) > 10000) loadPhoneInfo();    // new addresses after a network change
+  }
+  setInterval(phonePoll, 1000);
+  // Leave out the orientation extension: then the phone turns its picture itself, so the video, the zones and the recording agree.
+  const noCvo = sdp => sdp.split('\r\n').filter(l => !/^a=extmap:\d+(\/\w+)? urn:3gpp:video-orientation/.test(l)).join('\r\n');
+  // No trickle: wait for this laptop's candidates (no STUN: its own addresses only), then send the whole answer.
+  function iceDone(pc, ms) {
+    return new Promise(resolve => {
+      if (pc.iceGatheringState === 'complete') return resolve();
+      pc.addEventListener('icegatheringstatechange', () => { if (pc.iceGatheringState === 'complete') resolve(); });
+      setTimeout(resolve, ms);
+    });
+  }
+  async function answerPhone(st, o) {
+    const ph = st.phone;
+    if (ph.state === 'live') phoneLost(st, 'iPhone reconnecting');    // the phone sent a new offer: it lost this page, or another phone took over
+    closePhonePc(st, false);
+    const pc = new RTCPeerConnection({ iceServers: [] });
+    Object.assign(ph, { pc, id: o.id, state: 'connecting', since: now(), camera: o.camera || 'iPhone', stream: null, stats: null, discAt: 0 });
+    pc.ontrack = e => { if (ph.pc === pc) ph.stream = (e.streams && e.streams[0]) || new MediaStream([e.track]); };
+    pc.onconnectionstatechange = () => phoneConn(st, pc);
+    try {
+      await pc.setRemoteDescription({ type: 'offer', sdp: o.sdp });
+      const ans = await pc.createAnswer();
+      try { await pc.setLocalDescription({ type: 'answer', sdp: noCvo(ans.sdp) }); } catch (e) { await pc.setLocalDescription(ans); }
+      await iceDone(pc, 2500);
+      if (ph.pc !== pc) return;
+      const r = await postJson('/api/phone/answer', { client: PHN.client, station: st.id, id: o.id, sdp: pc.localDescription.sdp });
+      if (!r.ok && ph.pc === pc) { closePhonePc(st, false); ph.state = ph.lostAt ? 'lost' : 'waiting'; }    // replaced meanwhile, or another /line has it
+    } catch (e) {
+      console.error('iPhone answer failed', e);
+      if (ph.pc === pc) phoneDrop(st, 'Could not answer the phone (' + (e && e.name || 'error') + '). It keeps trying.');
+    }
+    renderPhone(st, true);
+  }
+  function phoneConn(st, pc) {
+    const ph = st.phone;
+    if (!ph || ph.pc !== pc) return;
+    const cs = pc.connectionState;
+    if (cs === 'connected') { ph.discAt = 0; if (ph.state !== 'live') phoneUp(st); }
+    else if (cs === 'disconnected') { if (!ph.discAt) ph.discAt = now(); }
+    else if (cs === 'failed' || cs === 'closed') { if (ph.state === 'live') phoneLost(st); else phoneDrop(st, PHONE_BLOCKED); }
+  }
+  function phoneUp(st) {
+    const ph = st.phone, v = st.video;
+    if (!ph.stream) ph.stream = new MediaStream(ph.pc.getReceivers().map(r => r.track).filter(Boolean));
+    Object.assign(ph, { state: 'live', error: '', showQr: false, liveAt: now() });
+    st.stream = ph.stream; v.srcObject = ph.stream; v.play().catch(() => {});
+    st.prevGray = null; st.sig = null; st.dets = st.detsPrev = null; st.hands = null; st.lastCT = 0; st.err = '';
+    emit({ type: 'source_change', station: st.id, t: now(), input: 'phone', note: noteOf(st) });
+    if (G.session && st.recOn) startRecording(st);
+    renderPhone(st, true); sizeCanvas(st); drawOverlay(st);
+  }
+  // A live phone's connection ended: no video until the phone is back (its page sends a new offer by itself).
+  // The open cycle is dropped like on any source change, and Rec starts a new part when it reconnects.
+  function phoneLost(st, note) {
+    const ph = st.phone, t = now();
+    if (!ph || ph.state !== 'live') return;
+    ph.state = 'lost'; ph.lostAt = t; ph.stats = null;
+    if (st.rec) stopRecording(st);
+    st.eng.abandon(t).forEach(emit); st.chk.restart();
+    emit({ type: 'source_change', station: st.id, t, input: 'none', note: note || 'iPhone lost' });
+    st.stream = null; st.video.pause(); st.video.srcObject = null;
+    st.prevGray = null; st.sig = null; st.dets = st.detsPrev = null; st.hands = null;
+    closePhonePc(st, true);
+    renderPhone(st, true); drawOverlay(st);
+  }
+  function phoneDrop(st, err) {
+    const ph = st.phone;
+    if (!ph) return;
+    closePhonePc(st, true);
+    ph.state = ph.lostAt ? 'lost' : 'waiting'; ph.error = err || '';
+    renderPhone(st, true);
+  }
+  // tell: let the server know, so the phone's next poll says "dropped" and it sends a new offer.
+  function closePhonePc(st, tell) {
+    const ph = st.phone;
+    if (!ph) return;
+    const pc = ph.pc, id = ph.id;
+    ph.pc = null; ph.id = null; ph.discAt = 0;
+    if (pc) { pc.ontrack = pc.onconnectionstatechange = null; try { pc.close(); } catch (e) { /* closed */ } }
+    if (tell && id) postJson('/api/phone/drop', { client: PHN.client, station: st.id, id }).catch(() => {});
+  }
+  // What the phone actually sends (size and frame rate), for the chip and the station's footer.
+  setInterval(async () => {
+    for (const st of LIST) {
+      if (!phoneLive(st) || !st.phone.pc) continue;
+      const ph = st.phone;
+      try { (await ph.pc.getStats()).forEach(r => { if (r.type === 'inbound-rtp' && r.kind === 'video') ph.stats = { w: r.frameWidth, h: r.frameHeight, fps: r.framesPerSecond }; }); }
+      catch (e) { /* closed meanwhile */ }
+    }
+  }, 1000);
+  window.addEventListener('pagehide', () => {
+    if (navigator.sendBeacon && PHN.wanted) navigator.sendBeacon('/api/phone/bye', new Blob([JSON.stringify({ client: PHN.client })], { type: 'application/json' }));
+  });
 
   // ---------- model and hands: one session per model file (stations may share one), one inference at a time, round-robin over stations ----------
   const baseName = f => String(f).split('/').pop();
@@ -1056,7 +1270,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       for (const st of LIST) { st.eng.restart(); st.chk.restart(); st.manualN = 0; }
       if (G.failPick) closeFail(true);
       emit({ type: 'session_start', t: j.startedAtMs, source: 'page', note: info.title || '' });
-      for (const st of LIST) emit({ type: 'source_change', station: st.id, t: j.startedAtMs, input: st.source.type, note: st.source.label });
+      for (const st of LIST) emit({ type: 'source_change', station: st.id, t: j.startedAtMs, input: inputOf(st), note: noteOf(st) });
       for (const st of LIST) if (st.recOn && st.source.type !== 'none') startRecording(st);
       showStartForm(false);
       banner('session', '');
@@ -1091,7 +1305,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       G.events = []; G.evSeen = -1;
       for (const st of LIST) { st.eng.restart(); st.chk.restart(); st.manualN = 0; }
       const t = now();
-      for (const st of LIST) emit({ type: 'source_change', station: st.id, t, input: st.source.type, note: st.source.label });
+      for (const st of LIST) emit({ type: 'source_change', station: st.id, t, input: inputOf(st), note: noteOf(st) });
       renderSession(); loadClips(); if (!$('sessionsPanel').hidden) loadSessions();
     }
   }
@@ -1110,7 +1324,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
 
   // ---------- rendering (4 times a second) ----------
   function missingText(st, r) {
-    if (st.source.type === 'none') return 'no video';
+    if (st.source.type === 'none' || (st.source.type === 'phone' && !phoneLive(st))) return 'no video';
     const m = r.missing[0];
     if (!m) return '';
     const z = st.cfg.zones.find(x => x.id === m.zone), zl = z ? z.label : m.zone;
@@ -1124,6 +1338,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     const ss = sum && sum.stations[st.id], takt = G.config.taktSec;
     let lab, cur, big = '', cls = 'nowbox';
     if (s.inCycle) { lab = 'Now (cycle ' + s.cycle + ')'; cur = label(s.current); big = fmtS((t - s.since) / 1000); cls += ' incycle'; if (takt && (t - s.cycleStart) / 1000 > takt) cls += ' over'; }
+    else if (st.source.type === 'phone' && !phoneLive(st)) { lab = 'iPhone'; cur = st.phone && st.phone.state === 'lost' ? 'Phone lost: it reconnects by itself' : 'Waiting for the phone: scan its QR code'; }
     else if (st.source.type === 'none') { lab = 'Manual only'; cur = 'No video: press Cycle done when a unit leaves'; }
     else { lab = 'Between cycles'; cur = s.cycle ? 'Waiting for the next unit' : 'Waiting for the first step'; big = s.since ? fmtS((t - s.since) / 1000) : ''; }
     st.elNow.className = cls; st.elNowLab.textContent = lab; st.elCur.textContent = cur; st.elBig.textContent = big;
@@ -1166,7 +1381,8 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     if (html !== st.lastCheck) { st.elCheck.innerHTML = html; st.lastCheck = html; }
     const recNow = st.rec ? `<span class="recd">REC ${fmtMB(st.rec.bytes)}</span>` + (st.rec.dropped ? ` (${st.rec.dropped} chunks lost)` : '') : '';
     const parts = [];
-    if (st.source.type !== 'none') parts.push(st.fps.toFixed(1) + ' fps');
+    if (phoneLive(st)) { const ps = st.phone.stats || {}; parts.push('iPhone sends' + (ps.w ? ' ' + ps.w + 'x' + ps.h : '') + (ps.fps != null ? ' at ' + Math.round(ps.fps) + ' fps' : '')); }
+    if (st.source.type !== 'none' && (st.source.type !== 'phone' || phoneLive(st))) parts.push(st.fps.toFixed(1) + ' fps');
     const mc = modelOf(st);
     if (G.modelOn && st.mdl) parts.push(esc(baseName(st.mdl.file)) + ' ' + (st.source.type !== 'none' ? st.modelFps.toFixed(1) + '/s' : 'idle'));
     else parts.push(mc ? 'zones (' + (G.modelOn ? 'model not used' : 'model ' + esc(baseName(mc.file)) + ' off') + ')' : 'zones');
@@ -1174,6 +1390,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     const meta = parts.join(' | ') + (recNow ? ' | ' + recNow : '');
     if (meta !== st.lastMeta) { st.elMeta.innerHTML = meta; st.lastMeta = meta; }
     if (st.err !== st.lastErr) { st.elMsg.textContent = st.err; st.lastErr = st.err; }
+    if (st.phone || !st.phoneEl.hidden || !st.pchip.hidden) renderPhone(st);
   }
   function renderSummary(sum) {
     const L = sum.line, ids = LIST.map(s => s.id);
@@ -1258,6 +1475,12 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       const r = await fetch('/api/phone/rotate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client: PHN.client }) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.message || r.status);
+      for (const st of LIST) {
+        if (!st.phone) continue;
+        if (st.phone.state === 'live') phoneLost(st, 'iPhone cut off: new pairing code'); else closePhonePc(st, false);
+        Object.assign(st.phone, { state: 'waiting', lostAt: 0, error: '' });
+      }
+      await loadPhoneInfo();
       banner('pair', 'New pairing code made. Scan each station\'s QR code again with its iPhone.', 'good');
       setTimeout(() => banner('pair', ''), 6000);
     } catch (e) { banner('pair', 'No new pairing code: ' + esc(e && e.message || e), 'crit'); }
@@ -1267,7 +1490,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     if (G.session) { banner('reset', 'Counts cannot be reset while a session records. Stop the session first.', ''); setTimeout(() => banner('reset', ''), 4000); return; }
     G.events = []; G.evSeen = -1;
     const t = now();
-    for (const st of LIST) { st.eng.restart(); st.chk.restart(); st.manualN = 0; emit({ type: 'source_change', station: st.id, t, input: st.source.type, note: st.source.label }); }
+    for (const st of LIST) { st.eng.restart(); st.chk.restart(); st.manualN = 0; emit({ type: 'source_change', station: st.id, t, input: inputOf(st), note: noteOf(st) }); }
   };
 
   async function restoreSources(camsOnly) {
@@ -1276,12 +1499,13 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       if (!key || key === st.source.key) continue;
       if (key.startsWith('cam:') && G.cameras.some(c => c.key === key) && !LIST.some(s => s.source.key === key)) await setSource(st, key, true);
       else if (!camsOnly && key.startsWith('clip:') && G.clips.some(c => 'clip:' + c.key === key)) await setSource(st, key, true);
+      else if (!camsOnly && key === 'phone') await setSource(st, 'phone', true);
     }
   }
 
   // ---------- debug hook (tests and the console) ----------
   window.__line = {
-    G, ST, Y, H, LE, setSource, startSession, stopSession, manualCycle, manualPass, openFail, pickReason, setModel, setHands,
+    G, ST, Y, H, LE, PHN, setSource, loadPhoneInfo, phoneLive: id => phoneLive(ST[id]), startSession, stopSession, manualCycle, manualPass, openFail, pickReason, setModel, setHands,
     get summary() { return G.summary; },
     setZones(id, zones) { const st = ST[id]; Object.assign(st.setup.zones, zones); st.prevGray = null; saveSetup(st); if (st.setupOn) renderSetup(st); drawOverlay(st); },
     calibrate(id, kind) { return calibrate(ST[id], kind || 'empty'); },
@@ -1311,6 +1535,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     $('kLast').textContent = LIST.length;
     $('hdrNote').textContent = (G.config.name || 'Line') + ': ' + (G.config.product || '') + ' ' + LIST.length + ' stations, one overhead camera each.';
     renderToolbar(); renderSession(); rebuildPickers();
+    await loadPhoneInfo();
     LIST.forEach(st => { sizeCanvas(st); emit({ type: 'source_change', station: st.id, t: now(), input: 'none', note: st.source.label }); });
     await loadClips();
     // Camera labels need permission. Only ask when it was given before; else the Find cameras button asks.
