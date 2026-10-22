@@ -372,5 +372,271 @@ console.log('model output decoding (live-detect, generalized)');
   check('decode() without classes still names the LEGO classes (the /live page is unchanged)', d3.length === 1 && d3[0].cls === 'pink_brick');
 }
 
+// ---------- step checker (Ruza's live_check.py rules) ----------
+// Zone rects for the checker rig: the station's zones side by side, each the full height (0..1 of the frame).
+function rectsFor(station) { const n = station.zones.length, out = {}; station.zones.forEach((z, k) => { out[z.id] = { x: k / n, y: 0, w: 1 / n, h: 1 }; }); return out; }
+// A detection centered at (cx, cy) of a zone, w and h as shares of the zone.
+function det(rects, cls, zone, conf, p) {
+  const z = rects[zone], q = Object.assign({ cx: 0.5, cy: 0.5, w: 0.4, h: 0.2 }, p);
+  const x = z.x + q.cx * z.w, y = z.y + q.cy * z.h, w = q.w * z.w, h = q.h * z.h;
+  return { cls, conf, nbox: [x - w / 2, y - h / 2, x + w / 2, y + h / 2] };
+}
+// The real tracker plus the checker, fed every FRAME like the page. motion = the highest zone activity (all calm = still)
+// unless r.motion is set; r.hands as given (null = Hands off). With a model: a model result every `every` ms from see(),
+// or by hand with shot() (every: Infinity).
+function crig(station, opts) {
+  const o = opts || {}, rects = rectsFor(station), every = o.every || 250;
+  const eng = LE.createStation(station, { holdFrames: CFG.holdFrames, defaults: CFG.defaults, qaGraceSec: CFG.qaGraceSec, modelClasses: o.model || null });
+  const chk = LE.createChecker(station, o.check);
+  const cur = {};
+  for (const z of station.zones) cur[z.id] = { activity: 0, bright: 0 };
+  if (o.model) for (const z of Object.keys(cur)) for (const c of o.model) cur[z]['class:' + c] = 0;
+  let t = 0, fid = 0, frame = null, lastF = -1e9, dets = [];
+  const r = {
+    eng, chk, rects, verdicts: [], events: [], hands: o.hands == null ? null : o.hands, motion: null,
+    set(patch) { for (const z of Object.keys(patch || {})) Object.assign(cur[z], patch[z]); return r; },
+    calm() { for (const z of Object.keys(cur)) for (const k of Object.keys(cur[z])) cur[z][k] = 0; return r; },
+    see(list) { dets = list; return r; },
+    shot(list) { frame = { id: ++fid, t, dets: list }; return r; },
+    det: (cls, zone, conf, p) => det(rects, cls, zone, conf, p),
+    play(ms, patch) {
+      if (patch) r.set(patch);
+      const end = t + ms;
+      while (t < end) {
+        if (o.model && every !== Infinity && t - lastF >= every) { frame = { id: ++fid, t, dets }; lastF = t; }
+        const evs = eng.update(JSON.parse(JSON.stringify(cur)), t);
+        r.events.push(...evs);
+        const motion = r.motion != null ? r.motion : Math.max(...Object.values(cur).map(z => z.activity));
+        r.verdicts.push(...chk.update({ t, events: evs, state: eng.state(), modelOn: !!o.model, frame, zones: rects, hands: r.hands, motion }));
+        t += FRAME;
+      }
+      return r;
+    },
+    step(patch, ms) { r.calm(); return r.play(ms == null ? 500 : ms, patch); },
+    busy(ms) { r.motion = 0.5; r.play(ms || 500); r.motion = null; return r; },    // a hand passes: the view is not clear
+    get t() { return t; },
+    kinds: () => r.verdicts.map(v => v.kind + ': ' + v.message).join(' | '),
+    last: () => r.verdicts[r.verdicts.length - 1]
+  };
+  return r;
+}
+const st2 = () => JSON.parse(JSON.stringify(CFG.stations.find(s => s.id === 's2')));
+const withStation = s => { const c = JSON.parse(JSON.stringify(CFG)); c.stations = c.stations.map(x => (x.id === s.id ? s : x)); return c; };
+const S2_CLASSES = ['splice', 'crimp_tool', 'crimped_splice'];
+
+console.log('checker: config');
+{
+  check('the shipped config has no positionCheck and no mustStay (both opt-in, off)', CFG.stations.every(s => !s.positionCheck && s.substeps.every(x => !x.model || !x.model.mustStay)));
+  const s = st2();
+  s.positionCheck = { anchor: 'crimp', classes: ['splice'], tolerance: 0.14 };
+  s.substeps[4].model.mustStay = true;
+  const ok = withStation(s);
+  ok.sounds = { verified: false };
+  check('positionCheck, mustStay and sounds pass the config check', LE.checkConfig(ok).length === 0, LE.checkConfig(ok).join(' | '));
+  const bad = withStation(Object.assign(st2(), { positionCheck: { anchor: 'nowhere', classes: [], tolerance: 2 } }));
+  const e = LE.checkConfig(bad).join(' | ');
+  check('a bad positionCheck is reported: anchor, classes, tolerance', /anchor "nowhere"/.test(e) && /classes must be a non-empty/.test(e) && /tolerance must be/.test(e), e);
+  const b2 = st2(); b2.substeps[4].model.mustStay = 'yes';
+  const c2 = withStation(b2); c2.sounds = { verified: 'no' };
+  const e2 = LE.checkConfig(c2).join(' | ');
+  check('mustStay that is not true or false, and a bad sounds block, are reported', /mustStay must be true or false/.test(e2) && /sounds must look like/.test(e2), e2);
+}
+
+console.log('checker: wrong order and progress (zones)');
+{
+  const r = crig(st2());
+  r.play(500).step({ in: act() }).step({ crimp: act() });
+  const m = r.verdicts.find(v => v.kind === 'mistake');
+  check('a tracker jump is a mistake "Wrong order: <label> before <skipped label> (step N skipped)"', m && m.message === 'Wrong order: Push wire A into the splice before Take a splice (step 2 skipped)' && m.substep === 's2_get_splice' && m.reason === 'wrong_order' && m.conf === null && m.station === 's2' && m.cycle === 1, r.kinds());
+  check('it comes straight from the tracker, at the confirming frame (no clear view needed)', m && m.t === 1250 && r.chk.current.kind === 'mistake', m && m.t);
+  check('a zones substep is verified at once with no confidence: "Step N verified: <label>"', r.verdicts[0].kind === 'verified' && r.verdicts[0].message === 'Step 1 verified: Take a wire pair from the in tray' && r.verdicts[0].conf === null);
+  check('the red box goes around the zone of the step done out of order (the shown verdict keeps zones and box)', r.chk.current.zones.join() === 'crimp' && r.chk.current.box === null);
+  r.step({}, 250);
+  check('not cleared before the view has been clear 0.3 s', r.verdicts.length === 2, r.kinds());
+  r.play(250);
+  const c = r.last();
+  check('then "Mistake cleared. Continue with <next substep>" (kind cleared, no longer showing)', c.kind === 'cleared' && c.message === 'Mistake cleared. Continue with Crimp side A' && c.substep === 's2_crimp' && !r.chk.current && r.chk.cleared.message === c.message, r.kinds());
+  r.step({ out: act() }).step({}, 300);
+  const done = r.last();
+  check('the closing substep gives "Cycle complete" with the cycle time', done.kind === 'verified' && done.message === 'Cycle complete' && done.cycle_s === 1.5 && done.cycle === 1, JSON.stringify(done));
+}
+{
+  const r = crig(CFG.stations.find(s => s.id === 's1'));
+  r.play(500).step({ supply: act() }).step({ work: act() }, 2000).step({ supply: act() }).step({ work: act() }, 2000).step({ out: act() }).step({}, 500);
+  check('a repeat (s1 makes two wires) is not a mistake: every verdict is verified', r.verdicts.length === 5 && r.verdicts.every(v => v.kind === 'verified'), r.kinds());
+  check('the repeat gets its own "Step 1 verified" (verified is never deduped)', r.verdicts.filter(v => v.message === 'Step 1 verified: Pull wire from supply').length === 2);
+  check('step_s = seconds since the previous verified step', r.verdicts[1].step_s === 0.5 && r.last().message === 'Cycle complete' && r.last().cycle_s === 5, JSON.stringify(r.verdicts.map(v => v.step_s)));
+}
+{
+  const r = crig(st2(), { model: S2_CLASSES });
+  r.play(500).step({ in: act() }).step({ crimp: { 'class:crimp_tool': 0.5 } });
+  check('a jump confirmed by a model rule under 0.60 is a review with the same message', r.last().kind === 'review' && r.last().message === 'Wrong order: Crimp side A before Take a splice (step 2 skipped)' && r.last().conf === 0.5, r.kinds());
+  const r2 = crig(st2(), { model: S2_CLASSES });
+  r2.play(500).step({ in: act() }).step({ crimp: { 'class:crimp_tool': 0.8 } });
+  check('at 0.60 or more it is a mistake', r2.last().kind === 'mistake' && r2.last().conf === 0.8, r2.kinds());
+}
+
+console.log('checker: confidence (model substeps, clear-view checks)');
+{
+  const r = crig(st2(), { model: S2_CLASSES });
+  r.play(500).step({ in: act() });
+  r.see([r.det('splice', 'parts', 0.5)]).step({ parts: { 'class:splice': 0.5 } }, 1500);
+  const rv = r.verdicts.filter(v => v.kind === 'review');
+  check('a model substep under 0.60 gives review "<label> looks done but I\'m not sure"', rv.length === 1 && rv[0].message === "Take a splice looks done but I'm not sure" && rv[0].substep === 's2_get_splice' && rv[0].conf === 0.5, r.kinds());
+  check('...at the first check with 3 model results taken in clear view (clear from 1.3 s; results at 1.5, 1.75, 2.0 s)', rv[0] && rv[0].t === 2000, rv[0] && rv[0].t);
+  r.play(3000);
+  check('the same review again is shown but is no new verdict (not re-sounded)', r.verdicts.filter(v => v.kind === 'review').length === 1 && r.chk.current.kind === 'review', r.kinds());
+  r.see([r.det('splice', 'parts', 0.8)]).play(1500);
+  const ok = r.last();
+  check('once the model is sure (0.60 or more): "Step N verified: <label>" with its confidence', ok.kind === 'verified' && ok.message === 'Step 2 verified: Take a splice' && ok.conf === 0.8 && r.chk.current.box, JSON.stringify(ok));
+  const r2 = crig(st2(), { model: S2_CLASSES });
+  r2.play(500).step({ in: act() }).see([r2.det('splice', 'parts', 0.9)]).step({ parts: { 'class:splice': 0.9 } }, 1500);
+  check('a sure model substep is verified at its first clear-view check', r2.last().kind === 'verified' && r2.last().message === 'Step 2 verified: Take a splice' && r2.last().conf === 0.9, r2.kinds());
+  const r3 = crig(st2(), { model: S2_CLASSES });
+  r3.play(500).step({ in: act() }).see([r3.det('splice', 'parts', 0.9)]);
+  r3.hands = true; r3.step({ parts: { 'class:splice': 0.9 } }, 2000);
+  check('with a hand in the tile the model substep waits for its verdict', r3.verdicts.length === 1 && r3.chk.pending === 's2_get_splice', r3.kinds());
+  r3.hands = false; r3.play(1500);
+  check('...and gets it once the view is clear', r3.last().message === 'Step 2 verified: Take a splice');
+}
+
+console.log('checker: missing part (mustStay, opt-in)');
+{
+  const run = s => {
+    const r = crig(s, { model: S2_CLASSES });
+    const all = [r.det('crimped_splice', 'crimp', 0.8)];
+    r.play(500).step({ in: act() }).see(all).step({ parts: { 'class:splice': 0.8 } }).step({ crimp: { 'class:splice': 0.8 } })
+      .step({ crimp: { 'class:crimp_tool': 0.8 } }).step({ crimp: { 'class:crimped_splice': 0.8 } }, 1500);
+    r.see([]).busy(500).play(1500);
+    return r;
+  };
+  const s = st2(); s.substeps.find(x => x.id === 's2_pull_test').model.mustStay = true;
+  const r = run(s);
+  const miss = r.verdicts.find(v => v.kind === 'mistake');
+  const vs = r.verdicts.filter(v => v.kind === 'verified').map(v => v.substep).join();
+  check('each clear-view check verifies the newest model step (Take a splice was overtaken before 3 results came in, like live_check.py)', vs === 's2_pick,s2_insert,s2_crimp,s2_pull_test', r.kinds());
+  check('mustStay: a verified part gone from its zone is a mistake "<class> is missing (step N)"', miss && miss.message === 'Crimped splice is missing (step 5)' && miss.reason === 'missing' && miss.substep === 's2_pull_test' && miss.conf === null, r.kinds());
+  r.play(3000);
+  check('rechecked every second while it shows, same message: no new verdict', r.verdicts.filter(v => v.kind === 'mistake').length === 1);
+  r.see([r.det('crimped_splice', 'crimp', 0.8)]).busy(500).play(1500);
+  check('put back: "Mistake cleared. Continue with <next substep>"', r.last().kind === 'cleared' && r.last().message === 'Mistake cleared. Continue with Pass to station 3', r.kinds());
+  const r2 = run(st2());
+  check('without mustStay the same run raises nothing', !r2.verdicts.some(v => v.kind === 'mistake' || v.kind === 'review'), r2.kinds());
+  r.step({ out: act() }).step({}, 300).see([]).busy(500).play(1500);
+  check('after the cycle ends the part may leave (no missing mistake)', r.last().message === 'Cycle complete', r.kinds());
+}
+
+console.log('checker: position and orientation (positionCheck, Save correct state)');
+const posStation = () => Object.assign(st2(), { positionCheck: { anchor: 'crimp', classes: ['splice'], tolerance: 0.14 } });
+let REF = null;
+{
+  const r = crig(posStation(), { model: S2_CLASSES });
+  r.see([r.det('splice', 'crimp', 0.8)]).busy(500);
+  check('Save correct state needs a clear view', /hands out of view/.test(r.chk.saveRef(r.t).error || ''));
+  r.play(500);
+  check('...and 3 model results taken in it', /of 3 model results/.test(r.chk.saveRef(r.t).error || ''), JSON.stringify(r.chk.saveRef(r.t)));
+  r.play(2500);
+  const saved = r.chk.saveRef(r.t), b = saved.ref && saved.ref.classes.splice;
+  check('saved: each listed class\'s median box relative to the anchor zone, plus landscape', b && near(b.x, 0.5) && near(b.y, 0.5) && near(b.w, 0.4) && near(b.h, 0.2) && b.landscape === true && saved.ref.anchor === 'crimp' && saved.ref.frames === 10, JSON.stringify(saved));
+  REF = saved.ref;
+  const r2 = crig(posStation(), { model: S2_CLASSES });
+  r2.see([r2.det('crimp_tool', 'crimp', 0.8)]).play(1500);
+  check('a listed class that is not in view cannot be saved', /Could not see Splice in Crimp area/.test(r2.chk.saveRef(r2.t).error || ''), JSON.stringify(r2.chk.saveRef(r2.t)));
+  const r3 = crig(st2(), { model: S2_CLASSES });
+  check('a station without positionCheck has nothing to save', /no positionCheck/.test(r3.chk.saveRef(0).error));
+}
+{
+  const r = crig(posStation(), { model: S2_CLASSES });
+  r.chk.setRef(REF);
+  r.see([r.det('splice', 'crimp', 0.8, { cx: 0.6 })]).play(1500);
+  check('within the tolerance (0.10 of the zone off, limit 0.14): no mistake', r.verdicts.length === 0, r.kinds());
+  r.see([r.det('splice', 'crimp', 0.8, { cx: 0.7 })]).busy().play(1500);
+  check('off by more than 0.14 of the anchor zone: mistake "<class> is in the wrong position"', r.last() && r.last().kind === 'mistake' && r.last().message === 'Splice is in the wrong position' && r.last().reason === 'wrong_position' && near(r.chk.current.box[0], 2 / 4 + 0.5 / 4, 1e-9), r.kinds());
+  r.see([r.det('splice', 'crimp', 0.8, { w: 0.2, h: 0.4 })]).busy().play(1500);
+  check('portrait where the saved state is landscape: "<class> is turned the wrong way"', r.last().kind === 'mistake' && r.last().message === 'Splice is turned the wrong way' && r.last().reason === 'turned', r.kinds());
+  r.see([r.det('splice', 'crimp', 0.5, { cy: 0.8 })]).busy().play(1500);
+  check('the same on a box under 0.60 is a review', r.last().kind === 'review' && r.last().message === 'Splice is in the wrong position' && r.last().conf === 0.5, r.kinds());
+  r.see([r.det('splice', 'crimp', 0.3, { cy: 0.8 })]).busy().play(1500);
+  check('a box under 0.35 is ignored (the review clears)', r.last().kind === 'cleared', r.kinds());
+}
+
+console.log('checker: vote, flicker, clear-view gate, recheck');
+{
+  const vote = shots => {
+    const r = crig(posStation(), { model: S2_CLASSES, every: Infinity });
+    r.chk.setRef(REF);
+    r.play(500);
+    for (const s of shots) r.shot([r.det('splice', 'crimp', s[0], { cx: s[1] })]).play(250);
+    return r;
+  };
+  const r1 = vote([[0.8, 0.9], [0.8, 0.5], [0.8, 0.9]]);
+  check('vote: 2 of the last 3 checks find the wrong position, so it is a mistake', r1.verdicts.length === 1 && r1.last().kind === 'mistake', r1.kinds());
+  const r2 = vote([[0.8, 0.5], [0.8, 0.9], [0.8, 0.5]]);
+  check('one stray result out of 3 raises nothing', r2.verdicts.length === 0, r2.kinds());
+  const r3 = vote([[0.8, 0.9], [0.5, 0.9], [0.8, 0.5]]);
+  check('no majority (mistake, review, fine): review "Results flickered between checks, take a look"', r3.verdicts.length === 1 && r3.last().kind === 'review' && r3.last().message === 'Results flickered between checks, take a look' && r3.last().reason === 'flicker', r3.kinds());
+  const r4 = vote([[0.8, 0.9], [0.8, 0.9]]);
+  check('fewer than 3 clear-view results: no check yet', r4.verdicts.length === 0);
+}
+{
+  const r = crig(posStation(), { model: S2_CLASSES, every: Infinity });
+  r.chk.setRef(REF);
+  r.motion = 0.5; r.shot([]).play(250);
+  check('a model result taken while the view is not clear is not used', r.chk.frames === 0);
+  r.motion = null; r.play(125).shot([]).play(125);
+  check('nor one taken in the first 0.3 s of a clear view', r.chk.frames === 0 && !r.chk.clear);
+  r.play(250).shot([]).play(125);
+  check('after 0.3 s it is', r.chk.frames === 1 && r.chk.clear);
+}
+{
+  const r = crig(st2(), { hands: false });
+  r.play(500).step({ in: act() }).step({ crimp: act() });
+  r.hands = true; r.step({}, 2000);
+  check('Hands on and a hand in the tile: no clear view, the mistake stays', r.last().kind === 'mistake' && r.chk.current.kind === 'mistake');
+  r.hands = false; r.play(500);
+  check('hand gone and zones still for 0.3 s: checked and cleared', r.last().kind === 'cleared');
+  const r2 = crig(st2());
+  r2.play(500).step({ in: act() }).step({ crimp: act() });
+  r2.motion = 0.06; r2.step({}, 2000);
+  check('zone motion of 0.05 or more is not a clear view', r2.last().kind === 'mistake');
+  r2.motion = 0.04; r2.play(500);
+  check('under 0.05 is', r2.last().kind === 'cleared');
+}
+{
+  const r = crig(posStation(), { model: S2_CLASSES });
+  r.chk.setRef(REF);
+  r.see([r.det('splice', 'crimp', 0.8, { cx: 0.9 })]).play(1500);
+  const m = r.last();
+  r.play(3000);
+  check('a showing mistake that stays the same is not repeated', r.verdicts.length === 1 && m.kind === 'mistake', r.kinds());
+  const t0 = r.t;
+  r.see([r.det('splice', 'crimp', 0.8)]).play(2000);
+  const c = r.last();
+  check('rechecked every 1.0 s in the same clear spell: fixed gives "Mistake cleared"', c.kind === 'cleared', r.kinds());
+  check('...at the next recheck (within 1.0 s of the fix, 1.0 s after the last check)', c.t - t0 < 1000 + FRAME && (c.t - m.t) % 125 === 0, c.t - t0);
+  const r2 = crig(posStation(), { model: S2_CLASSES });
+  r2.chk.setRef(REF);
+  r2.see([r2.det('splice', 'crimp', 0.8)]).play(1500).see([r2.det('splice', 'crimp', 0.8, { cx: 0.9 })]).play(3000);
+  check('nothing showing: one check per clear spell (a change waits for the next one)', r2.verdicts.length === 0, r2.kinds());
+  r2.busy().play(1500);
+  check('...which then finds it', r2.last() && r2.last().kind === 'mistake', r2.kinds());
+}
+
+console.log('checker: logs (verdicts.csv, cycles.csv counts)');
+{
+  const r = crig(st2());
+  r.play(500).step({ in: act() }).step({ crimp: act() }).step({}, 500).step({ out: act() }).step({}, 300);
+  const extra = { type: 'verdict', station: 's2', t: 1300, cycle: 1, substep: 's2_insert', kind: 'review', message: 'Results flickered between checks, take a look', conf: null, videoT: 1.3, videoFile: 's2.mp4' };
+  const ev = [{ type: 'session_start', t: 0 }].concat(r.events, r.verdicts, [extra]);
+  const v = LE.verdictsCsv(ev, CFG, { id: 'sess' }).trim().split('\n');
+  check('verdicts.csv: header and one row per verdict, in time order', v[0] === LE.VERDICT_COLS.join(',') && v.length === 1 + r.verdicts.length + 1 && v[2].includes(',mistake,') && v[3].includes(',review,'), v.join(' / '));
+  check('verdicts.csv row: session, station, time, ts, cycle, step number, event, message, empty confidence for zones', v[2] === 'sess,s2,1970-01-01T00:00:01Z,1.25,1,2,mistake,Wrong order: Push wire A into the splice before Take a splice (step 2 skipped),,,,,', v[2]);
+  check('verdicts.csv quotes a message with a comma and keeps the video position', v[3] === 'sess,s2,1970-01-01T00:00:01Z,1.3,1,3,review,"Results flickered between checks, take a look",,,,s2.mp4,1.3', v[3]);
+  check('verdicts.csv: Cycle complete has step_seconds and cycle_seconds', /,verified,Cycle complete,,[\d.]+,[\d.]+,,$/.test(v[v.length - 1]), v[v.length - 1]);
+  const c = LE.cyclesCsv(ev, CFG, { id: 'sess' }).trim().split('\n'), h = c[0].split(','), row = (c.find(l => l.includes(',s2,detected,1,')) || '').split(',');
+  check('cycles.csv gains mistakes and reviews per cycle (1 and 1 here)', h.indexOf('mistakes') === h.indexOf('flags') + 1 && row[h.indexOf('mistakes')] === '1' && row[h.indexOf('reviews')] === '1', c.join(' / '));
+  check('the server accepts verdict events (EVENT_TYPES)', LE.EVENT_TYPES.includes('verdict'));
+}
+
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);
