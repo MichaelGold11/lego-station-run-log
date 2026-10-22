@@ -154,6 +154,26 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
 .zbtns, .calrow { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .zsw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
 .stmsg { font-size: 12px; color: var(--crit-ink); }
+/* mistake alerts: the card on the video (MISTAKE flashes at 4 Hz like live_check.py), and the checklist row it is about */
+.vcard { position: absolute; left: 6px; right: 6px; bottom: 6px; padding: 5px 9px 6px; border-radius: 6px; border-left: 6px solid var(--line-2); background: var(--surface); color: var(--ink); box-shadow: 0 2px 8px rgba(0, 0, 0, .35); pointer-events: none; }
+.vc-top { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.vc-title { font-size: 15px; font-weight: 700; letter-spacing: .05em; }
+.vc-st { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.vc-msg { font-size: 13px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.vcard.mistake { border-left-color: var(--crit); background: color-mix(in srgb, var(--crit) 14%, var(--surface)); animation: vflash .5s steps(1, end) infinite; }
+.vcard.mistake .vc-title { color: var(--crit-ink); }
+@keyframes vflash { 50% { background: color-mix(in srgb, var(--crit) 34%, var(--surface)); } }
+@media (prefers-reduced-motion: reduce) { .vcard.mistake { animation: none; } }
+.vcard.review { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 18%, var(--surface)); }
+.vcard.review .vc-title { color: var(--warn-ink); }
+.vcard.cleared { border-left-color: var(--good); background: color-mix(in srgb, var(--good) 10%, var(--surface)); }
+.vcard.cleared .vc-title { color: var(--good-ink); }
+.check li.mistake { border-left-color: var(--crit); background: color-mix(in srgb, var(--crit) 8%, transparent); }
+.check li.mistake .ic { border-color: var(--crit); background: var(--crit); }
+.check li.mistake small { color: var(--crit-ink); font-weight: 600; }
+.check li.review { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.check li.review .ic { border-color: var(--warn); background: var(--warn); }
+.check li.review small { color: var(--warn-ink); font-weight: 600; }
 
 .sessions table { border-collapse: collapse; width: 100%; font-size: 13px; }
 .sessions th { text-align: left; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 4px 8px; border-bottom: 1px solid var(--line); }
@@ -207,6 +227,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
   <div class="toolbar">
     <button class="btn sm" id="btnModel" type="button">Model: off</button>
     <button class="btn sm" id="btnHands" type="button">Hands: off</button>
+    <button class="btn sm" id="btnSound" type="button" title="Mistake alert sounds for every station (each station also has its own Mute)">Sound: on</button>
     <span class="muted" id="detNote"></span>
     <span class="sep"></span>
     <button class="btn sm" id="btnCams" type="button">Find cameras</button>
@@ -245,7 +266,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
   const G = {
     config: null, setup: {}, events: [], queue: [], session: null, lastSession: null, basis: store.get('wire-line:basis') || 'auto',
     modelOn: false, handsOn: false, cameras: [], clips: [], camAllowed: false, failPick: null, sending: false, summary: null, sumAt: 0, evSeen: -1,
-    qaId: null, saveTimer: null, starting: false, stopping: false
+    qaId: null, saveTimer: null, starting: false, stopping: false, soundOn: store.get('wire-line:sound') !== false
   };
   // Y.files: one entry per distinct model file ({ status, session, size, canvas, ctx, ... }); each station points at its file through st.mdl.
   const Y = { status: 'off', backend: '', ort: null, files: {}, error: '', loading: null, errs: 0 };
@@ -285,6 +306,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       for (const k of Object.keys(x.calib.motion || {})) if (ids.includes(k)) out.calib.motion[k] = x.calib.motion[k];
       for (const k of Object.keys(x.calib.bright || {})) if (ids.includes(k)) out.calib.bright[k] = x.calib.bright[k];
     }
+    if (x && x.ref && x.ref.classes && ids.includes(x.ref.anchor)) out.ref = x.ref;    // the saved correct state (positionCheck)
     return out;
   }
   function saveSetup(st) {
@@ -326,8 +348,10 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       source: { type: 'none', key: 'none', label: 'None (manual only)' }, stream: null, recOn: false, rec: null, recBytes: 0,
       setup: normSetup(cfg, G.setup[cfg.id]), prevGray: null, sig: null, lastProc: 0, lastCT: 0, fps: 0, fpsN: 0, fpsT: now(), fresh: false,
       mdl: null, dets: null, detsPrev: null, detT: 0, hands: null, handsT: 0, modelN: 0, modelFps: 0, modelT: now(),
-      manualN: 0, setupOn: false, drawZone: null, drag: null, calib: null, err: '', clearArm: 0, lastCheck: '', token: 0
+      manualN: 0, setupOn: false, drawZone: null, drag: null, calib: null, err: '', clearArm: 0, lastCheck: '', token: 0,
+      chk: LE.createChecker(cfg), mute: store.get('wire-line:mute:' + cfg.id) === true, detSeq: 0, detCapT: 0, driven: false, lastCard: '', refMsg: '', px: 1
     };
+    st.chk.setRef(st.setup.ref || null);
     const el = document.createElement('section');
     el.className = 'panel st'; el.dataset.st = cfg.id;
     el.innerHTML = `
@@ -335,10 +359,12 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
         <span class="st-badge">${esc(cfg.id.toUpperCase())}</span><h2>${esc(cfg.label)}</h2>
         <select class="src" aria-label="Video source for ${esc(cfg.label)}"></select>
         <label class="recl" title="Record this station's video while a session runs"><input type="checkbox" class="rec"> Rec</label>
+        <label class="recl" title="Mute this station's mistake alert sounds"><input type="checkbox" class="mute"> Mute</label>
         <button class="btn sm setupb" type="button">Setup</button>
       </div>
       <div class="st-body">
-        <div class="stage"><video muted playsinline></video><canvas></canvas><div class="nosrc">No video. Pick a camera or a clip above, or use the buttons below.</div></div>
+        <div class="stage"><video muted playsinline></video><canvas></canvas><div class="nosrc">No video. Pick a camera or a clip above, or use the buttons below.</div>
+          <div class="vcard" hidden role="status" aria-live="assertive"><div class="vc-top"><b class="vc-title"></b><span class="vc-st">${esc(cfg.id.toUpperCase())} ${esc(cfg.label)}</span></div><div class="vc-msg"></div></div></div>
         <div class="info">
           <div class="nowbox"><div><div class="eyebrow nowlab">Now</div><div class="cur">Waiting for the first step</div></div><div class="big mono"></div></div>
           <div class="kv mono"></div>
@@ -357,12 +383,15 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
         <div class="zbtns"></div>
         <div class="calrow"><button class="btn sm calb" type="button">Calibrate empty</button>${bulbs.length ? '<button class="btn sm boff" type="button">Bulb off</button><button class="btn sm bon" type="button">Bulb on</button>' : ''}<button class="btn sm clr" type="button">Clear zones</button><span class="calst muted"></span></div>
         <div class="muted">Pick a zone, then drag a box on the video. Calibrate with the work area empty${bulbs.length ? ' and the bulb off; then light the bulb and press Bulb on' : ''}.</div>
+        ${cfg.positionCheck ? `<div class="calrow"><button class="btn sm refb" type="button">Save correct state</button><span class="refst muted"></span></div>
+        <div class="muted">Position check: build it correctly, turn the model on, take your hands away, then press Save correct state. It saves where the model sees ${esc(cfg.positionCheck.classes.join(', '))} inside the ${esc((cfg.zones.find(z => z.id === cfg.positionCheck.anchor) || {}).label || cfg.positionCheck.anchor)} zone.</div>` : ''}
       </div>`;
     const q = s => el.querySelector(s);
     Object.assign(st, {
       el, video: q('video'), canvas: q('canvas'), stage: q('.stage'), nosrc: q('.nosrc'), sel: q('.src'), recBox: q('.rec'), setupBtn: q('.setupb'),
       elNow: q('.nowbox'), elNowLab: q('.nowlab'), elCur: q('.cur'), elBig: q('.big'), elKv: q('.kv'), elQa: q('.qa'), elCheck: q('.check'),
-      elMeta: q('.meta'), elMsg: q('.stmsg'), setupPanel: q('.setup-panel'), zbtns: q('.zbtns'), calst: q('.calst'), reasons: q('.reasons')
+      elMeta: q('.meta'), elMsg: q('.stmsg'), setupPanel: q('.setup-panel'), zbtns: q('.zbtns'), calst: q('.calst'), reasons: q('.reasons'),
+      vcard: q('.vcard'), vcTitle: q('.vc-title'), vcMsg: q('.vc-msg'), refst: q('.refst')
     });
     st.ctx = st.canvas.getContext('2d');
     st.proc = document.createElement('canvas');
@@ -371,6 +400,10 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     // Blur after picking, so the number and letter hotkeys reach the page instead of the list.
     st.sel.onchange = () => { st.sel.blur(); setSource(st, st.sel.value); };
     st.recBox.onchange = () => setRec(st, st.recBox.checked);
+    const muteBox = q('.mute');
+    muteBox.checked = st.mute;
+    muteBox.onchange = () => { st.mute = muteBox.checked; store.set('wire-line:mute:' + st.id, st.mute); };
+    if (cfg.positionCheck) q('.refb').onclick = () => saveRef(st);
     st.setupBtn.onclick = () => toggleSetup(st);
     q('.cyc').onclick = () => manualCycle(st);
     if (isQa) { q('.passb').onclick = () => manualPass(); q('.failb').onclick = () => openFail(); }
@@ -438,6 +471,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     st.source = src; st.err = '';
     st.prevGray = null; st.sig = null; st.dets = st.detsPrev = null; st.hands = null; st.lastCT = 0;
     st.eng.abandon(t).forEach(emit);
+    st.chk.restart();
     emit({ type: 'source_change', station: st.id, t, input: src.type, note: src.label });
     if (!quiet) store.set('wire-line:source:' + st.id, src.key);
     st.recOn = src.type === 'camera' ? (store.get('wire-line:rec:' + st.id) !== false) : src.type === 'clip' ? store.get('wire-line:recclip:' + st.id) === true : false;
@@ -535,7 +569,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
   function processStation(st) {
     const v = st.video;
     st.lastProc = now();
-    if (st.source.type === 'none' || v.readyState < 2 || !v.videoWidth || v.paused) return;
+    if (st.driven || st.source.type === 'none' || v.readyState < 2 || !v.videoWidth || v.paused) return;
     const { w, h } = procSize(v.videoWidth, v.videoHeight);
     if (st.proc.width !== w || st.proc.height !== h) { st.proc.width = w; st.proc.height = h; st.prevGray = null; }
     if (st.source.type === 'clip' && v.currentTime + 0.3 < st.lastCT) st.prevGray = null;    // the clip looped: no motion from the jump
@@ -554,7 +588,9 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     }
     if (G.handsOn && H.status === 'ready') hp = LE.handPresence(st.hands && t - st.handsT < 2000 ? st.hands : [], zones);
     st.sig = LE.mergeSignals(r.signals, cls, hp);
-    st.eng.update(st.sig, t).forEach(emit);
+    const evs = st.eng.update(st.sig, t);
+    evs.forEach(emit);
+    runChecker(st, evs, zoneMotion(r.signals), t);
     st.fpsN++;
     if (t - st.fpsT >= 1000) { st.fps = st.fpsN * 1000 / (t - st.fpsT); st.fpsN = 0; st.fpsT = t; }
     st.fresh = true;
@@ -567,6 +603,48 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     if (pick) { try { processStation(pick); } catch (e) { console.error(e); } if (pick.fresh) { drawOverlay(pick); pick.fresh = false; } }
     for (const st of LIST) if (st.source.type === 'none' || st.video.paused) st.eng.tick(t).forEach(emit);
   }, 30);
+
+  // ---------- step checker (Ruza's live_check.py): verdicts, sounds, Save correct state ----------
+  // The checker reads what the page already has (tracker events, the station's last model result, hands, zone motion): no extra inference.
+  const HANDS_FRESH = 5000;     // a hand result counts for the clear-view gate this long (with four stations they come every few seconds)
+  function zoneMotion(sig) { let m = null; for (const id of Object.keys(sig || {})) m = Math.max(m || 0, sig[id].activity || 0); return m; }
+  // x (tests only): override hands, modelOn or frame.
+  function runChecker(st, evs, motion, t, x) {
+    const o = x || {};
+    const hands = 'hands' in o ? o.hands : G.handsOn && H.status === 'ready' && st.hands && t - st.handsT < HANDS_FRESH ? st.hands.length > 0 : null;
+    const modelOn = 'modelOn' in o ? o.modelOn : !!(G.modelOn && st.mdl);
+    const frame = 'frame' in o ? o.frame : modelOn && st.dets ? { id: st.detSeq, t: st.detCapT, dets: st.dets } : null;
+    for (const v of st.chk.update({ t, events: evs, state: st.eng.state(), modelOn, frame, zones: zonesOf(st), hands, motion })) { emit(v); playVerdict(st, v.kind); }
+  }
+  // live_check.py beep(): mistake 3 x 880 Hz for 220 ms, review 600 Hz for 300 ms, verified 1320 Hz for 120 ms. One per new verdict.
+  const TONES = { mistake: [880, 220, 3], review: [600, 300, 1], verified: [1320, 120, 1] };
+  const A = { ctx: null };
+  // Browsers only start audio after a click or a key press: create or resume the context then.
+  function unlockAudio() {
+    try { if (!A.ctx) A.ctx = new (window.AudioContext || window.webkitAudioContext)(); if (A.ctx.state === 'suspended') A.ctx.resume(); } catch (e) { /* no audio here */ }
+  }
+  window.addEventListener('pointerdown', unlockAudio, true);
+  window.addEventListener('keydown', unlockAudio, true);
+  function playVerdict(st, kind) {
+    const tone = TONES[kind];
+    if (!tone || !G.soundOn || st.mute || !A.ctx || A.ctx.state !== 'running') return;
+    if (kind === 'verified' && G.config.sounds && G.config.sounds.verified === false) return;
+    const ac = A.ctx, d = tone[1] / 1000;
+    let at = ac.currentTime + 0.02;
+    for (let i = 0; i < tone[2]; i++, at += d + 0.08) {
+      const osc = ac.createOscillator(), g = ac.createGain();
+      osc.type = 'sine'; osc.frequency.value = tone[0];
+      g.gain.setValueAtTime(0, at); g.gain.linearRampToValueAtTime(0.3, at + 0.01); g.gain.setValueAtTime(0.3, at + d - 0.015); g.gain.linearRampToValueAtTime(0, at + d);
+      osc.connect(g); g.connect(ac.destination); osc.start(at); osc.stop(at + d);
+    }
+  }
+  function saveRef(st) {
+    const r = st.chk.saveRef(now());
+    if (r.error) st.refMsg = r.error;
+    else { st.setup.ref = r.ref; st.refMsg = 'Saved from ' + r.ref.frames + ' model results.'; saveSetup(st); }
+    renderSetup(st);
+  }
+  function dropRef(st, why) { if (!st.setup.ref) return; delete st.setup.ref; st.chk.setRef(null); st.refMsg = why; }
 
   // ---------- model and hands: one session per model file (stations may share one), one inference at a time, round-robin over stations ----------
   const baseName = f => String(f).split('/').pop();
@@ -698,8 +776,8 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
         const st = live[k++ % live.length];
         if (G.modelOn && st.mdl) {
           try {
-            const d = await infer(st.video, st.mdl);
-            st.detsPrev = st.dets; st.dets = d; st.detT = now(); st.modelN++; Y.errs = 0;
+            const t0 = now(), d = await infer(st.video, st.mdl);
+            st.detsPrev = st.dets; st.dets = d; st.detT = now(); st.detCapT = t0; st.detSeq++; st.modelN++; Y.errs = 0;
           } catch (e) {
             console.error(e);
             if (e && e.classMismatch) {   // this station's model is the wrong one: back to zones, the others keep going
@@ -751,6 +829,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
   function toggleSetup(st) {
     st.setupOn = !st.setupOn;
     st.setupPanel.hidden = !st.setupOn;
+    st.refMsg = '';
     st.setupBtn.classList.toggle('on', st.setupOn);
     st.stage.classList.toggle('setup', st.setupOn);
     if (st.setupOn && !st.drawZone) st.drawZone = (st.cfg.zones.find(z => !st.setup.zones[z.id]) || st.cfg.zones[0]).id;
@@ -765,6 +844,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     if (st.bulbs.length) txt += ' | bulb off ' + (bulb.off != null ? Math.round(bulb.off) : '--') + ', on ' + (bulb.on != null ? Math.round(bulb.on) : '--');
     if (st.calib) txt = 'Calibrating... keep still';
     st.calst.textContent = txt;
+    if (st.refst) st.refst.textContent = st.refMsg || (st.setup.ref ? 'Correct state saved ' + new Date(st.setup.ref.saved).toLocaleString() + '.' : 'No correct state saved yet.');
   }
   function contentRect(st) {
     const c = st.canvas, v = st.video, W = c.width, H2 = c.height, vw = v.videoWidth, vh = v.videoHeight;
@@ -795,6 +875,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       if (w > 0.02 && h > 0.02) {
         st.setup.zones[d.zone] = { x: +x.toFixed(4), y: +y.toFixed(4), w: +w.toFixed(4), h: +h.toFixed(4) };
         st.prevGray = null;
+        if (st.cfg.positionCheck && d.zone === st.cfg.positionCheck.anchor) dropRef(st, 'The anchor zone changed: press Save correct state again.');
         saveSetup(st);
         const next = st.cfg.zones.find(z => !st.setup.zones[z.id]);
         if (next) st.drawZone = next.id;
@@ -810,6 +891,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     if (now() - st.clearArm > 3000) { st.clearArm = now(); btn.textContent = 'Click again to clear'; setTimeout(() => { btn.textContent = 'Clear zones'; }, 3000); return; }
     st.clearArm = 0; btn.textContent = 'Clear zones';
     st.setup = { zones: {}, calib: { motion: {}, bright: {} }, updatedAt: null };
+    st.chk.setRef(null);
     st.drawZone = st.cfg.zones[0].id;
     saveSetup(st); renderSetup(st); drawOverlay(st);
   }
@@ -837,6 +919,18 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     const r = st.stage.getBoundingClientRect(), d = Math.min(window.devicePixelRatio || 1, 2);
     const w = Math.max(2, Math.round(r.width * d)), h = Math.max(2, Math.round(r.height * d));
     if (st.canvas.width !== w || st.canvas.height !== h) { st.canvas.width = w; st.canvas.height = h; }
+    st.px = w / Math.max(1, r.width);
+  }
+  // The verdict box: red (mistake) or amber (review) 5 px around the detection, or its zone when there is no box; green for 2 s after a verified step.
+  const VERDICT_COLORS = { mistake: '#d03b3b', review: '#fab219', verified: '#0ca30c' };
+  function drawVerdict(st, cr) {
+    const v = st.chk.current;
+    if (!v || !VERDICT_COLORS[v.kind] || (v.kind === 'verified' && now() - v.t > 2000)) return;
+    const ctx = st.ctx, lw = (v.kind === 'verified' ? 3 : 5) * st.px;
+    let rects = v.box ? [{ x: v.box[0], y: v.box[1], w: v.box[2] - v.box[0], h: v.box[3] - v.box[1] }] : v.zones.map(z => st.setup.zones[z]).filter(Boolean);
+    if (!rects.length) rects = [{ x: 0, y: 0, w: 1, h: 1 }];
+    ctx.lineWidth = lw; ctx.strokeStyle = VERDICT_COLORS[v.kind];
+    for (const r of rects) ctx.strokeRect(cr.x + r.x * cr.w + lw / 2, cr.y + r.y * cr.h + lw / 2, Math.max(1, r.w * cr.w - lw), Math.max(1, r.h * cr.h - lw));
   }
   function drawOverlay(st) {
     const ctx = st.ctx, c = st.canvas;
@@ -877,6 +971,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       ctx.fillStyle = 'rgba(240,180,41,.9)';
       for (const hand of st.hands) for (const p of hand) { ctx.beginPath(); ctx.arc(cr.x + p.x * cr.w, cr.y + p.y * cr.h, Math.max(2, 2 * k), 0, 6.283); ctx.fill(); }
     }
+    drawVerdict(st, cr);
     if (st.calib) {
       ctx.fillStyle = 'rgba(15,17,19,.7)'; ctx.fillRect(cr.x, cr.y, cr.w, 22 * k);
       ctx.fillStyle = '#fff'; ctx.font = `600 ${Math.max(11, 12 * k)}px Saira, sans-serif`;
@@ -955,7 +1050,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       for (const st of LIST) if (st.rec) await stopRecording(st);
       G.session = { id: j.id, startedAtMs: j.startedAtMs, title: info.title, crew: info.crew, shift: info.shift, parts: {} };
       G.events = []; G.queue = []; G.evSeen = -1;
-      for (const st of LIST) { st.eng.restart(); st.manualN = 0; }
+      for (const st of LIST) { st.eng.restart(); st.chk.restart(); st.manualN = 0; }
       if (G.failPick) closeFail(true);
       emit({ type: 'session_start', t: j.startedAtMs, source: 'page', note: info.title || '' });
       for (const st of LIST) emit({ type: 'source_change', station: st.id, t: j.startedAtMs, input: st.source.type, note: st.source.label });
@@ -983,7 +1078,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       const L = doc.summary && doc.summary.line;
       const base = '/api/sessions/' + sess.id;
       banner('session', `Session saved: <b>${esc(sess.title || sess.id)}</b>${L ? ` | ${L.units} units, FPY ${L.fpy == null ? '--' : Math.round(L.fpy * 100) + '%'}` : ''} | ` +
-        `<a href="${base}/substeps.csv" download>substeps.csv</a> <a href="${base}/cycles.csv" download>cycles.csv</a> <a href="${base}/events.jsonl" download>events.jsonl</a> <a href="${base}" target="_blank" rel="noopener">session.json</a>` +
+        `<a href="${base}/substeps.csv" download>substeps.csv</a> <a href="${base}/cycles.csv" download>cycles.csv</a> <a href="${base}/verdicts.csv" download>verdicts.csv</a> <a href="${base}/events.jsonl" download>events.jsonl</a> <a href="${base}" target="_blank" rel="noopener">session.json</a>` +
         (G.queue.length ? ` | <b>${G.queue.length} events were not sent</b>` : ''), G.queue.length ? 'crit' : 'good');
     } catch (e) {
       banner('session', 'Stopping had a problem: ' + esc(e && e.message || e) + '. The data sent so far is on disk.', 'crit');
@@ -991,7 +1086,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       G.session = null; G.queue = []; G.stopping = false;
       // Live counting starts over; the finished session lives on the server.
       G.events = []; G.evSeen = -1;
-      for (const st of LIST) { st.eng.restart(); st.manualN = 0; }
+      for (const st of LIST) { st.eng.restart(); st.chk.restart(); st.manualN = 0; }
       const t = now();
       for (const st of LIST) emit({ type: 'source_change', station: st.id, t, input: st.source.type, note: st.source.label });
       renderSession(); loadClips(); if (!$('sessionsPanel').hidden) loadSessions();
@@ -1004,7 +1099,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
         const base = '/api/sessions/' + s.id, bytes = s.videos.reduce((a, v) => a + (v.bytes || 0), 0);
         return `<tr><td class="mono">${esc(s.id)}</td><td>${esc(s.title || '')}</td><td>${esc(s.crew || '')}</td><td>${esc(s.shift || '')}</td>` +
           `<td>${s.startedAt ? esc(new Date(s.startedAt).toLocaleString()) : ''}</td><td>${s.endedAt ? esc(new Date(s.endedAt).toLocaleTimeString()) : '<span class="chip warn">not ended</span>'}</td>` +
-          `<td class="mono">${s.videos.length} (${fmtMB(bytes)})</td><td><a href="${base}/substeps.csv" download>substeps.csv</a><a href="${base}/cycles.csv" download>cycles.csv</a><a href="${base}/events.jsonl" download>events</a><a href="${base}" target="_blank" rel="noopener">json</a></td></tr>`;
+          `<td class="mono">${s.videos.length} (${fmtMB(bytes)})</td><td><a href="${base}/substeps.csv" download>substeps.csv</a><a href="${base}/cycles.csv" download>cycles.csv</a><a href="${base}/verdicts.csv" download>verdicts.csv</a><a href="${base}/events.jsonl" download>events</a><a href="${base}" target="_blank" rel="noopener">json</a></td></tr>`;
       }).join('');
       $('sessTbl').innerHTML = rows ? `<table><thead><tr><th>Id</th><th>Title</th><th>Crew / group</th><th>Shift</th><th>Started</th><th>Ended</th><th>Videos</th><th>Exports</th></tr></thead><tbody>${rows}</tbody></table>` : '<div class="muted">No sessions yet.</div>';
     } catch (e) { $('sessTbl').innerHTML = '<div class="muted">The local server is not answering.</div>'; }
@@ -1046,6 +1141,12 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       } else if (!s.waitingQa) html += '<span class="muted">none yet</span>';
       if (html !== st.lastQaHtml) { st.elQa.innerHTML = html; st.lastQaHtml = html; }
     }
+    // verdict card (stays until cleared or replaced; "Mistake cleared" for about 3 s)
+    const cv = st.chk.current, cl = st.chk.cleared, bad = cv && (cv.kind === 'mistake' || cv.kind === 'review') ? cv : null;
+    let ck = '', title = '', msg = '';
+    if (bad) { ck = bad.kind; title = bad.kind === 'mistake' ? 'MISTAKE' : 'NEEDS REVIEW'; msg = bad.message; }
+    else if (cl && t < cl.until) { ck = 'cleared'; title = 'CLEARED'; msg = cl.message; }
+    if (ck + '|' + msg !== st.lastCard) { st.lastCard = ck + '|' + msg; st.vcard.hidden = !ck; st.vcard.className = 'vcard ' + ck; st.vcTitle.textContent = title; st.vcMsg.textContent = msg; }
     // checklist
     const rules = st.eng.rules(), counts = {};
     s.occ.forEach(o => { counts[o.id] = (counts[o.id] || 0) + 1; });
@@ -1054,6 +1155,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       if (!r.kind) { c = 'off'; why = r.hasModelRule ? 'needs the model' : 'needs a model rule'; }
       else if (!r.ready) { c = 'wait'; why = missingText(st, r); }
       if (s.current === r.id) c += ' now'; else if (counts[r.id]) c += ' done';
+      if (bad && bad.substep === r.id) { c += ' ' + bad.kind; why = bad.kind === 'mistake' ? 'Mistake - fix and clear the view' : 'Needs review'; }
       const avg = d && d.substepAvg[r.id];
       const tip = r.rule ? LE.ruleText(r.rule, cfg) : why;
       return `<li class="${c}" title="${esc(tip)}"><span class="ic"></span><span class="nm">${esc(r.label)}${counts[r.id] > 1 ? ` <span class="rep">x${counts[r.id]}</span>` : ''}${r.kind === 'model' ? ' <span class="tag">model</span>' : ''}${r.closes ? ' <span class="muted" style="font-size:11px">(ends the cycle)</span>' : ''}${why ? `<small>${esc(why)}</small>` : ''}</span><span class="num mono">${avg != null && !r.closes && d.cycles && (r.kind || avg > 0) ? fmtS(avg) : ''}</span></li>`;
@@ -1110,6 +1212,8 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     const bh = $('btnHands');
     bh.textContent = 'Hands: ' + (H.status === 'loading' ? 'loading...' : G.handsOn ? 'on' : 'off');
     bh.classList.toggle('on', G.handsOn);
+    $('btnSound').textContent = 'Sound: ' + (G.soundOn ? 'on' : 'off');
+    $('btnSound').classList.toggle('on', G.soundOn);
     $('detNote').textContent = (G.modelOn ? Y.backend + (GPU ? '' : ' (add ?gpu for WebGPU)') : '') + (G.handsOn ? (G.modelOn ? ' | ' : '') + 'hands: CPU worker' : '');
     document.querySelectorAll('#basisSeg button').forEach(b => b.classList.toggle('on', b.dataset.b === G.basis));
   }
@@ -1140,13 +1244,14 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
   $('btnRefresh').onclick = () => { loadSessions(); loadClips(); };
   $('btnModel').onclick = () => setModel(!G.modelOn);
   $('btnHands').onclick = () => setHands(!G.handsOn);
+  $('btnSound').onclick = () => { G.soundOn = !G.soundOn; store.set('wire-line:sound', G.soundOn); unlockAudio(); renderToolbar(); };
   $('btnCams').onclick = async () => { await findCameras(true); await restoreSources(true); };
   $('basisSeg').onclick = e => { const b = e.target.closest('button'); if (!b) return; G.basis = b.dataset.b; store.set('wire-line:basis', G.basis); G.evSeen = -1; renderToolbar(); };
   $('btnReset').onclick = () => {
     if (G.session) { banner('reset', 'Counts cannot be reset while a session records. Stop the session first.', ''); setTimeout(() => banner('reset', ''), 4000); return; }
     G.events = []; G.evSeen = -1;
     const t = now();
-    for (const st of LIST) { st.eng.restart(); st.manualN = 0; emit({ type: 'source_change', station: st.id, t, input: st.source.type, note: st.source.label }); }
+    for (const st of LIST) { st.eng.restart(); st.chk.restart(); st.manualN = 0; emit({ type: 'source_change', station: st.id, t, input: st.source.type, note: st.source.label }); }
   };
 
   async function restoreSources(camsOnly) {
@@ -1163,7 +1268,11 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     G, ST, Y, H, LE, setSource, startSession, stopSession, manualCycle, manualPass, openFail, pickReason, setModel, setHands,
     get summary() { return G.summary; },
     setZones(id, zones) { const st = ST[id]; Object.assign(st.setup.zones, zones); st.prevGray = null; saveSetup(st); if (st.setupOn) renderSetup(st); drawOverlay(st); },
-    calibrate(id, kind) { return calibrate(ST[id], kind || 'empty'); }
+    calibrate(id, kind) { return calibrate(ST[id], kind || 'empty'); },
+    // Drive one station by hand: while driven the frame loop leaves its tracker and checker alone; feed() runs one frame.
+    drive(id, on) { ST[id].driven = !!on; },
+    feed(id, sig, x) { const st = ST[id], t = now(), evs = st.eng.update(sig, t); st.sig = sig; evs.forEach(emit); runChecker(st, evs, x && 'motion' in x ? x.motion : zoneMotion(sig), t, x); drawOverlay(st); return evs; },
+    saveRef(id) { saveRef(ST[id]); return ST[id].refMsg; }
   };
 
   // ---------- start ----------
