@@ -1,14 +1,21 @@
 // Session API tests: starts server.mjs on a spare port with a temporary data folder, then stops it.
+// Also the iPhone camera listener (HTTPS on a second spare port): certificate, per-station keys, signaling, isolation.
 // Run: npm run test:line
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import http from 'node:http';
+import https from 'node:https';
+import net from 'node:net';
+import tls from 'node:tls';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ensurePhoneCert, findOpenssl, lanAddresses, localNames, ipAllowed } from './phone-cert.mjs';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const PORT = Number(process.env.TEST_PORT) || 4199;
+const PHONE_PORT = Number(process.env.TEST_PHONE_PORT) || 4198;
 const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'line-test-'));
 let fails = 0, passes = 0;
 function check(name, cond, extra) {
@@ -36,18 +43,29 @@ function req(method, p, body, headers) {
 }
 const jsonHdr = { 'Content-Type': 'application/json' };
 
-const server = spawn(process.execPath, [path.join(ROOT, 'server.mjs')], { env: Object.assign({}, process.env, { PORT: String(PORT), DATA_DIR: DATA }), stdio: ['ignore', 'pipe', 'pipe'] });
-let log = '';
-server.stdout.on('data', d => { log += d; });
-server.stderr.on('data', d => { log += d; });
+let server, log = '';
+function startServer() {
+  log = '';
+  server = spawn(process.execPath, [path.join(ROOT, 'server.mjs')], { env: Object.assign({}, process.env, { PORT: String(PORT), PHONE_PORT: String(PHONE_PORT), DATA_DIR: DATA }), stdio: ['ignore', 'pipe', 'pipe'] });
+  server.stdout.on('data', d => { log += d; });
+  server.stderr.on('data', d => { log += d; });
+}
+async function stopServer() {
+  if (!server || server.exitCode != null) return;
+  const gone = new Promise(r => server.once('exit', r));
+  server.kill();
+  await gone;
+}
+// Ready when both listeners have spoken (the phone one makes its certificate first: about a second).
 async function ready() {
-  for (let i = 0; i < 100; i++) {
-    if (/localhost:\d+/.test(log)) return true;
+  for (let i = 0; i < 300; i++) {
+    if (/localhost:\d+/.test(log) && /iPhone cameras:/.test(log)) return true;
     if (server.exitCode != null) return false;
     await new Promise(r => setTimeout(r, 100));
   }
   return false;
 }
+startServer();
 
 try {
   check('server starts on a spare port with DATA_DIR', await ready(), log);
@@ -204,12 +222,154 @@ try {
   const okOrigin = await req('POST', '/api/sessions', { title: 'origin ok', stations: { s4: { input: 'none' } } }, Object.assign({ Origin: 'http://localhost:' + PORT }, jsonHdr));
   check('a POST with the matching Origin still works', okOrigin.status < 300 && okOrigin.json && okOrigin.json.id, okOrigin.text);
 
+  console.log('iPhone cameras: certificate');
+  const info = (await req('GET', '/api/phone/info')).json;
+  const CD = path.join(DATA, 'phone-cert'), OSSL = findOpenssl();
+  if (!info.on) {
+    console.log('  skip  the iPhone listener is off here (' + info.error + '): no openssl?');
+  } else {
+    const caPem = fs.readFileSync(path.join(CD, 'ca.crt')), ca = new crypto.X509Certificate(caPem), leaf = new crypto.X509Certificate(fs.readFileSync(path.join(CD, 'server.crt')));
+    check('the certificate files and the pairing secret are in <data>/phone-cert', ['ca.crt', 'ca.key', 'server.crt', 'server.key', 'pairing-secret'].every(n => fs.existsSync(path.join(CD, n))));
+    if (process.platform !== 'win32') check('ca.key, server.key and the secret are readable by this user only', ['ca.key', 'server.key', 'pairing-secret'].every(n => (fs.statSync(path.join(CD, n)).mode & 0o077) === 0));
+    const days = (new Date(leaf.validTo) - new Date(leaf.validFrom)) / 86400000;
+    check('the server certificate follows Apple\'s rules: signed by the CA, serverAuth, at most 397 days', ca.ca && !leaf.ca && leaf.verify(ca.publicKey) && (leaf.keyUsage || []).includes('1.3.6.1.5.5.7.3.1') && days <= 397, days + ' days');
+    const lan = lanAddresses(), inside = lan.filter(a => ipAllowed(a.address)), outside = lan.filter(a => !ipAllowed(a.address));
+    check('it names localhost, the .local name, 127.0.0.1, ::1 and every private LAN address', leaf.checkHost('localhost') && localNames().every(n => leaf.checkHost(n)) && leaf.checkIP('127.0.0.1') && leaf.checkIP('::1') && inside.every(a => leaf.checkIP(a.address)), leaf.subjectAltName);
+    check('it leaves out public addresses (the CA may not vouch for them, and one would break the whole certificate)', outside.every(a => !leaf.checkIP(a.address)) && !/IP Address:(?!127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|0:0:0:0:0:0:0:1\b|f[cd])/i.test(leaf.subjectAltName), leaf.subjectAltName);
+    if (OSSL) {
+      const nc = spawnSync(OSSL, ['x509', '-in', path.join(CD, 'ca.crt'), '-noout', '-ext', 'nameConstraints'], { encoding: 'utf8' }).stdout || '';
+      check('the CA has critical name constraints: .local, localhost, loopback and private addresses only', /critical/.test(nc) && ['DNS:.local', 'DNS:localhost', 'IP:127.0.0.0/255.0.0.0', 'IP:10.0.0.0/255.0.0.0', 'IP:172.16.0.0/255.240.0.0', 'IP:192.168.0.0/255.255.0.0', 'IP:0:0:0:0:0:0:0:1/FFFF', 'IP:FC00:0:0:0:0:0:0:0/FE00'].every(x => nc.includes(x)), nc);
+      // A certificate for a real website, signed with this laptop's CA key: anyone holding ca.key could make one. It must fail.
+      const T = fs.mkdtempSync(path.join(os.tmpdir(), 'line-foreign-')), tf = n => path.join(T, n);
+      fs.writeFileSync(tf('f.cnf'), '[req]\nprompt = no\ndistinguished_name = dn\n[dn]\nCN = www.google.com\n[e]\nbasicConstraints = critical, CA:FALSE\nextendedKeyUsage = serverAuth\nsubjectAltName = DNS:www.google.com\n');
+      spawnSync(OSSL, ['req', '-new', '-newkey', 'rsa:2048', '-nodes', '-keyout', tf('f.key'), '-config', tf('f.cnf'), '-out', tf('f.csr')]);
+      spawnSync(OSSL, ['x509', '-req', '-in', tf('f.csr'), '-CA', path.join(CD, 'ca.crt'), '-CAkey', path.join(CD, 'ca.key'), '-set_serial', '0x4242', '-sha256', '-days', '30', '-extfile', tf('f.cnf'), '-extensions', 'e', '-out', tf('f.crt')]);
+      const vf = spawnSync(OSSL, ['verify', '-CAfile', path.join(CD, 'ca.crt'), tf('f.crt')], { encoding: 'utf8' }), vo = spawnSync(OSSL, ['verify', '-CAfile', path.join(CD, 'ca.crt'), path.join(CD, 'server.crt')], { encoding: 'utf8' });
+      check('a www.google.com certificate signed with the CA key is refused (permitted subtree violation); ours passes', fs.existsSync(tf('f.crt')) && vf.status !== 0 && /subtree/.test(vf.stdout + vf.stderr) && vo.status === 0, vf.stdout + vf.stderr + vo.stderr);
+      if (process.platform === 'darwin') {
+        const sv = (c, h) => spawnSync('/usr/bin/security', ['verify-cert', '-c', c, '-r', path.join(CD, 'ca.crt'), '-p', 'ssl', '-s', h, '-L', '-q'], { encoding: 'utf8' }).status === 0;
+        check('Apple\'s trust check (security verify-cert -p ssl) takes ours for the .local name and refuses the foreign one', sv(path.join(CD, 'server.crt'), localNames()[0] || 'localhost') && sv(path.join(CD, 'server.crt'), 'localhost') && !sv(tf('f.crt'), 'www.google.com') && !sv(path.join(CD, 'server.crt'), 'www.google.com'));
+      }
+      fs.rmSync(T, { recursive: true, force: true });
+      // An older CA without the constraints (what the first version made) is replaced, and the server certificate with it.
+      const O = fs.mkdtempSync(path.join(os.tmpdir(), 'line-oldca-')), of = n => path.join(O, n);
+      fs.writeFileSync(of('ca.cnf'), '[req]\nprompt = no\ndistinguished_name = dn\nx509_extensions = v\n[dn]\nCN = old\n[v]\nbasicConstraints = critical, CA:TRUE\nkeyUsage = critical, keyCertSign\n');
+      spawnSync(OSSL, ['req', '-new', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', of('ca.key'), '-config', of('ca.cnf'), '-days', '3650', '-out', of('ca.crt')]);
+      const oldFp = new crypto.X509Certificate(fs.readFileSync(of('ca.crt'))).fingerprint256;
+      const m1 = ensurePhoneCert(O, { names: ['test-mac.local'], ips: ['192.168.1.20'] });
+      check('an existing CA without name constraints is replaced (created), with a new server certificate', m1.created && m1.reissued && m1.caFingerprint !== oldFp);
+      const m2 = ensurePhoneCert(O, { names: ['test-mac.local'], ips: ['192.168.1.20', '10.1.2.3'] });
+      const m3 = ensurePhoneCert(O, { names: ['test-mac.local'], ips: ['192.168.1.20', '10.1.2.3', '2607:fb90::5', '8.8.8.8'] });
+      const l3 = new crypto.X509Certificate(m3.cert);
+      check('a new private address reissues the server certificate with the same CA; public ones are left out and change nothing', !m2.created && m2.reissued && m2.caFingerprint === m1.caFingerprint && !m3.reissued && m3.outside.join() === '2607:fb90::5,8.8.8.8' && l3.checkIP('10.1.2.3') && !l3.checkIP('8.8.8.8'), JSON.stringify(m3.outside));
+      fs.rmSync(O, { recursive: true, force: true });
+    } else console.log('  skip  openssl checks (no openssl found)');
+
+    // HTTPS with this laptop's CA as the only trust anchor. host: the address to connect to; name: the name to check.
+    const sreq = (method, p, body, o) => new Promise((resolve, reject) => {
+      const x = o || {}, buf = body == null ? null : Buffer.from(typeof body === 'string' ? body : JSON.stringify(body));
+      const ro = { host: x.host || '127.0.0.1', port: PHONE_PORT, method, path: p, ca: caPem, timeout: 5000, headers: Object.assign(buf ? { 'Content-Type': 'application/json', 'Content-Length': buf.length } : {}, x.headers || {}) };
+      if (x.name) { ro.checkServerIdentity = (h, c) => tls.checkServerIdentity(x.name, c); if (!net.isIP(x.name)) ro.servername = x.name; }
+      const r = https.request(ro, res => {
+        const chunks = [];
+        res.on('data', c => chunks.push(c));
+        res.on('end', () => { const raw = Buffer.concat(chunks), t = raw.toString('utf8'); let json = null; try { json = JSON.parse(t); } catch (e) { /* not json */ } resolve({ status: res.statusCode, headers: res.headers, text: t, json, raw }); });
+      });
+      r.on('error', reject); r.on('timeout', () => r.destroy(new Error('timeout')));
+      if (buf) r.write(buf);
+      r.end();
+    });
+    const caGet = await sreq('GET', '/ca.crt');
+    check('TLS checks out against the CA alone, and /ca.crt is the CA (DER) for the phone to install', caGet.status === 200 && /x509-ca-cert/.test(caGet.headers['content-type']) && caGet.raw.equals(ca.raw));
+    if (localNames()[0]) check('the certificate is good for the .local name', (await sreq('GET', '/ca.crt', null, { name: localNames()[0] })).status === 200);
+    for (const a of lan.slice(0, 2)) {
+      const g = await sreq('GET', '/ca.crt', null, { host: a.address, name: ipAllowed(a.address) ? a.address : localNames()[0] }).catch(e => ({ status: String(e.code || e.message) }));
+      check('the phone listener answers on the LAN address ' + a.address + ' (' + a.kind + ')', g.status === 200, g.status);
+      const plain = await new Promise(res => { const c = net.connect({ host: a.address, port: PORT, timeout: 2000 }, () => { c.destroy(); res('connected'); }); c.on('error', e => res(e.code)); c.on('timeout', () => { c.destroy(); res('timeout'); }); });
+      check('the data server (HTTP ' + PORT + ') is not reachable on ' + a.address, plain !== 'connected', plain);
+    }
+
+    console.log('iPhone cameras: per-station keys');
+    const keys = info.keys || {}, ids = ['s1', 's2', 's3', 's4'];
+    check('/api/phone/info gives each station its own 16-character key, and no shared token', ids.every(id => /^[A-Za-z0-9_-]{16}$/.test(keys[id] || '')) && new Set(ids.map(id => keys[id])).size === 4 && info.token === undefined && info.hosts.length >= 1, JSON.stringify(info));
+    const pg = await sreq('GET', `/phone?s=s1&k=${keys.s1}`);
+    check('the phone page opens with its station\'s key, with a strict CSP', pg.status === 200 && /Wire line camera/.test(pg.text) && /default-src 'none'/.test(pg.headers['content-security-policy'] || ''));
+    const wrong = [await sreq('GET', `/phone?s=s2&k=${keys.s1}`), await sreq('GET', `/phone/hello?s=s2&k=${keys.s1}`), await sreq('GET', `/phone/poll?s=s2&k=${keys.s1}&id=x&c=y`),
+      await sreq('POST', `/phone/offer?s=s2&k=${keys.s1}`, { client: 'attacker01', sdp: 'v=0\r\n' }), await sreq('GET', `/phone/hello?s=s9&k=${keys.s1}`), await sreq('GET', '/phone/hello?s=s1'), await sreq('GET', '/phone?s=s1')];
+    check('S1\'s key does not open S2 (page, hello, poll, offer), an unknown station or a missing key: all 403', wrong.every(r => r.status === 403), wrong.map(r => r.status).join());
+    const hello = await sreq('GET', `/phone/hello?s=s2&k=${keys.s2}`);
+    check('S2\'s own key works and says no /line page is open', hello.status === 200 && hello.json.station === 's2' && hello.json.laptop === 'closed', hello.text);
+    const iso = [];
+    for (const p of ['/line', '/api/line/config', '/api/sessions', '/api/db/runs', '/_blob/' + 'a'.repeat(32), '/api/phone/info', '/line-engine.js', '/vendor/qrcode.js', '/models/lego-parts.onnx', '/local-runtime.js', '/live'])
+      iso.push((await sreq('GET', p + `?s=s1&k=${keys.s1}`)).status);
+    iso.push((await sreq('POST', '/api/phone/rotate', { client: 'abcdefgh12' })).status, (await sreq('POST', '/api/sessions', { title: 'x' })).status);
+    check('the phone port serves nothing else, even with a key: the app, data, sessions, models and /line\'s signaling all 404', iso.every(c => c === 404), iso.join());
+
+    console.log('iPhone cameras: signaling');
+    const A = 'laptopAAAA1', B = 'laptopBBBB2', P1 = 'phone11111', P2 = 'phone22222', SDP = 'v=0\r\no=- 1 2 IN IP4 127.0.0.1\r\n';
+    const lpoll = (client, want) => req('POST', '/api/phone/poll', { client, want }, jsonHdr);
+    const pp = (id, c) => sreq('GET', `/phone/poll?s=s1&k=${keys.s1}&id=${id}&c=${c}`);
+    let a1 = await lpoll(A, ['s1', 's9']);
+    check('/line says which stations want a phone (unknown ones ignored); none has one yet', a1.status === 200 && a1.json.phones.s1.state === 'none' && !a1.json.phones.s9 && !a1.json.offers.length, a1.text);
+    const badOffer = await sreq('POST', `/phone/offer?s=s1&k=${keys.s1}`, { client: P1, sdp: 'not sdp' });
+    const o1 = await sreq('POST', `/phone/offer?s=s1&k=${keys.s1}`, { client: P1, sdp: SDP, camera: 'Back Camera', settings: { width: 640, height: 480, frameRate: 15 } });
+    check('an offer that is not a session description is refused; a good one is taken and the phone hears /line is open', badOffer.status === 400 && o1.status === 200 && /^[a-f0-9]{16}$/.test(o1.json.id) && o1.json.laptop === 'open', o1.text);
+    a1 = await lpoll(A, ['s1']);
+    const off = a1.json.offers[0];
+    check('/line gets the offer with the camera name and size', a1.json.offers.length === 1 && off.station === 's1' && off.id === o1.json.id && off.sdp === SDP && off.camera === 'Back Camera' && off.settings.width === 640, a1.text);
+    let p1 = await pp(o1.json.id, P1);
+    check('the phone waits for the answer', p1.json.state === 'waiting' && p1.json.answer === null && p1.json.laptop === 'open', p1.text);
+    const ansWrong = await req('POST', '/api/phone/answer', { client: A, station: 's1', id: 'ffffffffffffffff', sdp: SDP }, jsonHdr);
+    const ans = await req('POST', '/api/phone/answer', { client: A, station: 's1', id: o1.json.id, sdp: SDP + 'a=answer\r\n' }, jsonHdr);
+    p1 = await pp(o1.json.id, P1);
+    check('an answer for an old offer gets 409; the right one reaches the phone', ansWrong.status === 409 && ans.status === 200 && p1.json.state === 'answered' && p1.json.answer.endsWith('a=answer\r\n'), p1.text);
+    const b1 = await lpoll(B, ['s1']);
+    const ansB = await req('POST', '/api/phone/answer', { client: B, station: 's1', id: o1.json.id, sdp: SDP }, jsonHdr);
+    check('a second /line page sees the phone as busy, gets no offer, and cannot answer it (409)', b1.json.phones.s1.busy === true && !b1.json.offers.length && ansB.status === 409 && ansB.json.code === 'busy', b1.text + ansB.text);
+    await req('POST', '/api/phone/bye', { client: B }, jsonHdr);
+    const o2 = await sreq('POST', `/phone/offer?s=s1&k=${keys.s1}`, { client: P2, sdp: SDP });
+    p1 = await pp(o1.json.id, P1);
+    check('another phone on the same station link takes over; the first one hears "replaced"', o2.status === 200 && p1.json.state === 'replaced', p1.text);
+    a1 = await lpoll(A, ['s1']);
+    await req('POST', '/api/phone/answer', { client: A, station: 's1', id: o2.json.id, sdp: SDP }, jsonHdr);
+    await lpoll(A, []);
+    let p2 = await pp(o2.json.id, P2);
+    check('when /line picks another source the phone hears "dropped" and "not picked" (it sends a new offer)', p2.json.state === 'dropped' && p2.json.laptop === 'not_picked', p2.text);
+    const o3 = await sreq('POST', `/phone/offer?s=s1&k=${keys.s1}`, { client: P2, sdp: SDP });
+    await lpoll(A, ['s1']);
+    await req('POST', '/api/phone/drop', { client: A, station: 's1', id: o3.json.id }, jsonHdr);
+    p2 = await pp(o3.json.id, P2);
+    check('/line can drop a connection that did not start; the phone hears "dropped"', p2.json.state === 'dropped', p2.text);
+    await req('POST', '/api/phone/bye', { client: A }, jsonHdr);
+    p2 = await pp(o3.json.id, P2);
+    check('after /line says goodbye (a reload or a closed tab) the phone hears no /line page is open', p2.json.laptop === 'closed', p2.text);
+    const fh = await req('GET', '/api/phone/info', null, { Host: 'evil.example:' + PORT });
+    const fo = await req('POST', '/api/phone/poll', { client: A, want: ['s1'] }, Object.assign({ Origin: 'http://evil.example' }, jsonHdr));
+    const fr = await req('POST', '/api/phone/rotate', { client: A }, Object.assign({ Origin: 'http://evil.example' }, jsonHdr));
+    check('/api/phone/* refuses a foreign Host or Origin (403)', fh.status === 403 && fo.status === 403 && fr.status === 403);
+    const ps = await req('POST', '/api/sessions', { title: 'phones', stations: { s1: { input: 'phone', label: 'iPhone', record: true } } }, jsonHdr);
+    check('a session keeps "phone" as a station\'s input', ps.status === 200 && JSON.parse(fs.readFileSync(path.join(DATA, 'sessions', ps.json.id, 'session.json'), 'utf8')).stations.s1.input === 'phone');
+
+    console.log('iPhone cameras: pairing code');
+    const secret0 = fs.readFileSync(path.join(CD, 'pairing-secret'), 'utf8');
+    const rot = await req('POST', '/api/phone/rotate', { client: A }, jsonHdr);
+    const keys2 = (await req('GET', '/api/phone/info')).json.keys;
+    const oldK = await sreq('GET', `/phone/hello?s=s1&k=${keys.s1}`), newK = await sreq('GET', `/phone/hello?s=s1&k=${keys2.s1}`);
+    check('New pairing code changes every station\'s key and the saved secret; old links get 403, new ones work', rot.status === 200 && ids.every(id => keys2[id] !== keys[id]) && fs.readFileSync(path.join(CD, 'pairing-secret'), 'utf8') !== secret0 && oldK.status === 403 && newK.status === 200);
+    const ppOld = await sreq('GET', `/phone/poll?s=s1&k=${keys2.s1}&id=${o3.json.id}&c=${P2}`);
+    check('it also forgets the offers waiting from before', ppOld.json.state === 'unknown', ppOld.text);
+    await stopServer();
+    startServer();
+    check('the server starts again with the same data folder', await ready(), log);
+    const keys3 = (await req('GET', '/api/phone/info')).json.keys;
+    check('the keys survive a restart (phones do not need to scan again), and the certificate is not remade', ids.every(id => keys3[id] === keys2[id]) && !/new local CA|new certificate/.test(log), log);
+  }
+
 } catch (e) {
   fails++;
   console.log('  FAIL  ' + (e && e.stack || e));
 } finally {
-  server.kill();
-  await new Promise(r => setTimeout(r, 300));
+  await stopServer();
   try { fs.rmSync(DATA, { recursive: true, force: true }); } catch (e) { /* temp folder */ }
 }
 
