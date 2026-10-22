@@ -2,7 +2,8 @@
 // and the metric and CSV functions. The /line page, the server (CSV exports) and the tests all load this file.
 // No dependencies, no DOM. Browser: window.LineEngine. Node: module.exports.
 //
-// Pipeline per station: frame -> zoneSignals (+ classSignals, handPresence) -> createStation().update -> events.
+// Pipeline per station: frame -> zoneSignals (+ classSignals, handPresence) -> createStation().update -> events,
+// then createChecker().update (those events + model results + clear view) -> verdicts (mistake alerts).
 // Signals are per zone, all 0..1: { work: { activity, bright, 'class:cutter': 0.7 }, ... }.
 // A zone that is not drawn is left out, and a signal that is not available yet (bright before calibration,
 // classes with the model off) is left out too. A rule that reads a missing signal is "not ready" and never fires.
@@ -16,7 +17,7 @@
   const MOTION = { noise: 6, scale: 32 };      // per-pixel gray diff noise floor, and the mean diff that counts as motion 1.0
   const BRIGHT_SPAN = 60;                        // without a "Bulb on" calibration, a rise of 60 gray levels counts as bright 1.0
   const MISMATCH_NOTE = 'quality mismatch, review the video';
-  const EVENT_TYPES = ['substep', 'cycle_end', 'qa_result', 'flag', 'manual', 'session_start', 'session_end', 'source_change'];
+  const EVENT_TYPES = ['substep', 'cycle_end', 'qa_result', 'flag', 'manual', 'session_start', 'session_end', 'source_change', 'verdict'];
   const CYCLE_ACTIONS = { cycle_done: 'unknown', pass: 'pass', fail: 'fail' };   // manual actions that close a manual cycle
 
   const clamp01 = v => Math.max(0, Math.min(1, v));
@@ -96,6 +97,16 @@
             if (kind === 'zones' && m.signal && m.signal !== 'activity' && m.signal !== 'bright') errs.push(sub.id + ': signal "' + m.signal + '" is not activity or bright.');
           }
         }
+        if (sub.model && sub.model.mustStay != null && typeof sub.model.mustStay !== 'boolean') errs.push(sub.id + ': mustStay must be true or false.');
+      }
+      const pc = st.positionCheck;
+      if (pc != null) {
+        if (typeof pc !== 'object' || Array.isArray(pc)) errs.push(st.id + ': positionCheck must look like { "anchor": "<zone id>", "classes": ["..."], "tolerance": 0.14 }.');
+        else {
+          if (!zones[pc.anchor]) errs.push(st.id + ': positionCheck anchor "' + pc.anchor + '" is not one of its zones.');
+          if (!Array.isArray(pc.classes) || !pc.classes.length || pc.classes.some(c => typeof c !== 'string' || !c)) errs.push(st.id + ': positionCheck classes must be a non-empty list of class names.');
+          if (pc.tolerance != null && !(isNum(pc.tolerance) && pc.tolerance > 0 && pc.tolerance <= 1)) errs.push(st.id + ': positionCheck tolerance must be a number above 0 and at most 1.');
+        }
       }
       if (st.cycleEnds && !st.substeps.some(s => s.id === st.cycleEnds)) errs.push(st.id + ': cycleEnds "' + st.cycleEnds + '" is not one of its substeps.');
       if (st.qa) {
@@ -104,6 +115,7 @@
       }
     }
     for (const r of cfg.failReasons || []) if (r.cause != null && !seenSt[r.cause]) errs.push('Fail reason ' + r.id + ' names cause station "' + r.cause + '", which does not exist.');
+    if (cfg.sounds != null && (typeof cfg.sounds !== 'object' || Array.isArray(cfg.sounds) || (cfg.sounds.verified != null && typeof cfg.sounds.verified !== 'boolean'))) errs.push('sounds must look like { "verified": true }.');
     if (cfg.model) errs.push(...modelShapeErrors('model', cfg.model));
     if (cfg.models != null) {
       if (typeof cfg.models !== 'object' || Array.isArray(cfg.models)) errs.push('models must be an object keyed by station id: { "s1": { "file": "/models/<name>.onnx", "classes": [...] } }.');
@@ -430,6 +442,206 @@
     return out;
   }
 
+  // ---------- step checker (Ruza's vision/live_check.py on the config's substeps) ----------
+  // Per station: turns the tracker's events and the station's model results into what the operator hears and sees:
+  // verified, mistake, review, and the short "Mistake cleared" note (kind cleared). Wrong order comes straight from the
+  // tracker (a jump, already held for holdFrames). Model-state checks (confidence, a mustStay part gone, positionCheck) only
+  // read model results taken while the view was clear (no hand, every zone still for clearSec) and vote over the last 3.
+  // No inference of its own: it reads the detections the page already has. Thresholds are live_check.py's.
+  const CHECK = { detectConf: 0.35, sureConf: 0.6, clearSec: 0.3, recheckSec: 1.0, votes: 3, refFrames: 10, tolerance: 0.14, stillMotion: 0.05, clearedMs: 3000 };
+  const prettyClass = c => { const s = String(c).replace(/_/g, ' '); return s.charAt(0).toUpperCase() + s.slice(1); };
+  const centerIn = (nb, z) => !!z && inRect((nb[0] + nb[2]) / 2, (nb[1] + nb[3]) / 2, z);
+  // The best detection of a class with its box center in a zone, at or over minConf. null if none (or no zone).
+  function bestIn(dets, cls, zone, minConf) {
+    let best = null;
+    if (!zone) return null;
+    for (const d of dets || []) if (d && d.cls === cls && d.nbox && d.conf >= minConf && centerIn(d.nbox, zone) && (!best || d.conf > best.conf)) best = d;
+    return best;
+  }
+  // A box (0..1 of the frame) relative to a zone: center x, y and size w, h as shares of the zone (live_check.py relative()).
+  const relBox = (nb, z) => ({ x: ((nb[0] + nb[2]) / 2 - z.x) / z.w, y: ((nb[1] + nb[3]) / 2 - z.y) / z.h, w: (nb[2] - nb[0]) / z.w, h: (nb[3] - nb[1]) / z.h });
+  const median = a => { const s = a.slice().sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+  const own = (obj, k) => !!obj && Object.prototype.hasOwnProperty.call(obj, k);
+
+  // station: one entry of config.stations. opts: overrides for CHECK.
+  // update(input) returns new verdict events. input: { t, events (what the tracker's update returned), state (its state()),
+  // modelOn (this station runs a model now), frame ({id, t: capture time, dets} or null), zones ({id: rect}), hands (true,
+  // false, or null when Hands is off), motion (highest zone activity, or null) }.
+  function createChecker(station, opts) {
+    const o = Object.assign({}, CHECK, opts || {});
+    const subs = station.substeps || [], pc = station.positionCheck || null;
+    const tol = pc && isNum(pc.tolerance) ? pc.tolerance : o.tolerance;
+    const need = Math.floor(o.votes / 2) + 1;
+    let endIdx = subs.findIndex(s => s.id === station.cycleEnds);
+    if (endIdx < 0) endIdx = subs.length - 1;
+    const idxOf = id => subs.findIndex(s => s.id === id);
+    const zoneLabel = id => { const z = (station.zones || []).find(x => x.id === id); return z ? z.label : id; };
+    let ref = null, C = fresh();
+    function fresh() {
+      return { show: null, cleared: null, clearSince: null, clear: false, checked: false, lastCheck: -Infinity, frames: [], lastFrame: null,
+        newFrame: false, newInfo: false, pending: null, done: {}, lastOk: null, zones: {}, modelOn: false };
+    }
+    function verdict(kind, reason, message, idx, conf, x) {
+      return { kind, reason, message, idx, substep: idx >= 0 && subs[idx] ? subs[idx].id : null, conf: isNum(conf) ? round(conf, 3) : null, box: (x && x.box) || null, zones: (x && x.zones) || [] };
+    }
+    const sure = (conf, kind) => (conf >= o.sureConf ? kind : 'review');   // a decision on a box under sureConf becomes a review
+    // The best detection for a model rule: any member's class in that member's zone.
+    function ruleBest(dets, rule) {
+      let best = null;
+      for (const m of members(rule)) { const d = m.class ? bestIn(dets, m.class, C.zones[m.zone], o.detectConf) : null; if (d && (!best || d.conf > best.conf)) best = d; }
+      return best;
+    }
+    // The substep a class belongs to: the first whose model rule names it, else the current one.
+    function classIdx(cls, st) { const i = subs.findIndex(s => members(s.model).some(m => m.class === cls)); return i >= 0 ? i : st.pos; }
+    const nextIdx = st => (st.pos >= 0 && st.pos + 1 < subs.length ? st.pos + 1 : 0);
+
+    // One model result against the rules, in live_check.py's order: position, missing, progress. Returns a verdict (maybe waiting).
+    function snapshot(dets, st) {
+      const D = (dets || []).filter(d => d && d.nbox && d.conf >= o.detectConf);
+      const az = pc && ref && ref.anchor === pc.anchor ? C.zones[pc.anchor] : null;
+      if (az) {
+        for (const cls of pc.classes) {
+          const want = own(ref.classes, cls) && isNum(ref.classes[cls].x) ? ref.classes[cls] : null, d = want ? bestIn(D, cls, az, o.detectConf) : null;
+          if (!d) continue;
+          const r = relBox(d.nbox, az), off = Math.max(Math.abs(r.x - want.x), Math.abs(r.y - want.y)), turned = (r.w >= r.h) !== (want.w >= want.h);
+          if (turned || off > tol) return verdict(sure(d.conf, 'mistake'), turned ? 'turned' : 'wrong_position', prettyClass(cls) + (turned ? ' is turned the wrong way' : ' is in the wrong position'), classIdx(cls, st), d.conf, { box: d.nbox, zones: [pc.anchor] });
+        }
+      }
+      for (let i = 0; i < subs.length; i++) {
+        const m = subs[i].model;
+        if (!C.done[i] || !m || m.mustStay !== true) continue;
+        const ms = members(m).filter(x => x.class && C.zones[x.zone]);
+        if (!ms.length || ms.some(x => bestIn(D, x.class, C.zones[x.zone], o.detectConf))) continue;
+        return verdict('mistake', 'missing', prettyClass(ms[0].class) + ' is missing (step ' + (i + 1) + ')', i, null, { zones: ms.map(x => x.zone) });
+      }
+      const p = C.pending;
+      if (p) {
+        const d = ruleBest(D, subs[p.idx].model), conf = Math.max(p.conf || 0, d ? d.conf : 0), x = { box: d ? d.nbox : null, zones: p.zones };
+        if (conf < o.sureConf) return verdict('review', 'low_confidence', subs[p.idx].label + " looks done but I'm not sure", p.idx, conf, x);
+        return verdict('verified', 'progress', 'Step ' + (p.idx + 1) + ' verified: ' + subs[p.idx].label, p.idx, conf, x);
+      }
+      return verdict('waiting', 'waiting', 'No change yet', -1, null, null);
+    }
+    // live_check.py's vote: the kind most checks agree on (the newest of them), else "flickered".
+    function vote(frames, st) {
+      const snaps = frames.map(f => snapshot(f.dets, st)), n = k => snaps.filter(s => s.kind === k).length;
+      let best = null;
+      for (let i = snaps.length - 1; i >= 0; i--) if (!best || n(snaps[i].kind) > n(best.kind)) best = snaps[i];
+      if (n(best.kind) >= need) return best;
+      return verdict('review', 'flicker', 'Results flickered between checks, take a look', C.pending ? C.pending.idx : st.pos, null, null);
+    }
+
+    // Show a verdict and return its event. The same mistake or review again keeps showing, with no new event (so no new sound).
+    // waiting after a mistake or review: "Mistake cleared".
+    function apply(v, t, st, cycle, extra) {
+      const bad = C.show && (C.show.kind === 'mistake' || C.show.kind === 'review');
+      if (v.kind === 'waiting') {
+        if (!bad) return [];
+        const nx = nextIdx(st), c = verdict('cleared', 'cleared', 'Mistake cleared. Continue with ' + subs[nx].label, nx, null, null);
+        C.show = null; C.cleared = Object.assign({ t, until: t + o.clearedMs }, c);
+        return [event(c, t, cycle)];
+      }
+      if (bad && C.show.kind === v.kind && C.show.message === v.message) { C.show.box = v.box || C.show.box; return []; }
+      C.show = Object.assign({ t }, v); C.cleared = null;
+      const e = event(v, t, cycle, extra);
+      if (v.kind === 'verified') { if (C.lastOk != null) e.step_s = round((t - C.lastOk) / 1000, 2); C.lastOk = t; }
+      return [e];
+    }
+    function event(v, t, cycle, extra) {
+      return Object.assign({ type: 'verdict', station: station.id, t, cycle, substep: v.substep, kind: v.kind, reason: v.reason, message: v.message, conf: v.conf, step_s: null, cycle_s: null }, extra);
+    }
+
+    function update(inp) {
+      const t = inp.t, st = inp.state || { pos: -1, cycle: 0, inCycle: false }, evs = inp.events || [], out = [];
+      C.zones = inp.zones || {};
+      C.modelOn = !!inp.modelOn;
+      const frame = C.modelOn && inp.frame && inp.frame.dets ? inp.frame : null;
+      if (!C.modelOn) C.pending = null;
+      // 1) the tracker's news: wrong order and zone steps now, model steps at the next clear-view check
+      for (const e of evs) {
+        if (e.type !== 'substep') continue;
+        const i = idxOf(e.substep);
+        if (i < 0) continue;
+        if (e.move === 'start') { C.done = {}; C.pending = null; C.lastOk = e.t; }
+        const byModel = e.source === 'model', rule = byModel ? subs[i].model : subs[i].zones;
+        const x = { box: byModel && frame ? ((ruleBest(frame.dets, rule) || {}).nbox || null) : null, zones: members(rule).map(m => m.zone) };
+        const skipped = evs.filter(f => f.type === 'flag' && f.cycle === e.cycle && f.t === e.t && /^skipped /.test(f.note || '')).map(f => idxOf(f.substep)).filter(j => j >= 0);
+        const ce = i === endIdx ? evs.find(f => f.type === 'cycle_end' && f.cycle === e.cycle) : null;
+        if (skipped.length) {
+          const j = Math.min.apply(null, skipped);
+          C.pending = null;
+          out.push(...apply(verdict(byModel ? sure(e.conf, 'mistake') : 'mistake', 'wrong_order', 'Wrong order: ' + subs[i].label + ' before ' + subs[j].label + ' (step ' + (j + 1) + ' skipped)', j, byModel ? e.conf : null, x), t, st, e.cycle));
+        } else {
+          if (C.pending) C.done[C.pending.idx] = true;   // a newer step came first: the older one counts as done (live_check.py reports the newest)
+          C.pending = null;
+          if (byModel && i !== endIdx) { C.pending = { idx: i, conf: e.conf, zones: x.zones }; C.newInfo = true; }
+          else {
+            const ok = !byModel || e.conf >= o.sureConf;
+            if (ok) C.done[i] = true;
+            const msg = !ok ? subs[i].label + " looks done but I'm not sure" : i === endIdx ? 'Cycle complete' : 'Step ' + (i + 1) + ' verified: ' + subs[i].label;
+            out.push(...apply(verdict(ok ? 'verified' : 'review', ok ? (i === endIdx ? 'complete' : 'progress') : 'low_confidence', msg, i, byModel ? e.conf : null, x), t, st, e.cycle, ce ? { cycle_s: ce.dur } : null));
+          }
+        }
+        if (ce) { C.done = {}; C.pending = null; }
+      }
+      // 2) is the view clear: no hand in the tile and every zone still, for clearSec
+      const clearNow = isNum(inp.motion) && inp.motion < o.stillMotion && inp.hands !== true;
+      if (!clearNow) { C.clearSince = null; C.frames = []; C.checked = false; C.newFrame = false; }
+      else if (C.clearSince == null) C.clearSince = t;
+      C.clear = clearNow && t - C.clearSince >= o.clearSec * 1000;
+      // 3) a new model result taken while the view was clear joins the checks (and the Save correct state frames)
+      if (frame && frame.id !== C.lastFrame) {
+        C.lastFrame = frame.id;
+        if (C.clear && !(isNum(frame.t) && frame.t < C.clearSince + o.clearSec * 1000)) { C.frames.push(frame); if (C.frames.length > o.refFrames) C.frames.shift(); C.newFrame = true; }
+      }
+      // 4) check once per clear spell, again when the tracker brings a model step, and every recheckSec while a problem shows
+      if (C.clear) {
+        const bad = C.show && (C.show.kind === 'mistake' || C.show.kind === 'review');
+        const due = !C.checked || C.newInfo || (bad && t - C.lastCheck >= o.recheckSec * 1000);
+        let v = null;
+        if (due && !C.modelOn) v = verdict('waiting', 'waiting', 'No change yet', -1, null, null);   // nothing model-based to look at: the clear view settles it
+        else if (due && C.frames.length >= o.votes && (C.newFrame || C.newInfo || !C.checked)) v = vote(C.frames.slice(-o.votes), st);
+        if (v) {
+          C.checked = true; C.newInfo = false; C.newFrame = false; C.lastCheck = t;
+          if (v.kind === 'verified' && C.pending && v.idx === C.pending.idx) { C.done[C.pending.idx] = true; C.pending = null; }
+          out.push(...apply(v, t, st, st.inCycle ? st.cycle : st.cycle + 1));
+        }
+      }
+      return out;
+    }
+
+    // Save correct state: each positionCheck class's median box in the anchor zone over the last refFrames clear-view
+    // model results (live_check.py calibration). Returns {ref} (also kept here) or {error} in plain words.
+    function saveRef(t) {
+      if (!pc) return { error: 'This station has no positionCheck in the config.' };
+      const az = C.zones[pc.anchor];
+      if (!az) return { error: 'Draw the ' + zoneLabel(pc.anchor) + ' zone first.' };
+      if (!C.modelOn) return { error: 'Turn the model on first: the correct state comes from the model.' };
+      if (!C.clear) return { error: 'Take your hands out of view and hold still, then press it again.' };
+      const fr = C.frames.slice(-o.refFrames);
+      if (fr.length < o.votes) return { error: 'Hold still a moment longer: ' + fr.length + ' of ' + o.votes + ' model results so far.' };
+      const classes = {}, lost = [];
+      for (const cls of pc.classes) {
+        const rels = fr.map(f => bestIn(f.dets, cls, az, o.detectConf)).filter(Boolean).map(d => relBox(d.nbox, az));
+        if (rels.length < Math.max(2, Math.floor(fr.length / 3))) { lost.push(prettyClass(cls)); continue; }
+        const b = {};
+        for (const k of ['x', 'y', 'w', 'h']) b[k] = round(median(rels.map(r => r[k])), 4);
+        b.landscape = b.w >= b.h;
+        classes[cls] = b;
+      }
+      if (lost.length) return { error: 'Could not see ' + lost.join(', ') + ' in ' + zoneLabel(pc.anchor) + '. Keep hands away and try again.' };
+      ref = { anchor: pc.anchor, classes, frames: fr.length, saved: new Date(isNum(t) ? t : Date.now()).toISOString() };
+      return { ref };
+    }
+    function setRef(r) { ref = r && r.classes && typeof r.classes === 'object' ? r : null; }
+
+    return {
+      update, saveRef, setRef, restart() { C = fresh(); }, station,
+      get ref() { return ref; }, get current() { return C.show; }, get cleared() { return C.cleared; }, get clear() { return C.clear; },
+      get pending() { return C.pending ? subs[C.pending.idx].id : null; }, get frames() { return C.frames.length; }
+    };
+  }
+
   // ---------- metrics over an event list ----------
   function sortEvents(events) {
     return (events || []).map((e, i) => [e, i]).filter(x => x[0] && isNum(x[0].t)).sort((a, b) => (a[0].t - b[0].t) || (a[1] - b[1])).map(x => x[0]);
@@ -443,7 +655,7 @@
   // drops a cycle that was still open. The closing substep is a moment (zero length) that marks the cycle end.
   function detectedCycles(sorted, stationId) {
     const cycles = [];
-    const flags = {}, qa = {};
+    const flags = {}, qa = {}, verdicts = {};
     let open = null;
     for (const e of sorted) {
       if (e.type === 'session_start' || (e.type === 'source_change' && e.station === stationId)) { open = null; continue; }
@@ -464,9 +676,12 @@
         (flags[e.cycle] = flags[e.cycle] || []).push(e);
       } else if (e.type === 'qa_result') {
         qa[e.cycle] = e;
+      } else if (e.type === 'verdict' && (e.kind === 'mistake' || e.kind === 'review')) {
+        const v = verdicts[e.cycle] = verdicts[e.cycle] || { mistake: 0, review: 0 };
+        v[e.kind]++;
       }
     }
-    for (const c of cycles) { c.flags = flags[c.cycle] || []; c.qa = qa[c.cycle] || null; }
+    for (const c of cycles) { const v = verdicts[c.cycle] || {}; c.flags = flags[c.cycle] || []; c.qa = qa[c.cycle] || null; c.mistakes = v.mistake || 0; c.reviews = v.review || 0; }
     return { cycles, open };
   }
 
@@ -595,7 +810,7 @@
     return sorted.length ? sorted[0].t : 0;
   }
   const SUBSTEP_COLS = ['session_id', 'crew', 'shift', 'station', 'cycle', 'seq', 'substep', 'label', 'move', 'source', 'start_ts', 'end_ts', 'dur_s', 'conf', 'closes_cycle', 'video_file', 'video_t'];
-  const CYCLE_COLS = ['session_id', 'crew', 'shift', 'station', 'basis', 'cycle', 'source', 'start_ts', 'end_ts', 'cycle_s', 'substeps', 'repeats', 'flags', 'result', 'reason', 'cause_station', 'defect', 'light', 'bin', 'mismatch', 'video_file', 'video_start_t', 'video_end_t', 'notes'];
+  const CYCLE_COLS = ['session_id', 'crew', 'shift', 'station', 'basis', 'cycle', 'source', 'start_ts', 'end_ts', 'cycle_s', 'substeps', 'repeats', 'flags', 'mistakes', 'reviews', 'result', 'reason', 'cause_station', 'defect', 'light', 'bin', 'mismatch', 'video_file', 'video_start_t', 'video_end_t', 'notes'];
 
   // One row per detected substep occurrence in finished cycles (repeats are separate rows).
   function substepsCsv(events, config, meta) {
@@ -623,23 +838,37 @@
         const q = c.qa, info = q && q.result === 'fail' ? reasonInfo(config, q.reason) : null;
         const mismatch = st.qa ? c.flags.some(f => f.note === MISMATCH_NOTE) : null;
         const notes = c.flags.map(f => f.note).join('; ');
-        lines.push(csvLine([m.id, m.crew, m.shift, st.id, 'detected', c.cycle, c.source, ts(c.start), ts(c.end), round(c.sec, 3), c.occ.length, c.repeats, c.flags.length,
+        lines.push(csvLine([m.id, m.crew, m.shift, st.id, 'detected', c.cycle, c.source, ts(c.start), ts(c.end), round(c.sec, 3), c.occ.length, c.repeats, c.flags.length, c.mistakes, c.reviews,
           q ? q.result : (st.qa ? 'unknown' : null), q ? q.reason : null, info ? info.cause : null, info ? info.defect : null, q ? q.light : null, q ? q.bin : null, mismatch,
           c.videoFile, c.videoStart, c.videoEnd, notes]));
       }
       manualCycles(sorted, st.id).forEach((x, k) => {
         const info = x.result === 'fail' ? reasonInfo(config, x.reason) : null;
-        lines.push(csvLine([m.id, m.crew, m.shift, st.id, 'manual', k + 1, 'manual', x.prevT == null ? null : ts(x.prevT), ts(x.t), x.sec == null ? null : round(x.sec, 3), null, null, null,
+        lines.push(csvLine([m.id, m.crew, m.shift, st.id, 'manual', k + 1, 'manual', x.prevT == null ? null : ts(x.prevT), ts(x.t), x.sec == null ? null : round(x.sec, 3), null, null, null, null, null,
           st.qa ? x.result : null, x.reason, info ? info.cause : null, info ? info.defect : null, null, null, null, x.videoFile, null, x.videoT, x.action]));
       });
     }
     return lines.join('\n') + '\n';
   }
 
+  // One row per verdict (what the operator heard and saw), in time order across stations. Same columns as live_check.py's
+  // session CSV plus session, station, ts and the video position. step is the substep's number at its station.
+  const VERDICT_COLS = ['session_id', 'station', 'time', 'ts', 'cycle', 'step', 'event', 'message', 'confidence', 'step_seconds', 'cycle_seconds', 'video_file', 'video_t'];
+  function verdictsCsv(events, config, meta) {
+    const m = meta || {}, sorted = sortEvents(events), base = timeBase(sorted, m), ts = t => round((t - base) / 1000, 3);
+    const lines = [VERDICT_COLS.join(',')];
+    for (const e of sorted) {
+      if (e.type !== 'verdict') continue;
+      const st = config.stations.find(s => s.id === e.station), k = st && e.substep ? st.substeps.findIndex(s => s.id === e.substep) : -1;
+      lines.push(csvLine([m.id, e.station, new Date(e.t).toISOString().slice(0, 19) + 'Z', ts(e.t), e.cycle, k >= 0 ? k + 1 : null, e.kind, e.message, e.conf, e.step_s, e.cycle_s, e.videoFile, e.videoT]));
+    }
+    return lines.join('\n') + '\n';
+  }
+
   return {
-    DEFAULTS, MOTION, MISMATCH_NOTE, EVENT_TYPES, CYCLE_ACTIONS, SUBSTEP_COLS, CYCLE_COLS,
+    DEFAULTS, MOTION, MISMATCH_NOTE, EVENT_TYPES, CYCLE_ACTIONS, SUBSTEP_COLS, CYCLE_COLS, VERDICT_COLS, CHECK,
     members, activeRule, evalRule, missingOf, ruleText, checkConfig, modelFor, checkModelOutput, e2eBadClass, qaDecide, createStation,
-    zoneSignals, calibrationFrom, classSignals, handPresence, steadyClasses, mergeSignals,
-    sortEvents, detectedCycles, manualCycles, summarize, substepsCsv, cyclesCsv, csvCell
+    zoneSignals, calibrationFrom, classSignals, handPresence, steadyClasses, mergeSignals, createChecker,
+    sortEvents, detectedCycles, manualCycles, summarize, substepsCsv, cyclesCsv, verdictsCsv, csvCell
   };
 });
