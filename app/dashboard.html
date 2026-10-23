@@ -57,7 +57,7 @@ p { margin: 0; }
 button, input, select, textarea { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 a { color: var(--accent-2); }
-.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.mono, td.num, th.num, .big, .brow .mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; word-spacing: -.3em; }   /* one gap, not a double monospace space */
 .muted { color: var(--muted); }
 .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
 .wrap { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
@@ -111,7 +111,7 @@ button.card:hover { border-color: var(--ink-2); }
 .card .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .card .sent { color: var(--ink); flex: 1; }
 .big { font-family: var(--f-mono); font-variant-numeric: tabular-nums; font-size: 40px; line-height: 1; font-weight: 500; }
-.big small { font-size: 15px; color: var(--muted); margin-left: 6px; font-weight: 400; }
+.big small { word-spacing: 0; font-size: 15px; color: var(--muted); margin-left: 6px; font-weight: 400; }
 .sec-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .sec-h h2 { font-size: 17px; }
 
@@ -233,6 +233,26 @@ details.row > .body { padding: 12px 14px 4px; display: flex; flex-direction: col
   .brow { grid-template-columns: 96px minmax(0, 1fr) 56px; gap: 8px; }
   .headline { font-size: 20px; }
 }
+.sk { table-layout: fixed; min-width: 0; }
+.sk td, .sk th { white-space: normal; vertical-align: top; }
+.sk td.opc { font-family: var(--f-mono); width: 64px; }
+.sk .lv { font-weight: 600; display: block; }
+.sk .why { display: block; color: var(--muted); font-size: 12px; line-height: 1.3; }
+.sk .btn { min-height: 44px; padding: 4px 10px; margin-top: 4px; }
+@media (max-width: 560px) {
+  .ctl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; align-items: end; }
+  .ctl > label:first-child { grid-column: 1 / -1; }
+  .ctl > label:first-child .seg { display: flex; }
+  .ctl > label:first-child .seg button { flex: 1; padding: 4px 6px; }
+  .ctl select { width: 100%; }
+  .ctl .grp { flex-wrap: wrap; min-width: 0; }
+  .ctl .grp label { min-width: 0; }
+  .ctl .grp .seg { display: flex; }
+  .ctl .grp .seg button { flex: 1; padding: 4px 8px; }
+  .tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: visible; gap: 0; border-bottom: 0; }
+  .tabs a { justify-content: center; padding: 0 4px; border: 1px solid var(--line); margin: 0 -1px -1px 0; border-bottom-width: 3px; }
+  .tabs a[aria-current="page"] { border-color: var(--line); border-bottom-color: var(--accent); }
+}
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
@@ -304,7 +324,9 @@ const CONFIG = {
 const STN = id => CONFIG.stations.find(s => s.id === id);
 const SUB = id => { for (const s of CONFIG.stations) { const i = s.subs.findIndex(x => x.id === id); if (i >= 0) return { st: s, sub: s.subs[i], idx: i }; } return null; };
 const OPS = [['Op-02', 'certified'], ['Op-07', 'certified'], ['Op-11', 'training'], ['Op-14', 'certified'], ['Op-19', 'new'], ['Op-23', 'training']];
-const LEVELS = {}; OPS.forEach(o => { LEVELS[o[0]] = o[1]; });   // in memory; "Confirm" on the readiness table changes it
+const LEVELS = {}; OPS.forEach(o => { LEVELS[o[0]] = o[1]; });   // overall level; the per-station level lives in SKILL
+// Skill level per operator per station: 'certified' or 'learning'. In memory; Confirm on the skills matrix flips one cell.
+const SKILL = {}; OPS.forEach(o => { SKILL[o[0]] = {}; CONFIG.stations.forEach(st => { SKILL[o[0]][st.id] = o[1] === 'certified' ? 'certified' : 'learning'; }); });
 const LEVEL_LABEL = { certified: 'Certified', training: 'In training', new: 'New' };
 const SHIFTS = [
   { id: 0, day: 0, label: 'Mon 08:00', model: 'v1' }, { id: 1, day: 1, label: 'Tue 08:00', model: 'v1' }, { id: 2, day: 2, label: 'Wed 08:00', model: 'v1' },
@@ -374,6 +396,7 @@ function loadDash(filters) {
     operators: OPS.map(o => ({ code: o[0], level: LEVELS[o[0]] })),
     shifts: sel,
     hours: sel.length,
+    all: inP,   // every station, whatever is selected (the skills matrix needs it)
     cycles: inP.filter(c => !f.station || f.station === 'all' || c.st === f.station),
     units: inP.filter(c => c.st === 's4')   // every unit that reached QA, whatever station is selected
   };
@@ -383,6 +406,8 @@ function loadDash(filters) {
 const med = a => { if (!a.length) return 0; const s = a.slice().sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 const qnt = (a, p) => { if (!a.length) return 0; const s = a.slice().sort((x, y) => x - y), i = (s.length - 1) * p, lo = Math.floor(i), hi = Math.ceil(i); return s[lo] + (s[hi] - s[lo]) * (i - lo); };
 const f1 = v => (Math.round(v * 10) / 10).toFixed(1);
+const nb = (n, unit) => n + '\u00a0' + unit;   // the one place a number meets its unit: never breaks across lines
+const sec = v => nb(f1(v), 's');
 const pct = v => Math.round(v * 100);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const list = a => a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
@@ -412,36 +437,36 @@ function diagnose(D, rows, std) {
   const r = { std, n: all.length, med: med(all), p25: qnt(all, .25), p75: qnt(all, .75), ops, tag: 'pace', who: [] };
   if (all.length < 5 || !ops.length) { r.tag = 'few'; r.text = 'Not enough cycles yet in this period.'; return r; }
   const slow = ops.filter(o => o.med > std * SF && o.med - std >= 0.6), slowCert = slow.filter(o => o.level === 'certified'), cert = ops.filter(o => o.level === 'certified');
-  const stdTxt = ' against a ' + f1(std) + ' s standard';
+  const stdTxt = ' against a ' + sec(std) + ' standard';
   if (slow.length && slow.length / ops.length >= 0.5 && slowCert.length) {
     r.tag = 'process'; r.who = slow.map(o => o.op);
-    r.text = 'Slow for ' + slow.length + ' of ' + ops.length + ' operators, including certified ones. The median is ' + f1(r.med) + ' s' + stdTxt + '. Look at the step, the fixture or the written steps.';
+    r.text = 'Slow for ' + slow.length + ' of ' + ops.length + ' operators, including certified ones. The median is ' + sec(r.med) + stdTxt + '. Look at the step, the fixture or the written steps.';
     return r;
   }
   if (slow.length && !slowCert.length) {
     const a = slow.reduce((s, o) => s + o.first, 0) / slow.length, b = slow.reduce((s, o) => s + o.last, 0) / slow.length, falling = b < a * 0.93;
     r.who = slow.map(o => o.op);
     const names = list(slow.map(o => o.op)), lv = slow.every(o => o.level === 'new') ? 'new' : 'new or in training';
-    if (falling || slow.some(o => o.n < 20)) { r.tag = 'training'; r.text = 'Slow only for ' + names + ', who are ' + lv + '. Their times are falling, from ' + f1(a) + ' s to ' + f1(b) + ' s' + stdTxt + '. Keep practicing.'; }
-    else { r.tag = 'coaching'; r.text = 'Slow only for ' + names + ', who are ' + lv + '. Their times are flat after ' + Math.min(...slow.map(o => o.n)) + ' cycles (' + f1(b) + ' s' + stdTxt + '). A short coaching session would help.'; }
+    if (falling || slow.some(o => o.n < 20)) { r.tag = 'training'; r.text = 'Slow only for ' + names + ', who are ' + lv + '. Their times are falling, from ' + sec(a) + ' to ' + sec(b) + stdTxt + '. Keep practicing.'; }
+    else { r.tag = 'coaching'; r.text = 'Slow only for ' + names + ', who are ' + lv + '. Their times are flat after ' + nb(Math.min(...slow.map(o => o.n)), 'cycles') + ' (' + sec(b) + stdTxt + '). A short coaching session would help.'; }
     return r;
   }
   if (cert.length >= 2) {
     const hi = cert.reduce((x, y) => y.med > x.med ? y : x), lo = cert.reduce((x, y) => y.med < x.med ? y : x);
     if ((hi.med - lo.med) / lo.med > 0.3) {
       r.tag = 'technique'; r.who = [hi.op, lo.op];
-      r.text = 'Certified operators differ by ' + pct((hi.med - lo.med) / lo.med) + '%: ' + lo.op + ' takes ' + f1(lo.med) + ' s, ' + hi.op + ' takes ' + f1(hi.med) + ' s. Compare how they do it.';
+      r.text = 'Certified operators differ by ' + pct((hi.med - lo.med) / lo.med) + '%: ' + lo.op + ' takes ' + sec(lo.med) + ', ' + hi.op + ' takes ' + sec(hi.med) + '. Compare how they do it.';
       return r;
     }
   }
   const wide = ops.find(o => o.n >= 8 && (o.p75 - o.p25) / o.med > 0.4);
-  if (wide) { r.tag = 'inconsistent'; r.who = [wide.op]; r.text = wide.op + ' varies a lot from cycle to cycle: the middle half runs from ' + f1(wide.p25) + ' s to ' + f1(wide.p75) + ' s. Check the clips.'; return r; }
+  if (wide) { r.tag = 'inconsistent'; r.who = [wide.op]; r.text = wide.op + ' varies a lot from cycle to cycle: the middle half runs from ' + sec(wide.p25) + ' to ' + sec(wide.p75) + '. Check the clips.'; return r; }
   const shs = [...new Set(rows.map(x => x.sh))].sort((x, y) => x - y);
   if (shs.length >= 3) {
     const cut = shs[Math.floor(shs.length / 2)], cr = rows.filter(x => LEVELS[x.op] === 'certified'), e = med(cr.filter(x => x.sh < cut).map(x => x.sec)), l = med(cr.filter(x => x.sh >= cut).map(x => x.sec));
-    if (e && l > e * 1.15) { r.tag = 'drift'; r.text = 'Slower for everyone since ' + SHIFTS[cut].label.split(' ')[0] + ': ' + f1(e) + ' s to ' + f1(l) + ' s.'; return r; }
+    if (e && l > e * 1.15) { r.tag = 'drift'; r.text = 'Slower for everyone since ' + SHIFTS[cut].label.split(' ')[0] + ': ' + sec(e) + ' to ' + sec(l) + '.'; return r; }
   }
-  r.text = 'The median is ' + f1(r.med) + ' s' + stdTxt + '.';
+  r.text = 'The median is ' + sec(r.med) + stdTxt + '.';
   return r;
 }
 
@@ -463,7 +488,7 @@ function buildModels(D, S) {
   const mineSlow = mine.filter(x => x.st.med > x.s.sub.std * SF).sort((a, b) => b.st.med / b.s.sub.std - a.st.med / a.s.sub.std);
   const train = { groups, steps, attn, onPace, mine, mineSlow, me };
   if (S.view === 'operator') {
-    train.headline = !mine.length ? S.code + ' has no cycles in this period.' : mineSlow.length ? 'You are on pace on ' + (mine.length - mineSlow.length) + ' of ' + mine.length + ' steps. The best one to practice is ' + mineSlow[0].s.sub.label + ' (' + f1(mineSlow[0].st.med) + ' s, standard ' + f1(mineSlow[0].s.sub.std) + ' s).' : 'You are on pace on every step.';
+    train.headline = !mine.length ? S.code + ' has no cycles in this period.' : mineSlow.length ? 'You are on pace on ' + (mine.length - mineSlow.length) + ' of ' + mine.length + ' steps. The best one to practice is ' + mineSlow[0].s.sub.label + ' (' + sec(mineSlow[0].st.med) + ', standard ' + sec(mineSlow[0].s.sub.std) + ').' : 'You are on pace on every step.';
     train.num = mine.length - mineSlow.length; train.of = mine.length; train.tone = mineSlow.length ? 'warn' : 'good'; train.chip = mineSlow.length ? 'Room to improve' : 'On pace';
     train.sent = train.headline;
   } else {
@@ -479,11 +504,11 @@ function buildModels(D, S) {
   const hot = stt.reduce((a, b) => b.med > (a ? a.med : 0) ? b : a, null), units = D.units.length, uph = D.hours ? units / D.hours : 0, takt = D.config.taktSec;
   let buckets;
   if (D.shifts.length > 1) buckets = D.shifts.map(s => ({ label: s.label.replace(' 08:00', ' am').replace(' 14:00', ' pm'), v: D.units.filter(c => c.sh === s.id).length }));
-  else buckets = [0, 1, 2, 3, 4, 5].map(i => ({ label: (i * 10) + ' min', v: D.units.filter(c => c.t >= i * 600 && c.t < (i + 1) * 600).length * 6 }));
+  else buckets = [0, 1, 2, 3, 4, 5].map(i => ({ label: nb(i * 10, 'min'), v: D.units.filter(c => c.t >= i * 600 && c.t < (i + 1) * 600).length * 6 }));
   const thr = { stt, hot, units, uph, takt, buckets, cycles: D.cycles, over: hot && hot.med > takt };
   thr.headline = !hot ? 'No cycles in this period.' : S.station === 'all'
-    ? (thr.over ? Math.round(uph) + ' units/h. ' + hot.st.short + ' sets the pace (' + f1(hot.med) + ' s per unit vs ' + takt + ' s takt).' : Math.round(uph) + ' units/h. Every station is within the ' + takt + ' s takt.')
-    : hot.st.short + ' runs ' + f1(hot.med) + ' s per unit' + (thr.over ? ', over the ' + takt + ' s takt.' : ', within the ' + takt + ' s takt.');
+    ? (thr.over ? nb(Math.round(uph), 'units/h') + '. ' + hot.st.short + ' sets the pace (' + sec(hot.med) + ' per unit vs ' + nb(takt, 's') + ' takt).' : nb(Math.round(uph), 'units/h') + '. Every station is within the ' + nb(takt, 's') + ' takt.')
+    : hot.st.short + ' runs ' + sec(hot.med) + ' per unit' + (thr.over ? ', over the ' + nb(takt, 's') + ' takt.' : ', within the ' + nb(takt, 's') + ' takt.');
   thr.tone = thr.over ? 'crit' : 'good'; thr.chip = thr.over ? hot.st.short + ' over takt' : 'On takt'; thr.sent = thr.headline;
   // Quality
   const failU = D.units.filter(u => u.fail), reasonOf = id => D.config.failReasons.find(r => r.id === id);
@@ -497,9 +522,9 @@ function buildModels(D, S) {
   const cam = ['v1', 'v2'].map(m => { const cs = D.cycles.filter(c => c.model === m), rv = cs.filter(c => c.review); return { m, n: cs.length, need: cs.length ? cs.filter(c => c.needed).length / cs.length : 0, agree: rv.length ? rv.filter(c => c.review === 'agree').length / rv.length : 0, reviewed: rv.length }; }).filter(x => x.n);
   const qual = { fpy, units: D.units.length, fails, defects, byReason, mistakes, mism, cam, reasonOf };
   const topR = byReason[0];
-  qual.headline = !D.units.length ? 'No units in this period.' : fpy >= 0.97 ? 'Quality is steady: ' + pct(fpy) + '% of units passed first time.'
+  qual.headline = !D.units.length ? 'No units in this period.' : fpy >= 0.9 ? 'Quality is steady: ' + pct(fpy) + '% of units passed first time.'
     : pct(fpy) + '% of units passed first time.' + (topR ? ' Most fails: ' + topR.r.label.replace(/ \(.*\)/, '') + (topR.r.cause ? ' (' + STN(topR.r.cause).short + ').' : '.') : '');
-  qual.tone = fpy < 0.9 ? 'crit' : fpy < 0.97 ? 'warn' : 'good'; qual.chip = fpy < 0.97 ? 'Below 97%' : 'Steady'; qual.sent = qual.headline;
+  qual.tone = fpy < 0.8 ? 'crit' : fpy < 0.9 ? 'warn' : 'good'; qual.chip = fpy < 0.9 ? 'Below 90%' : 'Steady'; qual.sent = qual.headline;
   return { train, thr, qual };
 }
 
@@ -532,16 +557,20 @@ function curve(series, std) {
   const W = 320, H = 124, L = 30, R = 38, T = 10, B = 22;
   let xm = 1, ym = std * 2; series.forEach(s => s.pts.forEach(p => { xm = Math.max(xm, p[0]); ym = Math.max(ym, p[1] * 1.08); }));
   const X = n => L + n / xm * (W - L - R), Y = v => H - B - v / ym * (H - T - B), cols = ['var(--c1)', 'var(--c2)', 'var(--c3)'];
+  // end labels: sort by height and push apart so two labels never sit within 12 units of each other
+  const lab = series.map((s, i) => ({ s, i, y: Y(s.pts[s.pts.length - 1][1]) + 3 })).sort((a, b) => a.y - b.y);
+  for (let k = 1; k < lab.length; k++) if (lab[k].y - lab[k - 1].y < 12) lab[k].y = lab[k - 1].y + 12;
   return '<svg class="curve" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Learning curve: seconds per cycle against cycle number, with the standard as a dashed line"><path class="ax" d="M' + L + ' ' + T + 'V' + (H - B) + 'H' + (W - R) + '"/>' +
-    '<line class="std" x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(std) + '" y2="' + Y(std) + '"/><text x="' + (L + 3) + '" y="' + (Y(std) - 4) + '">standard ' + f1(std) + ' s</text>' +
-    '<text x="' + (L - 4) + '" y="' + (H - B + 3) + '" text-anchor="end">0</text><text x="' + (L - 4) + '" y="' + (T + 6) + '" text-anchor="end">' + Math.round(ym) + ' s</text><text x="' + L + '" y="' + (H - 6) + '">cycle number (0 to ' + xm + ')</text>' +
-    series.map((s, i) => '<path class="ln" stroke="' + cols[i % 3] + '" d="' + s.pts.map((p, j) => (j ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1)).join('') + '"/><text x="' + (X(s.pts[s.pts.length - 1][0]) + 4) + '" y="' + (Y(s.pts[s.pts.length - 1][1]) + 3 + i * 3) + '" style="fill:' + cols[i % 3] + '">' + s.op + '</text>').join('') + '</svg>';
+    '<line class="std" x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(std) + '" y2="' + Y(std) + '"/><text x="' + (L + 3) + '" y="' + (Y(std) - 4) + '">standard ' + sec(std) + '</text>' +
+    '<text x="' + (L - 4) + '" y="' + (H - B + 3) + '" text-anchor="end">0</text><text x="' + (L - 4) + '" y="' + (T + 6) + '" text-anchor="end">' + nb(Math.round(ym), 's') + '</text><text x="' + L + '" y="' + (H - 6) + '">cycle number (0 to ' + xm + ')</text>' +
+    series.map((s, i) => '<path class="ln" stroke="' + cols[i % 3] + '" d="' + s.pts.map((p, j) => (j ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1)).join('') + '"/>').join('') +
+    lab.map(l => '<text x="' + (X(l.s.pts[l.s.pts.length - 1][0]) + 4) + '" y="' + l.y.toFixed(1) + '" style="fill:' + cols[l.i % 3] + '">' + l.s.op + '</text>').join('') + '</svg>';
 }
 function rolling(rows, w) { const a = rows.slice().sort((x, y) => x.n - y.n), out = []; for (let i = 0; i < a.length; i++) { const win = a.slice(Math.max(0, i - w + 1), i + 1).map(r => r.sec); out.push([a[i].n, med(win)]); } return out; }
 const visItems = () => S.items.filter(i => S.view === 'manager' || i.kind !== 'suggestion');
 const pending = () => visItems().filter(i => i.status === 'pending');
 const kindLabel = { photo: 'Photo check', slow: 'Slow step', suggestion: 'Suggestion' };
-const itemTitle = i => i.kind === 'photo' ? i.stn.short + ': is "' + i.camera + '" right?' : i.kind === 'slow' ? SUB(i.sub).sub.label + ' took ' + f1(i.took) + ' s' : i.title;
+const itemTitle = i => i.kind === 'photo' ? i.stn.short + ': is "' + SUB(i.step).sub.label + '" done?' : i.kind === 'slow' ? SUB(i.sub).st.short + ' ' + SUB(i.sub).sub.label + ': ' + sec(i.took) + ' vs ' + sec(i.std) + ' standard' : i.title;
 
 /* ============ Seed inbox and rules from the week's data ============ */
 function seed() {
@@ -550,15 +579,15 @@ function seed() {
   const crimp = dxOf('s3_crimp'), ins = dxOf('s2_insert'), learners = ins.dx.ops.filter(o => o.level !== 'certified' && o.med > ins.sub.std * CONFIG.slowFactor);
   S.items = [
     { id: 'i1', kind: 'slow', status: 'pending', sub: 's2_insert', op: 'Op-19', took: 9.4, std: 2.6, total: 27.6, start: 8.1, reasons: new Set(), note: '', pos: 0 },
-    { id: 'i2', kind: 'photo', status: 'pending', st: 's2', stn: STN('s2'), camera: 'Crimp A done', conf: 58, ai: 'Looks done, the splice is crimped on the left', aiConf: 84, box: [150, 92, 100, 52], wrongOpen: false, pick: 's2_crimp' },
+    { id: 'i2', kind: 'photo', status: 'pending', st: 's2', stn: STN('s2'), step: 's2_crimp', camera: 'Crimp A done', conf: 58, ai: 'Looks done, the splice is crimped on the left', aiConf: 84, box: [150, 92, 100, 52], wrongOpen: false, pick: 's2_crimp' },
     { id: 'i3', kind: 'suggestion', status: 'pending', cat: 'Process', title: 'Check the S3 crimp fixture',
-      bullets: ['Crimp side B is slow for ' + crimp.dx.ops.filter(o => o.med > crimp.sub.std * CONFIG.slowFactor).length + ' of ' + crimp.dx.ops.length + ' operators, including every certified one.', 'Median ' + f1(crimp.dx.med) + ' s against a ' + f1(crimp.sub.std) + ' s standard.', 'It makes S3 the slowest station: the line runs at its pace.'],
+      bullets: ['Crimp side B is slow for ' + crimp.dx.ops.filter(o => o.med > crimp.sub.std * CONFIG.slowFactor).length + ' of ' + crimp.dx.ops.length + ' operators, including every certified one.', 'Median ' + sec(crimp.dx.med) + ' against a ' + sec(crimp.sub.std) + ' standard.', 'It makes S3 the slowest station: the line runs at its pace.'],
       action: 'Try a new fixture or jig on S3 and compare Crimp side B before and after.', rule: { kind: 'trial', change: 'New crimp fixture', station: 's3', step: 's3_crimp' } },
-    { id: 'i4', kind: 'photo', status: 'pending', st: 's3', stn: STN('s3'), camera: 'Tug test done', conf: 52, ai: 'The hands are covering the splice, so I cannot tell', aiConf: 61, box: [140, 88, 120, 60], wrongOpen: false, pick: 's3_pull_test' },
+    { id: 'i4', kind: 'photo', status: 'pending', st: 's3', stn: STN('s3'), step: 's3_pull_test', camera: 'Tug test done', conf: 52, ai: 'The hands are covering the splice, so I cannot tell', aiConf: 61, box: [140, 88, 120, 60], wrongOpen: false, pick: 's3_pull_test' },
     { id: 'i5', kind: 'slow', status: 'pending', sub: 's3_crimp', op: 'Op-02', took: 12.8, std: 3.6, total: 31.2, start: 14.6, reasons: new Set(), note: '', pos: 0 },
-    { id: 'i6', kind: 'photo', status: 'pending', st: 's1', stn: STN('s1'), camera: 'Strip done', conf: 55, ai: 'Both ends look stripped to the right length', aiConf: 79, box: [80, 70, 90, 60], wrongOpen: false, pick: 's1_strip' },
+    { id: 'i6', kind: 'photo', status: 'pending', st: 's1', stn: STN('s1'), step: 's1_strip', camera: 'Strip done', conf: 55, ai: 'Both ends look stripped to the right length', aiConf: 79, box: [80, 70, 90, 60], wrongOpen: false, pick: 's1_strip' },
     { id: 'i7', kind: 'suggestion', status: 'pending', cat: 'Training', title: 'Coach pushing wire A into the splice',
-      bullets: [list(learners.map(o => o.op)) + ' are slower than the ' + f1(ins.sub.std) + ' s standard on this step.', 'Their times are falling: ' + (learners.length ? f1(learners.reduce((s, o) => s + o.first, 0) / learners.length) + ' s to ' + f1(learners.reduce((s, o) => s + o.last, 0) / learners.length) + ' s.' : 'no data yet.'), 'Everyone else is on pace.'],
+      bullets: [list(learners.map(o => o.op)) + ' are slower than the ' + sec(ins.sub.std) + ' standard on this step.', 'Their times are falling: ' + (learners.length ? sec(learners.reduce((s, o) => s + o.first, 0) / learners.length) + ' to ' + sec(learners.reduce((s, o) => s + o.last, 0) / learners.length) + '.' : 'no data yet.'), 'Everyone else is on pace.'],
       action: 'Pair them with a certified operator for one session, then compare the step before and after.', rule: { kind: 'trial', change: 'Paired practice', station: 's2', step: 's2_insert' } }
   ];
   S.rules = [
@@ -577,12 +606,11 @@ function ruleText(r) {
 
 /* ============ Views ============ */
 function vToday() {
-  const T = M.train, H = M.thr, Q = M.qual, probs = [];
-  if (H.over) probs.push(H.hot.st.short + ' is over takt (' + f1(H.hot.med) + ' s vs ' + H.takt + ' s)');
-  if (S.view === 'manager' && T.attn.length) probs.push(T.attn.length + (T.attn.length === 1 ? ' step needs' : ' steps need') + ' a look in Training');
-  if (S.view === 'operator' && T.mineSlow.length) probs.push('one step to practice');
-  if (Q.tone !== 'good') probs.push('first-pass yield is ' + pct(Q.fpy) + '%');
-  const head = probs.length ? 'Something is off in ' + (probs.length === 1 ? 'one place' : probs.length + ' places') + ': ' + probs.join('; ') + '.' : 'Nothing is wrong. The line is on pace and quality is steady.';
+  const T = M.train, H = M.thr, Q = M.qual, probs = [];   // only sections whose status is warn or crit
+  if (H.tone === 'warn' || H.tone === 'crit') probs.push(H.hot.st.short + ' sets the pace and runs over takt.');
+  if (T.tone === 'warn' || T.tone === 'crit') probs.push(S.view === 'manager' ? (T.attn.length === 1 ? '1 step needs' : T.attn.length + ' steps need') + ' a look.' : 'One step to practice.');
+  if (Q.tone === 'warn' || Q.tone === 'crit') probs.push('First pass yield is ' + pct(Q.fpy) + '%.');
+  const head = probs.length ? probs.join(' ') : 'Nothing is wrong. The line is on pace and quality is steady.';
   const card = (tab, eb, m, num, unit) => '<button class="panel card" data-goto="' + tab + '"><div class="top"><span class="eyebrow">' + eb + '</span>' + chip(m.tone, m.chip) + '</div><p class="sent">' + esc(m.sent) + '</p><div class="big">' + num + '<small>' + unit + '</small></div></button>';
   const need = pending().slice(0, 3);
   return '<h2 class="headline">' + esc(head) + '</h2><div class="grid3">' +
@@ -595,47 +623,61 @@ function stepRow(s) {
   const k = 'step:' + s.sub.id, d = s.dx, tag = TAGS[d.tag], op = S.view === 'operator', mine = op ? d.ops.find(o => o.op === S.code) : null;
   let body = '<div class="diag">' + chip(tag.tone, tag.label) + '<p>' + esc(d.text) + '</p></div>';
   if (!op) {
-    body += dd(k + ':ops', 'By operator', d.ops.length ? '<div class="tbl"><table><thead><tr><th>Operator</th><th>Level</th><th class="num">Cycles</th><th class="num">Median</th><th>Trend</th></tr></thead><tbody>' + d.ops.map(o => '<tr><td class="mono">' + o.op + '</td><td>' + LEVEL_LABEL[o.level] + '</td><td class="num">' + o.n + '</td><td class="num">' + f1(o.med) + ' s</td><td>' + o.trend + '</td></tr>').join('') + '</tbody></table></div>' : '<p class="muted">No operator has 5 cycles on this step yet.</p>');
+    body += dd(k + ':ops', 'By operator', d.ops.length ? '<div class="tbl"><table><thead><tr><th>Operator</th><th>Level</th><th class="num">Cycles</th><th class="num">Median</th><th>Trend</th></tr></thead><tbody>' + d.ops.map(o => '<tr><td class="mono">' + o.op + '</td><td>' + LEVEL_LABEL[o.level] + '</td><td class="num">' + o.n + '</td><td class="num">' + sec(o.med) + '</td><td>' + o.trend + '</td></tr>').join('') + '</tbody></table></div>' : '<p class="muted">No operator has 5 cycles on this step yet.</p>');
   } else {
     body += dd(k + ':ops', 'You and the team', '<div class="tbl"><table><thead><tr><th></th><th class="num">Cycles</th><th class="num">Median</th><th>Compared with standard</th></tr></thead><tbody>' +
-      '<tr><td>You (<span class="mono">' + S.code + '</span>)</td><td class="num">' + (mine ? mine.n : 0) + '</td><td class="num">' + (mine ? f1(mine.med) + ' s' : 'n/a') + '</td><td>' + (mine ? (mine.med > d.std * CONFIG.slowFactor ? 'Above standard, ' + mine.trend.toLowerCase() : 'On pace, ' + mine.trend.toLowerCase()) : 'No cycles here') + '</td></tr>' +
-      '<tr><td>Team median</td><td class="num">' + d.n + '</td><td class="num">' + f1(d.med) + ' s</td><td>Standard ' + f1(d.std) + ' s</td></tr></tbody></table></div>');
+      '<tr><td>You (<span class="mono">' + S.code + '</span>)</td><td class="num">' + (mine ? mine.n : 0) + '</td><td class="num">' + (mine ? sec(mine.med) : 'n/a') + '</td><td>' + (mine ? (mine.med > d.std * CONFIG.slowFactor ? 'Above standard, ' + mine.trend.toLowerCase() : 'On pace, ' + mine.trend.toLowerCase()) : 'No cycles here') + '</td></tr>' +
+      '<tr><td>Team median</td><td class="num">' + d.n + '</td><td class="num">' + sec(d.med) + '</td><td>Standard ' + sec(d.std) + '</td></tr></tbody></table></div>');
   }
   const ser = (op ? d.ops.filter(o => o.op === S.code) : d.ops.filter(o => o.level !== 'certified')).filter(o => o.n >= 6).slice(0, 3).map(o => ({ op: o.op, pts: rolling(s.rows.filter(r => r.op === o.op), 5) }));
   body += dd(k + ':lc', 'Learning curve', ser.length ? curve(ser, s.sub.std) + '<p class="muted">Each line is a 5-cycle running median of one operator. Lower is faster.</p>' : '<p class="muted">' + (op ? 'You have' : 'No operator in training has') + ' 6 cycles on this step yet.</p>');
   const clips = S.items.filter(i => i.kind === 'slow' && i.status === 'pending' && i.sub === s.sub.id);
   if (clips.length) body += '<p><a href="#inbox" data-act="item" data-id="' + clips[0].id + '">' + clips.length + (clips.length === 1 ? ' clip' : ' clips') + ' to review</a></p>';
   body += dd(k + ':all', 'All cycles', raw('cyc:' + s.sub.id, [{ h: 'Session' }, { h: 'Operator' }, { h: 'Cycle', num: 1 }, { h: 'Seconds', num: 1 }], s.rows.map(r => [r.shift, r.op, r.n + 1, f1(r.sec)]), s.sub.id + '.csv'));
-  return '<details class="row" data-k="' + k + '"' + (S.open.has(k) ? ' open' : '') + '><summary><span class="rname">' + esc(s.sub.label) + '</span><span class="mono nstd">' + f1(s.sub.std) + ' s</span><span class="mono nmed">' + (d.n ? f1(d.med) + ' s' : 'n/a') + '</span>' +
+  return '<details class="row" data-k="' + k + '"' + (S.open.has(k) ? ' open' : '') + '><summary><span class="rname">' + esc(s.sub.label) + '</span><span class="mono nstd">' + sec(s.sub.std) + '</span><span class="mono nmed">' + (d.n ? sec(d.med) : 'n/a') + '</span>' +
     (d.n >= 5 ? spread(d) : '<span></span>') + '<span>' + chip(tag.tone, tag.word) + '</span></summary><div class="body">' + body + '</div></details>';
 }
 function vTraining() {
   const T = M.train;
-  const ready = D.operators.map(o => {
-    const cs = D.cycles.filter(c => c.op === o.code).sort((a, b) => a.sh - b.sh || a.t - b.t), ok = cs.filter(c => !c.mistake && c.sec <= STN(c.st).subs.reduce((a, b) => a + b.std, 0) * 1.2).length;
-    const clean = cs.slice(-10).every(c => !c.mistake);
-    return { o, n: cs.length, ok, ready: o.level === 'training' && ok >= 20 && clean };
-  }).filter(r => S.view === 'manager' || r.o.code === S.code);
+  const ops = D.operators.filter(o => S.view === 'manager' || o.code === S.code);
   return '<h2 class="headline">' + esc(T.headline) + '</h2>' +
     T.groups.map(g => '<section class="grp-h"><div class="eyebrow">' + g.st.short + ' ' + esc(g.st.label) + '</div><div class="cols"><span>Step</span><span>Standard</span><span>Median</span><span>Spread</span><span>Tag</span></div>' + g.rows.map(stepRow).join('') + '</section>').join('') +
     '<div class="muted foot">Spread bar: the middle half of cycles. The dot is the median, the orange tick is the standard.</div>' +
-    '<section class="stack"><div class="sec-h"><h2>Operator readiness</h2><span class="muted">Ready after 20 cycles within standard and no mistakes</span></div><div class="tbl"><table><thead><tr><th>Operator</th><th>Level</th><th class="num">Cycles</th><th>Ready to certify?</th></tr></thead><tbody>' +
-    ready.map(r => '<tr><td class="mono">' + r.o.code + '</td><td>' + LEVEL_LABEL[r.o.level] + '</td><td class="num">' + r.n + '</td><td>' + (r.o.level === 'certified' ? 'Certified' : r.ready ? (S.view === 'manager' ? '<button class="btn sm" data-act="confirm" data-code="' + r.o.code + '">Confirm</button> <span class="muted">Yes, ' + r.ok + ' on pace</span>' : 'Yes. Ask your manager to confirm.') : 'Not yet, ' + Math.min(r.ok, 20) + ' of 20 on pace' + (r.ok >= 20 ? ' (a recent mistake)' : '')) + '</td></tr>').join('') + '</tbody></table></div></section>';
+    '<section class="stack" id="skills"><div class="sec-h"><h2>Skills by station</h2></div><p class="muted">Certified is a level a manager confirmed. Ready means ' + nb(20, 'cycles') + ' or more at the station in this period, no slow step there, and no mistakes in the last ' + nb(10, 'cycles') + '. Learning shows what is holding it back. A dash means the operator did not work that station.</p>' +
+    '<div class="tbl"><table class="sk"><thead><tr><th>Operator</th>' + CONFIG.stations.map(st => '<th>' + st.short + '</th>').join('') + '</tr></thead><tbody>' +
+    ops.map(o => '<tr><td class="opc">' + o.code + '</td>' + CONFIG.stations.map(st => skillTd(o.code, st)).join('') + '</tr>').join('') + '</tbody></table></div></section>';
+}
+function skillCell(code, stId) {
+  const lvl = SKILL[code][stId], rows = D.all.filter(c => c.op === code && c.st === stId).sort((a, b) => a.sh - b.sh || a.t - b.t);
+  if (lvl === 'certified') return { k: 'cert' };
+  if (!rows.length) return { k: 'none' };
+  const st = STN(stId), slowSub = st.subs.find((sub, i) => med(rows.map(r => r.subs[i])) > sub.std * D.config.slowFactor);
+  if (slowSub) return { k: 'learn', why: 'slow on ' + slowSub.label };
+  if (rows.length < 20) return { k: 'learn', why: nb(rows.length, 'of') + ' 20 cycles' };
+  if (rows.slice(-10).some(r => r.mistake)) return { k: 'learn', why: 'a recent mistake' };
+  return { k: 'ready' };
+}
+function skillTd(code, st) {
+  const c = skillCell(code, st.id), nm = code + ' ' + st.short;
+  if (c.k === 'cert') return '<td><span class="lv">Certified</span></td>';
+  if (c.k === 'none') return '<td><span class="muted" aria-label="' + nm + ' not worked in this period">-</span></td>';
+  if (c.k === 'learn') return '<td><span class="lv">Learning</span><span class="why">' + esc(c.why) + '</span></td>';
+  return '<td><span class="lv">Ready</span>' + (S.view === 'manager' ? '<button class="btn sm" data-act="confirm" data-code="' + code + '" data-st="' + st.id + '" aria-label="Confirm ' + nm + '">Confirm</button>' : '<span class="why">Ask your manager to confirm.</span>') + '</td>';
 }
 
 function vThroughput() {
   const H = M.thr; if (!H.hot) return '<h2 class="headline">' + esc(H.headline) + '</h2>';
   const max = Math.max(H.hot.med, H.takt) * 1.15, w = v => (v / max * 100).toFixed(1) + '%', maxW = Math.max(...H.stt.map(x => x.wait)) * 1.1;
-  const bars = H.stt.map(x => '<div class="brow"><span class="lab">' + x.st.short + ' ' + esc(x.st.label) + '</span><div class="track"><div class="fill ' + (x === H.hot && H.over ? 'hot' : '') + '" style="width:' + w(x.med) + '"></div><div class="takt" style="left:' + w(H.takt) + '"></div></div><span class="mono">' + f1(x.med) + ' s</span></div>').join('');
+  const bars = H.stt.map(x => '<div class="brow"><span class="lab">' + x.st.short + ' ' + esc(x.st.label) + '</span><div class="track"><div class="fill ' + (x === H.hot && H.over ? 'hot' : '') + '" style="width:' + w(x.med) + '"></div><div class="takt" style="left:' + w(H.takt) + '"></div></div><span class="mono">' + sec(x.med) + '</span></div>').join('');
   const mxB = Math.max(...H.buckets.map(b => b.v), 1);
   const cols = '<div class="cols-chart">' + H.buckets.map(b => '<div class="cc"><span class="v">' + Math.round(b.v) + '</span><div class="b" style="height:' + (b.v / mxB * 120).toFixed(0) + 'px"></div></div>').join('') + '</div><div class="cc-l">' + H.buckets.map(b => '<span>' + esc(b.label) + '</span>').join('') + '</div>';
   const ramp = ['var(--k1)', 'var(--k2)', 'var(--k3)', 'var(--k4)', 'var(--k5)', 'var(--k6)'];
   const stacks = H.stt.map(x => { const tot = x.subs.reduce((a, b) => a + b.med, 0), top = x.subs.reduce((a, b) => b.med / b.sub.std > a.med / a.sub.std ? b : a);
-    return dd('thr:' + x.st.id, x.st.short + ' ' + x.st.label + ': where the time goes', '<div class="stk">' + x.subs.map((b, i) => '<div title="' + esc(b.sub.label) + ' ' + f1(b.med) + ' s" style="width:' + (b.med / tot * 100).toFixed(1) + '%;background:' + ramp[i % 6] + '"></div>').join('') + '</div><div class="legend">' + x.subs.map((b, i) => '<span><i style="background:' + ramp[i % 6] + '"></i>' + esc(b.sub.label) + ' <span class="mono">' + f1(b.med) + ' s</span></span>').join('') + '</div>' +
-      '<p class="sub">' + (top.med > top.sub.std * CONFIG.slowFactor ? 'The best place to cut: ' + esc(top.sub.label.toLowerCase()) + ' takes ' + f1(top.med) + ' s, standard ' + f1(top.sub.std) + ' s.' : 'No single step stands out here.') + '</p>'); }).join('');
-  const waits = H.stt.map(x => '<div class="brow"><span class="lab">' + x.st.short + ' ' + esc(x.st.label) + '</span><div class="track"><div class="fill" style="width:' + (x.wait / maxW * 100).toFixed(1) + '%"></div></div><span class="mono">' + Math.round(x.wait) + ' s</span></div>').join('');
+    return dd('thr:' + x.st.id, x.st.short + ' ' + x.st.label + ': where the time goes', '<div class="stk">' + x.subs.map((b, i) => '<div title="' + esc(b.sub.label) + ' ' + sec(b.med) + '" style="width:' + (b.med / tot * 100).toFixed(1) + '%;background:' + ramp[i % 6] + '"></div>').join('') + '</div><div class="legend">' + x.subs.map((b, i) => '<span><i style="background:' + ramp[i % 6] + '"></i>' + esc(b.sub.label) + ' <span class="mono">' + sec(b.med) + '</span></span>').join('') + '</div>' +
+      '<p class="sub">' + (top.med > top.sub.std * CONFIG.slowFactor ? 'The best place to cut: ' + esc(top.sub.label.toLowerCase()) + ' takes ' + sec(top.med) + ', standard ' + sec(top.sub.std) + '.' : 'No single step stands out here.') + '</p>'); }).join('');
+  const waits = H.stt.map(x => '<div class="brow"><span class="lab">' + x.st.short + ' ' + esc(x.st.label) + '</span><div class="track"><div class="fill" style="width:' + (x.wait / maxW * 100).toFixed(1) + '%"></div></div><span class="mono">' + nb(Math.round(x.wait), 's') + '</span></div>').join('');
   return '<h2 class="headline">' + esc(H.headline) + '</h2>' +
-    '<section class="panel pad stack"><div class="sec-h"><h2>Line balance</h2><span class="muted">Median seconds per unit. Dashed line: takt ' + H.takt + ' s</span></div><div class="bars">' + bars + '</div>' + stacks + '</section>' +
+    '<section class="panel pad stack"><div class="sec-h"><h2>Line balance</h2><span class="muted">Median seconds per unit. Dashed line: takt ' + nb(H.takt, 's') + '</span></div><div class="bars">' + bars + '</div>' + stacks + '</section>' +
     '<section class="panel pad stack"><div class="sec-h"><h2>Units per hour</h2><span class="muted">' + (D.shifts.length > 1 ? 'Units finished in each session' : 'Rate in each 10 minutes of the session') + '</span></div>' + cols + '</section>' +
     '<section class="panel pad stack"><div class="sec-h"><h2>Waiting between cycles</h2><span class="muted">Median seconds a station waits for the next unit</span></div><div class="bars">' + waits + '</div>' +
     dd('thr:all', 'All cycles', raw('thr', [{ h: 'Session' }, { h: 'Station' }, { h: 'Operator' }, { h: 'Cycle', num: 1 }, { h: 'Seconds', num: 1 }, { h: 'Wait s', num: 1 }], H.cycles.map(c => [SHIFTS[c.sh].label, c.st.toUpperCase(), c.op, c.n + 1, f1(c.sec), Math.round(c.wait)]), 'cycles.csv')) + '</section>';
@@ -657,7 +699,7 @@ function vQuality() {
     '<section class="panel pad stack"><div class="sec-h"><h2>QA mismatches</h2><span class="mono">' + Q.mism.length + '</span></div><p class="sub">' + (Q.mism.length ? 'The camera and the person at QA disagreed on the bulb test ' + Q.mism.length + (Q.mism.length === 1 ? ' time.' : ' times.') : 'The camera and QA always agreed.') + '</p>' +
     (Q.mism.length ? dd('q:mm', 'Which units', raw('mm', [{ h: 'Session' }, { h: 'Cycle', num: 1 }], Q.mism.map(u => [SHIFTS[u.sh].label, u.n + 1]), 'mismatches.csv')) : '') + '</section>' +
     '<section class="panel pad stack"><div class="sec-h"><h2>Camera trust</h2><span class="muted">How often the camera needed a person</span></div><div class="pair">' + cam + '</div>' +
-    (Q.cam.length > 1 ? '<p class="sub">Model ' + Q.cam[1].m + ' needs a person ' + Math.round((Q.cam[0].need - Q.cam[1].need) * 100) + ' points less often than ' + Q.cam[0].m + '.</p>' : '') +
+    (Q.cam.length > 1 ? '<p class="sub">Model ' + Q.cam[1].m + ' needs a person ' + Math.round((Q.cam[0].need - Q.cam[1].need) * 100) + '\u00a0points less often than ' + Q.cam[0].m + '.</p>' : '') +
     dd('q:all', 'All units', raw('units', [{ h: 'Session' }, { h: 'Cycle', num: 1 }, { h: 'Result' }, { h: 'Cause' }, { h: 'QA mismatch' }], D.units.map(u => [SHIFTS[u.sh].label, u.n + 1, u.fail ? 'Fail' : 'Pass', u.fail ? Q.reasonOf(u.fail).label : '', u.mismatch ? 'yes' : '']), 'units.csv')) + '</section>';
 }
 
@@ -666,12 +708,12 @@ function frame(i, play) {
   return '<div class="photo"><svg viewBox="0 0 400 260" role="img" aria-label="Sample picture of the ' + esc(st.label) + ' work area"><rect class="ph-bg" width="400" height="260"/>' +
     '<rect class="ph-tray" x="14" y="156" width="96" height="90" rx="6"/><rect class="ph-tray" x="290" y="156" width="96" height="90" rx="6"/><text class="ph-txt" x="22" y="172">in tray</text><text class="ph-txt" x="298" y="172">out tray</text>' +
     '<path class="ph-wire" d="M30 60 C 110 30, 150 110, 196 118"/><path class="ph-wire" d="M370 52 C 290 30, 250 110, 204 118"/><rect class="ph-part" x="172" y="108" width="56" height="20" rx="7"/><rect class="ph-part" x="186" y="150" width="28" height="64" rx="5"/>' +
-    (i.kind === 'photo' ? '<rect class="ph-look" x="' + b[0] + '" y="' + b[1] + '" width="' + b[2] + '" height="' + b[3] + '" rx="6"/>' : '') + '</svg><span class="chip tag">Sample photo</span>' +
+    (i.kind === 'photo' ? '<rect class="ph-look" x="' + b[0] + '" y="' + b[1] + '" width="' + b[2] + '" height="' + b[3] + '" rx="6"/>' : '') + '</svg><span class="chip tag">' + (play ? 'Sample clip' : 'Sample photo') + '</span>' +
     (play ? '<button class="playbtn" data-act="play" data-id="' + i.id + '" aria-label="' + (i.playing ? 'Pause' : 'Play') + ' the clip" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:56px;height:56px;border-radius:50%;border:1px solid var(--line-2);background:var(--surface);color:var(--ink);font-size:20px;cursor:pointer">' + (i.playing ? '||' : '&#9654;') + '</button>' : '') + '</div>';
 }
 function vInbox() {
   const vis = visItems(), pend = pending();
-  const meter = '<div class="inbox-top"><div class="stack" style="gap:4px"><span class="mono">Review media ' + Math.round(S.mb) + ' MB of 1 GB</span><div class="meter" role="img" aria-label="' + Math.round(S.mb) + ' of 1024 megabytes used"><i style="width:' + (S.mb / 1024 * 100).toFixed(1) + '%"></i></div></div><span class="mono">Photos kept for training: ' + S.kept + '</span>' +
+  const meter = '<div class="inbox-top"><div class="stack" style="gap:4px"><span class="mono">Review media ' + nb(Math.round(S.mb), 'MB') + ' of ' + nb(1, 'GB') + '</span><div class="meter" role="img" aria-label="' + Math.round(S.mb) + ' of 1024 megabytes used"><i style="width:' + (S.mb / 1024 * 100).toFixed(1) + '%"></i></div></div><span class="mono">Photos kept for training: ' + S.kept + '</span>' +
     '<div class="btnrow"><button class="btn sm" data-act="list" aria-pressed="' + S.list + '">' + (S.list ? 'Show one at a time' : 'Show list (' + vis.length + ')') + '</button></div></div>';
   let main;
   if (S.list) main = '<div class="qlist">' + vis.map(i => '<button class="qitem" data-act="item" data-id="' + i.id + '"' + (i.status !== 'pending' ? ' disabled style="opacity:.6;cursor:default"' : '') + '><span class="t">' + esc(itemTitle(i)) + '</span><span>' + chip('', kindLabel[i.kind]) + ' ' + chip(i.status === 'pending' ? 'warn' : 'good', i.status === 'pending' ? 'Waiting' : i.outcome) + '</span></button>').join('') + '</div>';
@@ -687,8 +729,8 @@ function vInbox() {
         '<p class="muted">A photo you confirm or correct is kept to train the camera. Anything else is deleted.</p>';
     } else if (i.kind === 'slow') {
       const pc = v => (v / i.total * 100).toFixed(1) + '%';
-      body = frame(i, true) + '<div class="tl" data-act="seek" data-id="' + i.id + '" role="slider" aria-label="Clip position" aria-valuemin="0" aria-valuemax="' + Math.round(i.total) + '" aria-valuenow="' + Math.round(i.pos * i.total) + '" tabindex="0"><div class="span" style="left:' + pc(i.start) + ';width:' + pc(i.took) + '"></div><div class="ph" id="ph" style="left:' + (i.pos * 100).toFixed(1) + '%"></div></div><div class="tl-l mono"><span id="tm">' + f1(i.pos * i.total) + ' s</span><span>' + f1(i.total) + ' s</span></div>' +
-        '<p class="say"><b>' + esc(SUB(i.sub).sub.label) + '</b> took <span class="mono">' + f1(i.took) + ' s</span> vs <span class="mono">' + f1(i.std) + ' s</span> standard. The shaded part of the bar is that step.</p>' +
+      body = frame(i, true) + '<div class="tl" data-act="seek" data-id="' + i.id + '" role="slider" aria-label="Clip position" aria-valuemin="0" aria-valuemax="' + Math.round(i.total) + '" aria-valuenow="' + Math.round(i.pos * i.total) + '" tabindex="0"><div class="span" style="left:' + pc(i.start) + ';width:' + pc(i.took) + '"></div><div class="ph" id="ph" style="left:' + (i.pos * 100).toFixed(1) + '%"></div></div><div class="tl-l mono"><span id="tm">' + sec(i.pos * i.total) + '</span><span>' + sec(i.total) + '</span></div>' +
+        '<p class="say"><b>' + esc(SUB(i.sub).sub.label) + '</b> took <span class="mono">' + sec(i.took) + '</span> vs <span class="mono">' + sec(i.std) + '</span> standard. The shaded part of the bar is that step.</p>' +
         '<div class="btnrow" role="group" aria-label="Reason">' + REASONS.map(r => '<button class="chipbtn" data-act="chip" data-r="' + r + '" aria-pressed="' + i.reasons.has(r) + '">' + r + '</button>').join('') + '</div>' +
         '<label class="stack" style="gap:4px" for="note"><span class="eyebrow">Note (optional)</span><textarea id="note" data-note="' + i.id + '">' + esc(i.note) + '</textarea></label>' +
         '<div class="btnrow"><button class="btn primary" data-act="savetags">Save tags <kbd>Y</kbd></button><button class="btn" data-act="skip">Skip <kbd>S</kbd></button></div><p class="muted">The clip is deleted after you save. The tags stay.</p>';
@@ -697,7 +739,7 @@ function vInbox() {
         (i.dismissOpen ? '<div class="stack"><span class="eyebrow">Why dismiss it?</span><div class="btnrow">' + DISMISS.map(r => '<button class="chipbtn" data-act="dreason" data-r="' + r + '">' + r + '</button>').join('') + '</div></div>' :
           '<div class="btnrow"><button class="btn primary" data-act="accept">Accept <kbd>Y</kbd></button><button class="btn" data-act="dismiss">Dismiss <kbd>N</kbd></button><button class="btn" data-act="skip">Skip <kbd>S</kbd></button></div><p class="muted">Accepting starts a trial. You can follow it in Rules.</p>');
     }
-    main = '<article class="panel qcard"><div class="qhead"><div class="btnrow">' + chip('', kindLabel[i.kind]) + (i.stn ? chip('quiet', i.stn.short + ' ' + i.stn.label) : i.sub ? chip('quiet', SUB(i.sub).st.short + (i.op ? ' ' + i.op : '')) : chip(i.cat === 'Process' ? 'crit' : 'warn', i.cat)) + '</div>' + nav + '</div><h2 class="qtitle">' + esc(i.kind === 'photo' ? 'Is this step done? ' + i.stn.short + ' ' + i.stn.label : i.kind === 'slow' ? 'Why was this step slow?' : i.title) + '</h2>' + body + '</article>';
+    main = '<article class="panel qcard"><div class="qhead"><div class="btnrow">' + chip('', kindLabel[i.kind]) + (i.stn ? chip('quiet', i.stn.short + ' ' + i.stn.label) : i.sub ? chip('quiet', SUB(i.sub).st.short + (i.op ? ' ' + i.op : '')) : chip(i.cat === 'Process' ? 'crit' : 'warn', i.cat)) + '</div>' + nav + '</div><h2 class="qtitle">' + esc(itemTitle(i)) + '</h2>' + body + '</article>';
   }
   return '<h2 class="headline">' + (pend.length ? pend.length + (pend.length === 1 ? ' thing needs' : ' things need') + ' a person. Keys: Y for yes, N for no, S to skip.' : 'Nothing to review. The camera is sure about everything it saw.') + '</h2>' + meter + main;
 }
@@ -707,7 +749,7 @@ function vRules() {
   const mgr = S.view === 'manager', n = S.nr, k = n.kind;
   const rules = S.rules.map(r => '<div class="panel stack"><div class="rule"><div class="txt"><div class="eyebrow">' + (r.kind === 'drift' ? 'Drift alert' : r.kind === 'trial' ? 'Trial' : 'Scheduled review') + (r.status ? ' ' + esc(r.status) : '') + '</div><p>' + ruleText(r) + '</p></div>' +
     '<button class="sw" role="switch" aria-checked="' + r.on + '" aria-label="' + (r.on ? 'Turn off' : 'Turn on') + ' this rule" data-act="sw" data-id="' + r.id + '" ' + (mgr ? '' : 'disabled') + '><i></i></button></div>' +
-    (r.result ? '<div class="res" style="margin:0 14px 14px"><b>' + esc(r.result.text) + '</b><div class="muted mono">Before: ' + r.result.before + ' cycles, median ' + f1(r.result.bm) + ' s. After: ' + r.result.after + ' cycles, median ' + f1(r.result.am) + ' s.</div></div>' : '') + '</div>').join('');
+    (r.result ? '<div class="res" style="margin:0 14px 14px"><b>' + esc(r.result.text) + '</b><div class="muted mono">Before: ' + r.result.before + ' cycles, median ' + sec(r.result.bm) + '. After: ' + r.result.after + ' cycles, median ' + sec(r.result.am) + '.</div></div>' : '') + '</div>').join('');
   const nI = (path, v, w) => '<input type="number" id="nr-' + path.replace('.', '-') + '" data-nr="' + path + '" value="' + v + '" min="1" style="width:' + (w || 76) + 'px" aria-label="' + path + '">';
   let form = '';
   if (k === 'drift') form = 'When <select id="nr-drift-step" data-nr="drift.step">' + stepOptions(n.drift.step) + '</select> median over the last ' + nI('drift.n', n.drift.n) + ' cycles is over ' + '<select id="nr-drift-x" data-nr="drift.x" aria-label="Threshold">' + ['1.2','1.3','1.5'].map(v => '<option value="' + v + '"' + (v === n.drift.x ? ' selected' : '') + '>standard x' + v + '</option>').join('') + '</select>, ' + 'flag it on /line and clip the next ' + nI('drift.m', n.drift.m) + ' cycles.';
@@ -733,12 +775,12 @@ function render() {
   document.getElementById('foot').textContent = 'Sample data: made up for this mockup (one week, six sessions, four stations).' + (S.period === 'month' ? ' Month shows the same week until real sessions are connected.' : '');
 }
 function decide(i, outcome, extra) { i.status = 'done'; i.outcome = outcome; if (extra) extra(); render(); }
-function setPos(i, p) { i.pos = Math.max(0, Math.min(1, p)); const ph = document.getElementById('ph'), tm = document.getElementById('tm'); if (ph) ph.style.left = (i.pos * 100).toFixed(1) + '%'; if (tm) tm.textContent = f1(i.pos * i.total) + ' s'; }
+function setPos(i, p) { i.pos = Math.max(0, Math.min(1, p)); const ph = document.getElementById('ph'), tm = document.getElementById('tm'); if (ph) ph.style.left = (i.pos * 100).toFixed(1) + '%'; if (tm) tm.textContent = sec(i.pos * i.total); }
 const cur = () => pending()[S.cur];
 const A = {
   csv(t) { const c = CSVS[t.dataset.key]; const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([c.text], { type: 'text/csv' })); a.download = c.file; document.body.appendChild(a); a.click(); a.remove(); toast('CSV ready: ' + c.n + ' rows'); },
   copycsv(t) { const c = CSVS[t.dataset.key]; (navigator.clipboard ? navigator.clipboard.writeText(c.text) : Promise.reject()).then(() => toast('CSV copied: ' + c.n + ' rows'), () => toast('Copy is blocked here. Use Download CSV.')); },
-  confirm(t) { LEVELS[t.dataset.code] = 'certified'; toast(t.dataset.code + ' is now certified'); render(); },
+  confirm(t) { SKILL[t.dataset.code][t.dataset.st] = 'certified'; toast(t.dataset.code + ' is now certified on ' + t.dataset.st.toUpperCase()); render(); },
   item(t) { const i = S.items.find(x => x.id === t.dataset.id); if (i.status !== 'pending') return; S.list = false; S.cur = pending().indexOf(i); if (S.tab !== 'inbox') location.hash = '#inbox'; else render(); },
   list() { S.list = !S.list; render(); }, prev() { S.cur--; render(); }, next() { S.cur++; render(); },
   skip() { if (pending().length > 1) { S.cur++; toast('Skipped. It stays in the queue.'); } else toast('That was the last one.'); render(); },
