@@ -1,7 +1,7 @@
 # Team guide: using the wire line platform
 
 Everything runs in one page on a laptop, http://localhost:4173/line. The cameras are four USB
-cameras or four iPhones (or a mix). It records all four stations at once, keeps the answer key, exports the data, runs each station's own trained model once you
+cameras or four iPhones (or a mix). It records all four stations at once, counts by itself, keeps an answer key when you score the cameras, exports the data, runs each station's own trained model once you
 add it, and alerts the operator to mistakes. This guide is the step-by-step for the team. The technical reference (event fields,
 CSV columns, config rules, known limits) is [wire-line-process.md](wire-line-process.md). The
 "why" behind each stage is the Station Vision Playbook doc.
@@ -35,7 +35,7 @@ the matching section here.
 |---|---|
 | Run-day lead | Brings the laptop, mounts the four cameras, sets up zones, starts and stops the session, uploads the footage |
 | Operators (S1 to S4) | Build at their station following its SOP, including the planned mistakes for the run |
-| Answer-key keeper | Presses the keys as units leave each station and at QA. This is the ground truth every model is scored against |
+| Answer-key keeper | Only when the cameras are being scored (**Score the cameras** on in Setup): presses the keys as units leave each station and at QA. This is the ground truth every model is scored against |
 | Station trainer (one per station) | Labels that station's footage, trains its model, adds it to the platform, tests it |
 
 ## 3. Run day (recording)
@@ -57,12 +57,16 @@ the matching section here.
 5. **Recording is on.** Every camera and iPhone records its video during a session (Setup has
    **Record video** per station, on by default). Each recording station shows **REC** and its size
    in its head. Without video there is nothing to train on.
-6. **Start.** Clear the trays (counts start from zero), press **Start session**, and fill in the
-   title, the crew or training group, and the shift.
-7. **Keep the answer key** while the line runs:
+6. **Start.** Clear the trays (counts start from zero), press **Start session**, then **Enter**.
+   The title is filled in with the date, time and shift. **More details** holds the crew or
+   training group, the shift and notes. The line under the title says what is not ready yet.
+7. **Run.** Nothing to press. The cameras log every cycle, step, QA pass or fail (the bulb and the
+   bin) and every mistake. To **score the cameras**, turn on **Score the cameras** in Setup (the
+   laptop remembers it). The answer-key bar appears at the bottom and one person keys:
    - Keys **1** to **3** when a unit leaves that station.
    - At QA, **P** for pass or **F** for fail, then pick the fail reason. P or F also closes S4's
      unit, so S4 has no number key (pressing 4 only says so).
+   Fail reasons (and fails by cause) only come from the answer key.
 8. **Stop.** Press **Stop session**. The banner links the session's three CSV files (the raw
    event log and session record fold under **raw**).
 
@@ -193,7 +197,8 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions**), and
 ## 8. Test your model against the answer key
 
 1. On your station, play a past session's video: **Connect a camera** > **Recorded clip** (or the
-   Camera list in Setup). Each station lists its own 10 newest recordings.
+   Camera list in Setup). Each station lists its own 10 newest recordings. Pick a session that was
+   recorded with **Score the cameras** on, so it has key presses to compare with.
 2. Press **Start session**, play the clip through, and **Stop session**.
 3. Compare the detected cycles in the new `cycles.csv` (`basis` = `detected`) with the original
    session's key presses (`basis` = `manual`). The go-live targets are in Stage 5 of the Playbook:

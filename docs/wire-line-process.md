@@ -1,9 +1,9 @@
 # Wire line: process, run day and data
 
 The wire line page (`/line`) watches four stations with one overhead camera each, all on one laptop.
-Right now its job is to **collect data**: cycle and substep times, QA pass or fail with a cause,
-step detections with a confidence, and the raw video from every camera so the model team can label
-and train. Start it with `npm start` and open http://localhost:4173/line in Chrome.
+Right now its job is to **collect data** with nothing pressed during a run: cycle and substep times,
+QA pass or fail (with a cause when the cameras are being scored), step detections with a confidence,
+and the raw video from every camera so the model team can label and train. Start it with `npm start` and open http://localhost:4173/line in Chrome.
 
 The process lives in `data/meta/wire-line.json` (draft v1). Edit that file, not the code. The page
 shows a red banner if the file has a problem (for example a rule that names a zone the station does
@@ -50,8 +50,8 @@ How the page counts:
 - A cycle runs from its first detected substep to the moment the closing substep starts. The time
   between cycles is idle time.
 - QA (S4): **light** = the bulb zone went bright during the cycle. **Bin** = which bin got the
-  activity at the sort. **Result** = the manual Pass or Fail if someone pressed it (during the cycle
-  or up to `qaGraceSec` = 5 s after the sort), else the bin. If light and bin disagree, a flag says
+  activity at the sort. **Result** = the manual Pass or Fail if someone keyed it (Score the cameras
+  on; during the cycle or up to `qaGraceSec` = 5 s after the sort), else the bin. If light and bin disagree, a flag says
   "quality mismatch, review the video". No light and no bin seen = result `unknown`.
 - Signal thresholds are in `defaults` (activity 0.1, bright 0.5, model class 0.4). Any rule can
   set its own `min`.
@@ -128,7 +128,9 @@ Config (all optional):
 | `test_setup` | Test setup problem (battery, bulb, clips) | S4 | no, retest |
 | `other` | Other | none | yes |
 
-First-pass yield = passes / (passes + defect fails). Test setup fails are left out.
+First-pass yield = passes / (passes + defect fails). Test setup fails are left out. A reason, and so a
+cause, only comes from the answer key (F with **Score the cameras** on). Without it a fail from the
+bin has no reason, and the yield tile says "Turn on Score the cameras to log reasons".
 
 ## Run day: cameras and zones
 
@@ -152,12 +154,19 @@ First-pass yield = passes / (passes + defect fails). Test setup fails are left o
 5. Press **Done**. Each station's head says **Ready**, or what is missing ("Setup needed", which opens
    Setup). Recording is on for cameras and iPhones (Setup's **Record video**, per station, off by
    default for replayed clips); a recording station shows **REC** and its size in its head. Press
-   **Start session** and fill in the title, the crew / training group and the shift. Counts start
-   from zero.
-6. While the line runs, one person keeps the answer key: keys **1** to **3** when a unit leaves that
-   station, **P** or **F** at QA (F opens the reason chips; pick one). Pass or Fail also closes S4's
-   manual cycle, so S4 has no number key (4 only shows "S4 closes its cycle with P or F"). Manual
-   presses are stored separately from what the cameras detect; they are how we score the detection.
+   **Start session**, then **Enter**: the title is filled in with the date, time and shift (Morning
+   from 5:00, Afternoon from 12:00, Evening from 17:00, Night from 22:00), and it follows the Shift
+   field until someone edits it. **More details** holds the crew / training group, the shift and
+   notes. The line under the title lists what is not ready (no camera, Setup needed, nothing
+   recording). Counts start from zero.
+6. A normal run needs nothing pressed: the cameras log cycles, substeps, QA (bulb light and bin) and
+   mistakes. To score the cameras, turn on **Score the cameras** in Setup (saved per laptop). Then a
+   bar at the bottom holds the answer key and one person keys it: **1** to **3** when a unit leaves
+   that station, **P** or **F** at QA (F opens the reason chips just above the bar; pick one). Pass
+   or Fail also closes S4's manual cycle, so S4 has no number key (4 only shows "S4 closes its cycle
+   with P or F"). Each key shows its count, and the station's tile flashes. With scoring off the bar
+   is gone and the keys only say how to turn it on. Manual presses are stored separately from what
+   the cameras detect; they are how we score the detection.
 7. Press **Stop session**. The banner links the three CSVs; `events.jsonl` and `session.json` fold
    under **raw**. Copy the session folder off the laptop: video is about 1 GB per hour for four
    cameras.
@@ -235,7 +244,7 @@ Folder `data/sessions/<id>/` (git-ignored), id like `20261015-233956-7509`:
 
 | File | What it holds |
 |---|---|
-| `session.json` | title, crew, shift, notes, start and end, which source each station had (`camera`, `clip`, `phone` or `none`), a copy of the config and of the zones, per-station recordings (start time, chunks, bytes, any gaps), and a summary at the end |
+| `session.json` | title, crew, shift, notes, start and end, the page's switches at the start (`client`: `model`, `hands`, `score` = Score the cameras), which source each station had (`camera`, `clip`, `phone` or `none`), a copy of the config and of the zones, per-station recordings (start time, chunks, bytes, any gaps), and a summary at the end |
 | `events.jsonl` | one event per line, appended as they happen (sort by `t`) |
 | `s1.mp4` ... `s4.mp4` | each station's video (`.webm` on browsers without MP4 recording). `s1-2.mp4` is a second part if the source changed or Rec was switched off and on |
 
@@ -259,7 +268,7 @@ the last two under **raw**).
 | `dur` | cycle length in seconds (on `cycle_end`) |
 | `result`, `reason` | QA result (`pass`, `fail`, `unknown`) and fail reason id |
 | `light`, `bin` | bulb seen lit (`true`, `false`, `null` = bulb zone not usable), bin seen (`pass`, `fail`, `null`) |
-| `action` | manual button: `cycle_done`, `pass`, `fail` |
+| `action` | answer key press (Score the cameras on): `cycle_done`, `pass`, `fail` |
 | `input` | on `source_change`: `camera`, `clip`, `phone` or `none`. An iPhone counts as `phone` only while it is connected: picking it, losing it or cutting it off is `none` (the note says "iPhone (waiting for the phone)", "iPhone lost" or "iPhone cut off: new pairing code") |
 | `note` | flag text ("skipped ...", "quality mismatch, review the video"), or the source label |
 | `kind` | on a verdict: `verified`, `mistake`, `review` or `cleared` |
@@ -282,9 +291,10 @@ video_file, video_start_t, video_end_t, notes`
 
 `mistakes` and `reviews` count the cycle's mistake and review verdicts (an alert that stays on screen counts once).
 
-`basis` is `detected` (from the cameras) or `manual` (from the buttons; `cycle_s` is the time since
-the previous press). The **Count by** switch in Setup picks which one the line numbers use; **Auto**
-uses detected counts where a station has any, else manual.
+`basis` is `detected` (from the cameras) or `manual` (from the answer key; `cycle_s` is the time
+since the previous press). With **Score the cameras** off the line numbers use detected counts. With
+it on, the **Count by** switch in Setup picks which one they use; **Auto** (the default) uses
+detected counts where a station has any, else manual.
 
 ### verdicts.csv (one row per verdict, in time order)
 
@@ -314,7 +324,8 @@ not a class; a `crimp_tool` in the crimp area is. Suggested classes per station
 
 **Where the data is.** Every session folder has one video per station and `events.jsonl`. Use
 `s1.mp4` for the S1 trainer, `s2.mp4` for S2, and so on. Use `videoT` to jump to detected moments,
-and the manual Cycle done, Pass and Fail presses as the answer key. Split training and test data by
+and, in sessions recorded with **Score the cameras** on, the key presses (1 to 3, P, F) as the
+answer key. Split training and test data by
 session, never by frame.
 
 **Export the page expects.** ONNX, opset 12, square input (640 by default; 416 or 320 run faster on

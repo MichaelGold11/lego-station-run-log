@@ -75,12 +75,18 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
 .banner.good { border-color: color-mix(in srgb, var(--good) 50%, transparent); background: color-mix(in srgb, var(--good) 8%, var(--surface)); color: var(--ink); }
 .banner a { color: inherit; font-weight: 600; }
 
-.form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 2fr); gap: 10px; align-items: end; }
+/* Start session: the title is filled in, so Enter starts; crew, shift and notes fold under More details */
+.form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 10px; align-items: end; }
 .form label { display: grid; gap: 3px; font-size: 12px; color: var(--ink-2); font-weight: 600; }
 .form input, .form textarea { padding: 6px 8px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--surface); font-size: 14px; font-weight: 400; }
 .form textarea { resize: vertical; min-height: 34px; height: 34px; }
-.form .acts { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; }
-@media (max-width: 900px) { .form { grid-template-columns: 1fr; } }
+.form .acts { display: flex; gap: 8px; align-items: center; }
+.form details, .form .rline { grid-column: 1 / -1; }
+.form summary { cursor: pointer; font-size: 13px; color: var(--ink-2); width: max-content; }
+.more-f { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr); gap: 10px; margin-top: 6px; }
+.rline { font-size: 13px; color: var(--ink-2); }
+.rline.warn { color: var(--warn-ink); }
+@media (max-width: 900px) { .form, .more-f { grid-template-columns: 1fr; } }
 
 .summary { display: grid; }
 .sum-row { display: flex; flex-wrap: wrap; align-items: stretch; }
@@ -109,7 +115,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
 
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
-.st { display: grid; grid-template-rows: auto 1fr auto; min-width: 0; }
+.st { display: grid; grid-template-rows: auto 1fr auto; min-width: 0; transition: box-shadow .15s; }
 .st-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .st-badge { font-family: var(--f-mono); font-weight: 600; font-size: 12px; background: var(--ink); color: var(--surface); border-radius: 4px; padding: 1px 6px; }
 .st-head h2 { font-size: 16px; margin-right: auto; }
@@ -167,13 +173,20 @@ button.chip:hover { border-color: var(--warn-ink); }
 .check .num { text-align: right; font-size: 12px; color: var(--ink-2); }
 .check .tag { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--accent-2); }
 .check .rep { font-family: var(--f-mono); font-size: 11px; color: var(--ink-2); }
-.st-foot { display: flex; gap: 8px; align-items: center; padding: 7px 10px; border-top: 1px solid var(--line); flex-wrap: wrap; }
-.reasons { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 8px 10px; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--crit) 6%, var(--surface)); font-size: 13px; }
+/* The answer key (Score the cameras on): one bar at the bottom of the screen; the fail reasons open just above it */
+.akbar { position: sticky; bottom: 0; z-index: 5; background: var(--surface); border: 1px solid var(--line-2); border-radius: 8px; box-shadow: 0 -2px 12px rgba(21, 24, 27, .12); overflow: hidden; }
+.ak-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 12px; }
+.ak-row .eyebrow { margin-right: 4px; }
+.ak-row .btn { font-size: 14px; padding: 6px 12px; }
+.akn { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.reasons { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--crit) 6%, var(--surface)); font-size: 13px; }
 .reasons .btn { font-size: 12.5px; }
+.st.keyed { box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 45%, transparent); }
 .setup-panel { display: grid; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--line); background: var(--surface-2); font-size: 12.5px; }
 .zbtns, .calrow { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .zsw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
 .stmsg { font-size: 12px; color: var(--crit-ink); }
+.stmsg:empty { display: none; }
 /* mistake alerts: the card on the video (MISTAKE flashes at 4 Hz like live_check.py), and the checklist row it is about */
 .vcard { position: absolute; left: 6px; right: 6px; bottom: 6px; padding: 5px 9px 6px; border-radius: 6px; border-left: 6px solid var(--line-2); background: var(--surface); color: var(--ink); box-shadow: 0 2px 8px rgba(0, 0, 0, .35); pointer-events: none; }
 .vc-top { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
@@ -243,13 +256,14 @@ details.raw[open] summary { margin-right: 6px; }
   <div id="banners"></div>
 
   <form class="panel pad form" id="startForm" hidden autocomplete="off">
-    <label>Title<input id="fTitle" maxlength="120" placeholder="Dry run 1"></label>
-    <label>Crew / training group<input id="fCrew" maxlength="80" placeholder="Group B"></label>
-    <label>Shift<input id="fShift" maxlength="40" placeholder="Morning"></label>
-    <label>Notes<textarea id="fNotes" maxlength="2000" placeholder="What is different about this run"></textarea></label>
-    <div class="banner" id="recWarn" hidden>No station is recording video. Turn Rec on to keep footage for training.</div>
-    <div class="acts"><button class="btn primary" type="submit">Start recording</button><button class="btn" id="btnCancelStart" type="button">Cancel</button>
-      <span class="muted" id="startNote">Counts start from zero. Stations with Rec on record their video.</span></div>
+    <label>Title<input id="fTitle" maxlength="120"></label>
+    <div class="acts"><button class="btn primary" type="submit">Start recording <kbd>Enter</kbd></button><button class="btn" id="btnCancelStart" type="button">Cancel</button></div>
+    <details id="fMore"><summary>More details: crew, shift, notes</summary>
+      <div class="more-f"><label>Crew / training group<input id="fCrew" maxlength="80" placeholder="Group B"></label>
+        <label>Shift<input id="fShift" maxlength="40"></label>
+        <label>Notes<textarea id="fNotes" maxlength="2000" placeholder="What is different about this run"></textarea></label></div>
+    </details>
+    <div class="rline" id="readyLine"></div>
   </form>
 
   <section class="panel pad sessions" id="sessionsPanel" hidden aria-label="Sessions">
@@ -261,9 +275,10 @@ details.raw[open] summary { margin-right: 6px; }
     <div class="sb-head"><div><span class="eyebrow">Setup</span>Each station: pick its camera, draw its boxes, calibrate. This laptop remembers it all.</div><button class="btn primary" id="btnDone" type="button">Done</button></div>
     <div class="sb-warn" id="sbWarn" hidden>A session is recording: boxes and calibration change the counts from now on.</div>
     <div class="sb-row">
+      <label class="sb-item" title="Shows the answer key: one person keys every unit (1, 2, 3 as units leave, P or F at QA with the reason), so the cameras can be scored against it. This laptop remembers it."><input type="checkbox" id="chkScore"> <b>Score the cameras</b><span class="muted">(answer key)</span></label>
       <span class="sb-item"><button class="btn sm" id="btnModel" type="button">Models: off</button><span class="muted" id="mdlNote"></span></span>
       <span class="sb-item"><button class="btn sm" id="btnHands" type="button" title="Hand tracking: a hand resting in a zone counts as activity, and model checks wait for a clear view. Slows each station's model results to every 4 to 5 seconds.">Hand tracking: off</button></span>
-      <span class="sb-item">Count by<span class="seg" id="basisSeg"><button type="button" data-b="auto">Auto</button><button type="button" data-b="detected">Detected</button><button type="button" data-b="manual">Manual</button></span></span>
+      <span class="sb-item" id="countItem" hidden>Count by<span class="seg" id="basisSeg"><button type="button" data-b="auto">Auto</button><button type="button" data-b="detected">Detected</button><button type="button" data-b="manual">Manual</button></span></span>
       <button class="btn sm" id="btnReset" type="button">Reset counts</button>
       <button class="btn sm" id="btnPair" type="button" title="Make a new pairing code for the iPhone cameras. Every phone link and QR code so far stops working, and connected phones are cut off.">New pairing code</button>
       <span class="muted mono" id="detNote"></span>
@@ -282,6 +297,11 @@ details.raw[open] summary { margin-right: 6px; }
 
 
   <div class="grid" id="grid"></div>
+
+  <div class="akbar" id="akBar" hidden aria-label="Answer key">
+    <div class="reasons" id="akReasons" hidden></div>
+    <div class="ak-row" id="akRow"></div>
+  </div>
 </div>
 
 <script src="/vendor/qrcode.js"></script>
@@ -311,7 +331,8 @@ details.raw[open] summary { margin-right: 6px; }
   const G = {
     config: null, setup: {}, events: [], queue: [], session: null, lastSession: null, basis: store.get('wire-line:basis') || 'auto',
     modelOn: false, handsOn: false, cameras: [], clips: [], camAllowed: false, failPick: null, sending: false, summary: null, sumAt: 0, evSeen: -1,
-    qaId: null, saveTimer: null, starting: false, stopping: false, soundOn: store.get('wire-line:sound') !== false, setupMode: false
+    qaId: null, saveTimer: null, starting: false, stopping: false, soundOn: store.get('wire-line:sound') !== false, setupMode: false,
+    score: store.get('wire-line:score') === true    // Score the cameras: the answer key shows (off by default)
   };
   // Y.files: one entry per distinct model file ({ status, session, size, canvas, ctx, ... }); each station points at its file through st.mdl.
   const Y = { status: 'off', backend: '', ort: null, files: {}, error: '', loading: null, errs: 0 };
@@ -418,15 +439,10 @@ details.raw[open] summary { margin-right: 6px; }
           <div class="nowbox"><div><div class="eyebrow nowlab">Now</div><div class="cur">Waiting for the first step</div></div><div class="big mono"></div></div>
           <div class="kv mono"></div>
           <div class="qa"${isQa ? '' : ' hidden'}></div>
+          <span class="stmsg"></span>
           <ol class="check"></ol>
         </div>
       </div>
-      <div class="st-foot">
-        ${isQa ? '' : `<button class="btn primary cyc" type="button">Cycle done <kbd>${idx + 1}</kbd></button>`}
-        ${isQa ? '<button class="btn pass passb" type="button">Pass <kbd>P</kbd></button><button class="btn fail failb" type="button">Fail <kbd>F</kbd></button>' : ''}
-        <span class="stmsg"></span>
-      </div>
-      ${isQa ? '<div class="reasons" hidden></div>' : ''}
       <div class="setup-panel" hidden>
         <div class="srow"><label class="recl">Camera <select class="src" aria-label="Video source for ${esc(cfg.label)}"></select></label>
           <label class="recl" title="Record this station's video while a session runs (on by default for cameras and iPhones)"><input type="checkbox" class="rec"> Record video</label>
@@ -444,7 +460,7 @@ details.raw[open] summary { margin-right: 6px; }
       el, video: q('video'), canvas: q('canvas'), stage: q('.stage'), nosrc: q('.nosrc'), sel: q('.src'), recBox: q('.rec'),
       elSrc: q('.srcst'), elRdy: q('.rdy'), needBtn: q('.needb'), elRec: q('.recst'),
       elNow: q('.nowbox'), elNowLab: q('.nowlab'), elCur: q('.cur'), elBig: q('.big'), elKv: q('.kv'), elQa: q('.qa'), elCheck: q('.check'),
-      elMeta: q('.diag'), elMsg: q('.stmsg'), setupPanel: q('.setup-panel'), zbtns: q('.zbtns'), calst: q('.calst'), reasons: q('.reasons'),
+      elMeta: q('.diag'), elMsg: q('.stmsg'), setupPanel: q('.setup-panel'), zbtns: q('.zbtns'), calst: q('.calst'),
       vcard: q('.vcard'), vcTitle: q('.vc-title'), vcMsg: q('.vc-msg'), refst: q('.refst'), phoneEl: q('.phonep'), pchip: q('.pchip'), qrBtn: q('.pqr'),
       con: { btn: q('.conb'), opts: q('.con-opts'), list: q('.con-list'), msg: q('.con-msg'), back: q('.con-x'), step: null }
     });
@@ -462,7 +478,6 @@ details.raw[open] summary { margin-right: 6px; }
     muteBox.checked = st.mute;
     muteBox.onchange = () => { st.mute = muteBox.checked; store.set('wire-line:mute:' + st.id, st.mute); };
     if (cfg.positionCheck) q('.refb').onclick = () => saveRef(st);
-    if (isQa) { q('.passb').onclick = () => manualPass(); q('.failb').onclick = () => openFail(); } else q('.cyc').onclick = () => manualCycle(st);
     q('.calb').onclick = () => calibrate(st, 'empty');
     if (bulbs.length) q('.bon').onclick = () => calibrate(st, 'on');
     q('.clr').onclick = () => clearZones(st);
@@ -1294,12 +1309,38 @@ details.raw[open] summary { margin-right: 6px; }
     }
   }
 
-  // ---------- manual buttons (the answer key) ----------
+  // ---------- the answer key (Score the cameras): one bar, keys 1 to 3, P and F ----------
+  // A normal run needs no key at all: the cameras count. With Score the cameras on, one person keys every unit so the
+  // detection can be scored against it; the presses are stored apart (manual events, basis "manual" in cycles.csv).
   function hint(text) { banner('hint', esc(text)); clearTimeout(G.hintT); G.hintT = setTimeout(() => banner('hint', ''), 3000); }
   function flash(btn) { if (!btn) return; btn.classList.add('flash'); setTimeout(() => btn.classList.remove('flash'), 300); }
+  // The pressed key flashes on the bar, and its station's tile flashes with it.
+  function flashKey(k, st) {
+    flash($('akRow').querySelector(`[data-k="${k}"]`));
+    if (st) { st.el.classList.add('keyed'); setTimeout(() => st.el.classList.remove('keyed'), 300); }
+  }
+  function buildAnswerKey() {
+    const keys = LIST.filter(st => !st.isQa).map(st => `<button type="button" class="btn ak" data-k="${esc(st.id)}"><kbd>${LIST.indexOf(st) + 1}</kbd> ${esc(st.id.toUpperCase())} unit out<span class="akn"></span></button>`).join('');
+    const qa = G.qaId ? '<button type="button" class="btn pass ak" data-k="pass"><kbd>P</kbd> Pass<span class="akn"></span></button><button type="button" class="btn fail ak" data-k="fail"><kbd>F</kbd> Fail<span class="akn"></span></button>' : '';
+    $('akRow').innerHTML = '<span class="eyebrow">Answer key</span>' + keys + qa;
+    $('akRow').querySelectorAll('.ak').forEach(b => { b.onclick = () => { const k = b.dataset.k; if (k === 'pass') manualPass(); else if (k === 'fail') openFail(); else manualCycle(ST[k]); }; });
+  }
+  // How many presses each key has had (live counts): on the bar next to each key.
+  function renderKeyCounts() {
+    const n = {};
+    for (const e of G.events) if (e.type === 'manual') { const k = e.action === 'cycle_done' ? e.station : e.action; n[k] = (n[k] || 0) + 1; }
+    $('akRow').querySelectorAll('.ak').forEach(b => { const t = n[b.dataset.k] ? String(n[b.dataset.k]) : ''; const el = b.querySelector('.akn'); if (el.textContent !== t) el.textContent = t; });
+  }
+  function setScore(on) {
+    G.score = !!on;
+    store.set('wire-line:score', G.score);
+    if (!G.score && G.failPick) closeFail(true);
+    $('akBar').hidden = !G.score; $('countItem').hidden = !G.score; $('chkScore').checked = G.score;
+    G.evSeen = -1;
+  }
   function manualCycle(st) {
     emit({ type: 'manual', station: st.id, action: 'cycle_done', source: 'manual', t: now(), cycle: ++st.manualN });
-    flash(st.el.querySelector('.cyc'));
+    flashKey(st.id, st);
     G.evSeen = -1;
   }
   function qaSt() { return G.qaId ? ST[G.qaId] : null; }
@@ -1310,7 +1351,7 @@ details.raw[open] summary { margin-right: 6px; }
     const t = now();
     emit({ type: 'manual', station: st.id, action: 'pass', source: 'manual', t, cycle: ++st.manualN });
     st.eng.manualQa({ result: 'pass', reason: null, t }).forEach(emit);
-    flash(st.el.querySelector('.passb'));
+    flashKey('pass', st);
     G.evSeen = -1;
   }
   function openFail() {
@@ -1320,16 +1361,17 @@ details.raw[open] summary { margin-right: 6px; }
     const t = now();
     G.failPick = { t, timer: setTimeout(() => pickReason(null), 20000) };
     st.eng.setQaHold(true);
-    st.reasons.innerHTML = '<b>Fail: why?</b>' + (G.config.failReasons || []).map(r => `<button type="button" class="btn sm" data-r="${esc(r.id)}" title="Cause: ${esc(r.cause || 'none')}${r.defect === false ? ', not a defect (retest)' : ''}">${esc(r.label)}</button>`).join('') +
+    const rs = $('akReasons');
+    rs.innerHTML = '<b>Fail: why?</b>' + (G.config.failReasons || []).map(r => `<button type="button" class="btn sm" data-r="${esc(r.id)}" title="Cause: ${esc(r.cause || 'none')}${r.defect === false ? ', not a defect (retest)' : ''}">${esc(r.label)}</button>`).join('') +
       '<button type="button" class="btn sm" data-r="">No reason</button><button type="button" class="btn sm" data-cancel="1">Cancel <kbd>Esc</kbd></button>';
-    st.reasons.querySelectorAll('button').forEach(b => { b.onclick = () => (b.dataset.cancel ? closeFail(true) : pickReason(b.dataset.r || null)); });
-    st.reasons.hidden = false;
-    flash(st.el.querySelector('.failb'));
+    rs.querySelectorAll('button').forEach(b => { b.onclick = () => (b.dataset.cancel ? closeFail(true) : pickReason(b.dataset.r || null)); });
+    rs.hidden = false;
+    flashKey('fail', st);
   }
   function pickReason(id) {
     const st = qaSt(), f = G.failPick;
     if (!st || !f) return;
-    clearTimeout(f.timer); G.failPick = null; st.reasons.hidden = true;
+    clearTimeout(f.timer); G.failPick = null; $('akReasons').hidden = true;
     emit({ type: 'manual', station: st.id, action: 'fail', reason: id || null, source: 'manual', t: f.t, cycle: ++st.manualN });
     st.eng.manualQa({ result: 'fail', reason: id || null, t: f.t }).forEach(emit);
     G.evSeen = -1;
@@ -1337,13 +1379,14 @@ details.raw[open] summary { margin-right: 6px; }
   function closeFail(cancel) {
     const st = qaSt(), f = G.failPick;
     if (!st || !f) return;
-    clearTimeout(f.timer); G.failPick = null; st.reasons.hidden = true;
+    clearTimeout(f.timer); G.failPick = null; $('akReasons').hidden = true;
     if (cancel) st.eng.setQaHold(false);
   }
   window.addEventListener('keydown', e => {
     if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) && e.target.type !== 'checkbox') return;
     if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
-    const n = Number(e.key);
+    const n = Number(e.key), key = e.key.toLowerCase();
+    if (!G.score && ((n >= 1 && n <= LIST.length) || key === 'p' || key === 'f')) { e.preventDefault(); hint('The answer key is off. To key units, turn on Score the cameras in Setup.'); return; }
     if (n >= 1 && n <= LIST.length) {
       e.preventDefault();
       const st = LIST[n - 1];
@@ -1356,15 +1399,42 @@ details.raw[open] summary { margin-right: 6px; }
   });
 
   // ---------- sessions ----------
-  function updateRecWarn() { $('recWarn').hidden = $('startForm').hidden || LIST.some(st => st.recOn && st.source.type !== 'none'); }
-  function showStartForm(on) { $('startForm').hidden = !on; updateRecWarn(); if (on) $('fTitle').focus(); }
+  // The title is filled in (date, time and shift), so Enter starts. It follows the shift field until someone edits it.
+  function shiftAt(d) { const h = d.getHours(); return h >= 22 || h < 5 ? 'Night' : h >= 17 ? 'Evening' : h >= 12 ? 'Afternoon' : 'Morning'; }
+  function autoTitle(d, shift) {
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ', ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + (shift ? ', ' + (/shift$/i.test(shift) ? shift : shift + ' shift') : '');
+  }
+  function showStartForm(on) {
+    $('startForm').hidden = !on;
+    if (!on) return;
+    const d = new Date(), sh = shiftAt(d);
+    if (!$('fShift').value.trim() || $('fShift').value === G.autoShift) $('fShift').value = sh;
+    G.autoShift = sh; G.formAt = d;
+    $('fTitle').value = G.autoTitle = autoTitle(d, $('fShift').value.trim());
+    renderReadyLine();
+    $('fTitle').focus(); $('fTitle').select();
+  }
+  // One check before a start, in place of the old Rec warning: what has no camera, what Setup still needs, what records.
+  function renderReadyLine() {
+    const out = [];
+    for (const st of LIST) {
+      const id = st.id.toUpperCase(), rd = readiness(st, st.eng.rules());
+      if (st.source.type === 'none') out.push(id + ' has no camera.');
+      else if (rd && rd.need) out.push(id + ': ' + rd.need[0].toLowerCase() + rd.need.slice(1) + '.');
+      else if (rd && !rd.ok) out.push(id + ': ' + rd.text.toLowerCase() + '.');
+    }
+    const recs = LIST.filter(st => st.recOn && st.source.type !== 'none').length;
+    if (!recs) out.push('No station records video: nothing to train on.');
+    const txt = out.length ? out.join(' ') : 'All ' + LIST.length + ' stations are ready' + (recs === LIST.length ? ' and recording.' : ', ' + recs + ' recording.') + ' Counts start from zero.';
+    if (txt !== G.lastReady) { G.lastReady = txt; $('readyLine').textContent = txt; $('readyLine').className = 'rline' + (out.length ? ' warn' : ''); }
+  }
   async function startSession(info) {
     if (G.session || G.starting) return;
     G.starting = true;
     try {
       const stations = {};
       for (const st of LIST) stations[st.id] = { input: st.source.type, label: st.source.label, record: st.recOn && st.source.type !== 'none' };
-      const body = Object.assign({}, info, { stations, client: { gpu: GPU, model: G.modelOn, hands: G.handsOn, agent: navigator.userAgent.slice(0, 160) } });
+      const body = Object.assign({}, info, { stations, client: { gpu: GPU, model: G.modelOn, hands: G.handsOn, score: G.score, agent: navigator.userAgent.slice(0, 160) } });
       const r = await fetch('/api/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.message || r.status);
@@ -1474,7 +1544,7 @@ details.raw[open] summary { margin-right: 6px; }
     let lab, cur, big = '', cls = 'nowbox';
     if (s.inCycle) { lab = 'Now (cycle ' + s.cycle + ')'; cur = label(s.current); big = fmtS((t - s.since) / 1000); cls += ' incycle'; if (takt && (t - s.cycleStart) / 1000 > takt) cls += ' over'; }
     else if (st.source.type === 'phone' && !phoneLive(st)) { lab = 'iPhone'; cur = st.phone && st.phone.state === 'lost' ? 'Phone lost: it reconnects by itself' : 'Waiting for the phone: scan its QR code'; }
-    else if (st.source.type === 'none') { lab = 'No camera'; cur = st.isQa ? 'Connect a camera, or press Pass or Fail for each unit' : 'Connect a camera, or press Cycle done when a unit leaves'; }
+    else if (st.source.type === 'none') { lab = 'No camera'; cur = !G.score ? 'Connect a camera to count this station' : st.isQa ? 'Connect a camera, or key P or F for each unit' : 'Connect a camera, or key ' + (st.idx + 1) + ' when a unit leaves'; }
     else if (rd && rd.need) { lab = 'Setup needed'; cur = rd.need; }
     else { lab = 'Between cycles'; cur = s.cycle ? 'Waiting for the next unit' : 'Waiting for the first step'; big = s.since ? fmtS((t - s.since) / 1000) : ''; }
     st.elNow.className = cls; st.elNowLab.textContent = lab; st.elCur.textContent = cur; st.elBig.textContent = big;
@@ -1482,12 +1552,12 @@ details.raw[open] summary { margin-right: 6px; }
     st.elKv.innerHTML = `<div><span>Cycle</span><b>${s.inCycle ? fmtS((t - s.cycleStart) / 1000) : '--'}</b></div>` +
       `<div><span>Last</span><b${over(d && d.lastSec)}>${fmtS(d && d.lastSec)}</b></div>` +
       `<div><span>Avg</span><b${over(d && d.avgSec)}>${fmtS(d && d.avgSec)}<small title="spread (standard deviation)">${d && d.stdSec != null ? '±' + d.stdSec.toFixed(1) + ' s' : '&nbsp;'}</small></b></div>` +
-      `<div><span>Done</span><b>${d ? d.cycles : 0}<small>${m ? m.cycles : 0} manual</small></b></div>`;
+      `<div><span>Done</span><b>${d ? d.cycles : 0}${G.score ? `<small>${m ? m.cycles : 0} keyed</small>` : ''}</b></div>`;
     if (st.isQa) {
       const lastQa = [...G.events].reverse().find(e => e.type === 'qa_result' && e.station === st.id);
       const mm = [...G.events].reverse().find(e => e.type === 'flag' && e.station === st.id && e.note === LE.MISMATCH_NOTE);
       let html = '<span class="eyebrow">Last unit</span>';
-      if (s.waitingQa) html += '<span class="chip warn">sorted, waiting for Pass / Fail</span>';
+      if (s.waitingQa) html += `<span class="chip warn">${G.score ? 'sorted, waiting for Pass / Fail' : 'sorted, result in ' + G.config.qaGraceSec + ' s'}</span>`;
       if (lastQa) {
         html += `<span class="chip ${lastQa.result === 'pass' ? 'good' : lastQa.result === 'fail' ? 'crit' : ''}">${esc(lastQa.result.toUpperCase())}${lastQa.reason ? ': ' + esc(lastQa.reason) : ''}</span>` +
           `<span class="muted">light ${lastQa.light == null ? '?' : lastQa.light ? 'on' : 'off'}, bin ${lastQa.bin || '?'}, from ${esc(lastQa.source)}</span>`;
@@ -1551,10 +1621,11 @@ details.raw[open] summary { margin-right: 6px; }
       if (i + 1 < ids.length) { const w = L.wip[i]; flow += `<div class="fl-ar${w.n < 0 ? ' neg' : ''}" title="Work in progress between ${id.toUpperCase()} and ${ids[i + 1].toUpperCase()}${i === 0 ? ' (pairs of wires)' : ''}"><i>→</i>WIP ${w.n}<i>→</i></div>`; }
     });
     $('sFlow').innerHTML = '<span class="eyebrow" style="margin-right:6px">Flow</span>' + flow;
-    // Fails by cause: the yield tile's second line.
+    // Fails by cause: the yield tile's second line. The cause comes from the fail reason, which only the answer key gives.
     const fc = L.failsByCause, causes = ids.filter(id => fc[id]).map(id => id.toUpperCase() + ' ' + fc[id]);
     if (fc.unknown) causes.push('no cause ' + fc.unknown);
-    $('sFails').innerHTML = 'Fails: ' + (causes.length ? esc(causes.join(', ')) : 'none') + (L.mismatches ? `<span class="chip crit">${L.mismatches} mismatch</span>` : '');
+    const mm = L.mismatches ? `<span class="chip crit">${L.mismatches} mismatch</span>` : '';
+    $('sFails').innerHTML = (G.score ? 'Fails: ' + (causes.length ? esc(causes.join(', ')) : 'none') : 'Turn on Score the cameras to log reasons') + mm;
   }
   function renderSession() {
     const on = !!G.session;
@@ -1583,12 +1654,14 @@ details.raw[open] summary { margin-right: 6px; }
     const t = now();
     // Metrics: recompute when events change, else once a second (idle share and units per hour move with time).
     if (G.evSeen !== G.events.length || t - G.sumAt > 1000) {
-      G.summary = LE.summarize(G.events, G.config, { now: t, basis: G.basis });
+      // Detected counts unless the cameras are being scored; then the Count by switch (Auto by default) decides.
+      G.summary = LE.summarize(G.events, G.config, { now: t, basis: G.score ? G.basis : 'detected' });
       G.evSeen = G.events.length; G.sumAt = t;
       renderSummary(G.summary);
+      if (G.score) renderKeyCounts();
     }
     for (const st of LIST) renderStation(st, G.summary, t);
-    updateRecWarn();
+    if (!$('startForm').hidden) renderReadyLine();
     if (G.session) {
       $('sessClock').textContent = fmtClock(t - G.session.startedAtMs);
       const bytes = LIST.reduce((a, s) => a + (s.rec ? s.rec.bytes : 0), 0);
@@ -1600,6 +1673,9 @@ details.raw[open] summary { margin-right: 6px; }
   // ---------- wiring ----------
   $('btnStart').onclick = () => showStartForm($('startForm').hidden);
   $('btnCancelStart').onclick = () => showStartForm(false);
+  $('startForm').onkeydown = e => { if (e.key === 'Escape') { e.preventDefault(); showStartForm(false); } };
+  $('fShift').oninput = () => { if ($('fTitle').value === G.autoTitle) $('fTitle').value = G.autoTitle = autoTitle(G.formAt, $('fShift').value.trim()); };
+  $('chkScore').onchange = () => setScore($('chkScore').checked);
   $('startForm').onsubmit = e => { e.preventDefault(); startSession({ title: $('fTitle').value.trim(), crew: $('fCrew').value.trim(), shift: $('fShift').value.trim(), notes: $('fNotes').value.trim() }); };
   $('btnStop').onclick = () => stopSession();
   $('btnSetup').onclick = () => setSetupMode(!G.setupMode);
@@ -1648,7 +1724,7 @@ details.raw[open] summary { margin-right: 6px; }
 
   // ---------- debug hook (tests and the console) ----------
   window.__line = {
-    G, ST, Y, H, LE, PHN, setSource, setSetupMode, loadPhoneInfo, phoneLive: id => phoneLive(ST[id]), startSession, stopSession, manualCycle, manualPass, openFail, pickReason, setModel, setHands,
+    G, ST, Y, H, LE, PHN, setSource, setSetupMode, setScore, loadPhoneInfo, phoneLive: id => phoneLive(ST[id]), startSession, stopSession, manualCycle, manualPass, openFail, pickReason, setModel, setHands,
     get summary() { return G.summary; },
     setZones(id, zones) { const st = ST[id]; Object.assign(st.setup.zones, zones); st.prevGray = null; saveSetup(st); if (st.setupOn) renderSetup(st); drawOverlay(st); },
     calibrate(id, kind) { return calibrate(ST[id], kind || 'empty'); },
@@ -1676,6 +1752,7 @@ details.raw[open] summary { margin-right: 6px; }
     const grid = $('grid');
     LIST.forEach(st => grid.appendChild(st.el));
     $('hdrNote').textContent = (G.config.name || 'Line') + ': ' + (G.config.product || '') + ' ' + LIST.length + ' stations, one overhead camera each.';
+    buildAnswerKey(); setScore(G.score);
     renderSetupBar(); renderSession(); rebuildPickers();
     await loadPhoneInfo();
     LIST.forEach(st => { sizeCanvas(st); emit({ type: 'source_change', station: st.id, t: now(), input: 'none', note: st.source.label }); });
