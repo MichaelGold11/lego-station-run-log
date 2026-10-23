@@ -77,7 +77,7 @@ Tabs: **Today, Training, Throughput, Quality, Inbox, Rules.**
   Varies, Still learning). Each row opens to the diagnosis sentence and its evidence, a breakdown
   by operator code (Manager) or "you vs team" (Operator), a learning curve, clips waiting, and the
   pinned reference clip. Below: operator readiness (code, level, cycles, ready to certify).
-- **Throughput:** "41 units/h, S3 sets the pace (14.2 s vs 12 s takt)". A line-balance chart (one
+- **Throughput:** "238 units/h (target 300), S3 sets the pace (14.0 s per unit vs 12 s takt)". A line-balance chart (one
   bar per station and a takt line), units per hour over time, and waiting time between cycles.
   Each station opens to its substeps as a stacked bar: that is where to cut.
 - **Quality:** first-pass yield, fails by cause station (`failReasons`), mistakes by step and kind

@@ -382,6 +382,19 @@ const ALL_CYCLES = (function () {
       }
     });
   }));
+  // Idle time follows the bottleneck (S3): upstream stations are blocked, S4 is starved. Units/h comes from the S3 pace.
+  const U = mulberry(20261023), medA = a => { const t = a.slice().sort((x, y) => x - y), m = t.length >> 1; return t.length % 2 ? t[m] : (t[m - 1] + t[m]) / 2; };
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  SHIFTS.forEach(sh => {
+    const mine = id => out.filter(c => c.sh === sh.id && c.st === id), bn = medA(mine('s3').map(c => c.sec));
+    CONFIG.stations.forEach(st => {
+      const own = medA(mine(st.id).map(c => c.sec)), base = st.id === 's3' ? 0.2 + 0.4 * U() : st.id === 's4' ? clamp(bn - own, 3, 5) : clamp(bn - own, 1.5, 3);
+      mine(st.id).forEach(c => { c.wait = Math.max(0.1, base + gauss() * 0.35); });
+    });
+    const util = 0.88 + 0.07 * U();
+    sh.uph = 3600 / bn * util;
+    sh.tenMin = [0, 1, 2, 3, 4, 5].map(() => sh.uph * (1 + (U() - 0.5) * 0.08));
+  });
   const q = out.find(c => c.st === 's4' && c.sh === 2 && !c.fail && c.t > 1700); if (q) q.mismatch = true;   // the one QA mismatch
   return out;
 })();
@@ -501,13 +514,13 @@ function buildModels(D, S) {
     const cs = D.cycles.filter(c => c.st === st.id), ms = med(cs.map(c => c.sec));
     return { st, n: cs.length, med: ms, wait: med(cs.map(c => c.wait)), subs: st.subs.map((sub, i) => ({ sub, med: med(cs.map(c => c.subs[i])) })) };
   }).filter(x => x.n);
-  const hot = stt.reduce((a, b) => b.med > (a ? a.med : 0) ? b : a, null), units = D.units.length, uph = D.hours ? units / D.hours : 0, takt = D.config.taktSec;
+  const hot = stt.reduce((a, b) => b.med > (a ? a.med : 0) ? b : a, null), units = D.units.length, uph = D.hours ? D.shifts.reduce((a, s) => a + s.uph, 0) / D.hours : 0, takt = D.config.taktSec;
   let buckets;
-  if (D.shifts.length > 1) buckets = D.shifts.map(s => ({ label: s.label.replace(' 08:00', ' am').replace(' 14:00', ' pm'), v: D.units.filter(c => c.sh === s.id).length }));
-  else buckets = [0, 1, 2, 3, 4, 5].map(i => ({ label: nb(i * 10, 'min'), v: D.units.filter(c => c.t >= i * 600 && c.t < (i + 1) * 600).length * 6 }));
+  if (D.shifts.length > 1) buckets = D.shifts.map(s => ({ label: s.label.replace(' 08:00', ' am').replace(' 14:00', ' pm'), v: s.uph }));
+  else buckets = [0, 1, 2, 3, 4, 5].map(i => ({ label: nb(i * 10, 'min'), v: D.shifts[0].tenMin[i] }));
   const thr = { stt, hot, units, uph, takt, buckets, cycles: D.cycles, over: hot && hot.med > takt };
   thr.headline = !hot ? 'No cycles in this period.' : S.station === 'all'
-    ? (thr.over ? nb(Math.round(uph), 'units/h') + '. ' + hot.st.short + ' sets the pace (' + sec(hot.med) + ' per unit vs ' + nb(takt, 's') + ' takt).' : nb(Math.round(uph), 'units/h') + '. Every station is within the ' + nb(takt, 's') + ' takt.')
+    ? (thr.over ? nb(Math.round(uph), 'units/h') + ' (target ' + Math.round(3600 / takt) + ')' + '. ' + hot.st.short + ' sets the pace (' + sec(hot.med) + ' per unit vs ' + nb(takt, 's') + ' takt).' : nb(Math.round(uph), 'units/h') + ' (target ' + Math.round(3600 / takt) + ')' + '. Every station is within the ' + nb(takt, 's') + ' takt.')
     : hot.st.short + ' runs ' + sec(hot.med) + ' per unit' + (thr.over ? ', over the ' + nb(takt, 's') + ' takt.' : ', within the ' + nb(takt, 's') + ' takt.');
   thr.tone = thr.over ? 'crit' : 'good'; thr.chip = thr.over ? hot.st.short + ' over takt' : 'On takt'; thr.sent = thr.headline;
   // Quality
@@ -614,7 +627,7 @@ function vToday() {
   const card = (tab, eb, m, num, unit) => '<button class="panel card" data-goto="' + tab + '"><div class="top"><span class="eyebrow">' + eb + '</span>' + chip(m.tone, m.chip) + '</div><p class="sent">' + esc(m.sent) + '</p><div class="big">' + num + '<small>' + unit + '</small></div></button>';
   const need = pending().slice(0, 3);
   return '<h2 class="headline">' + esc(head) + '</h2><div class="grid3">' +
-    card('training', 'Training', T, T.num, 'of ' + T.of + ' steps on pace') + card('throughput', 'Throughput', H, Math.round(H.uph), 'units/h') + card('quality', 'Quality', Q, pct(Q.fpy) + '%', 'first pass') + '</div>' +
+    card('training', 'Training', T, T.num, 'of ' + T.of + ' steps on pace') + card('throughput', 'Throughput', H, Math.round(H.uph), 'units/h, target ' + Math.round(3600 / H.takt)) + card('quality', 'Quality', Q, pct(Q.fpy) + '%', 'first pass') + '</div>' +
     '<section class="stack"><div class="sec-h"><h2>Needs you</h2><a href="#inbox">Open Inbox (' + pending().length + ')</a></div>' +
     (need.length ? '<div class="qlist">' + need.map(i => '<button class="qitem" data-act="item" data-id="' + i.id + '"><span class="t">' + esc(itemTitle(i)) + '</span>' + chip('', kindLabel[i.kind]) + '</button>').join('') + '</div>' : '<div class="panel empty"><b>Nothing to review.</b><span class="muted">The camera is sure about everything it saw.</span></div>') + '</section>';
 }
@@ -675,12 +688,12 @@ function vThroughput() {
   const stacks = H.stt.map(x => { const tot = x.subs.reduce((a, b) => a + b.med, 0), top = x.subs.reduce((a, b) => b.med / b.sub.std > a.med / a.sub.std ? b : a);
     return dd('thr:' + x.st.id, x.st.short + ' ' + x.st.label + ': where the time goes', '<div class="stk">' + x.subs.map((b, i) => '<div title="' + esc(b.sub.label) + ' ' + sec(b.med) + '" style="width:' + (b.med / tot * 100).toFixed(1) + '%;background:' + ramp[i % 6] + '"></div>').join('') + '</div><div class="legend">' + x.subs.map((b, i) => '<span><i style="background:' + ramp[i % 6] + '"></i>' + esc(b.sub.label) + ' <span class="mono">' + sec(b.med) + '</span></span>').join('') + '</div>' +
       '<p class="sub">' + (top.med > top.sub.std * CONFIG.slowFactor ? 'The best place to cut: ' + esc(top.sub.label.toLowerCase()) + ' takes ' + sec(top.med) + ', standard ' + sec(top.sub.std) + '.' : 'No single step stands out here.') + '</p>'); }).join('');
-  const waits = H.stt.map(x => '<div class="brow"><span class="lab">' + x.st.short + ' ' + esc(x.st.label) + '</span><div class="track"><div class="fill" style="width:' + (x.wait / maxW * 100).toFixed(1) + '%"></div></div><span class="mono">' + nb(Math.round(x.wait), 's') + '</span></div>').join('');
+  const waits = H.stt.map(x => '<div class="brow"><span class="lab">' + x.st.short + ' ' + esc(x.st.label) + '</span><div class="track"><div class="fill" style="width:' + (x.wait / maxW * 100).toFixed(1) + '%"></div></div><span class="mono">' + sec(x.wait) + '</span></div>').join('');
   return '<h2 class="headline">' + esc(H.headline) + '</h2>' +
     '<section class="panel pad stack"><div class="sec-h"><h2>Line balance</h2><span class="muted">Median seconds per unit. Dashed line: takt ' + nb(H.takt, 's') + '</span></div><div class="bars">' + bars + '</div>' + stacks + '</section>' +
-    '<section class="panel pad stack"><div class="sec-h"><h2>Units per hour</h2><span class="muted">' + (D.shifts.length > 1 ? 'Units finished in each session' : 'Rate in each 10 minutes of the session') + '</span></div>' + cols + '</section>' +
-    '<section class="panel pad stack"><div class="sec-h"><h2>Waiting between cycles</h2><span class="muted">Median seconds a station waits for the next unit</span></div><div class="bars">' + waits + '</div>' +
-    dd('thr:all', 'All cycles', raw('thr', [{ h: 'Session' }, { h: 'Station' }, { h: 'Operator' }, { h: 'Cycle', num: 1 }, { h: 'Seconds', num: 1 }, { h: 'Wait s', num: 1 }], H.cycles.map(c => [SHIFTS[c.sh].label, c.st.toUpperCase(), c.op, c.n + 1, f1(c.sec), Math.round(c.wait)]), 'cycles.csv')) + '</section>';
+    '<section class="panel pad stack"><div class="sec-h"><h2>Units per hour</h2><span class="muted">' + (D.shifts.length > 1 ? 'Units per hour in each session, from the S3 pace' : 'Rate in each 10 minutes of the session') + '</span></div>' + cols + '</section>' +
+    '<section class="panel pad stack"><div class="sec-h"><h2>Waiting between cycles</h2><span class="muted">Seconds per unit a station sits idle: blocked by the next station or waiting for the last one</span></div><div class="bars">' + waits + '</div>' +
+    dd('thr:all', 'All cycles', raw('thr', [{ h: 'Session' }, { h: 'Station' }, { h: 'Operator' }, { h: 'Cycle', num: 1 }, { h: 'Seconds', num: 1 }, { h: 'Idle s', num: 1 }], H.cycles.map(c => [SHIFTS[c.sh].label, c.st.toUpperCase(), c.op, c.n + 1, f1(c.sec), f1(c.wait)]), 'cycles.csv')) + '</section>';
 }
 
 function vQuality() {
