@@ -43,23 +43,25 @@ the matching section here.
 1. **Mount the cameras.** One camera straight above each station, with every tray, bin and work
    area in view. Plug all four into the laptop, spread over different USB ports (a powered hub
    helps). Close any other app that uses a camera.
-2. **Connect them.** Open `/line`, press **Find cameras** and allow access. Pick one camera per
-   station. To tell them apart, cover one lens and see which tile goes dark.
+2. **Connect them.** Open `/line` and pick one camera in each station's camera list. The first
+   time, pick **USB camera: allow access** and allow it; after that the cameras are found by
+   themselves, also when you plug one in later. To tell them apart, cover one lens and see which
+   tile goes dark.
 3. **Draw the zones.** On each station press **Setup**. Drag a box around each tray, bin or work
    area it asks for; the next zone is picked for you. Keep boxes off walkways, because a hand
    passing through counts as activity. Zones are saved on the laptop and come back after a reload.
 4. **Calibrate.** With each work area empty and still, press **Calibrate empty** (2 seconds). On
-   S4, press **Bulb off** with the bulb dark, then light the bulb in the fixture and press
-   **Bulb on**.
+   S4, keep the bulb dark for that, then light the bulb in the fixture and press **Bulb on**.
 5. **Check Rec.** Leave **Rec** ticked on every station (on by default for cameras). Without video
    there is nothing to train on. The start form warns you if no station is recording.
 6. **Start.** Clear the trays (counts start from zero), press **Start session**, and fill in the
    title, the crew or training group, and the shift.
 7. **Keep the answer key** while the line runs:
-   - Keys **1** to **4** when a unit leaves that station.
-   - At QA, **P** for pass or **F** for fail, then pick the fail reason. P or F also counts as
-     S4's unit done, so do not press 4 as well.
-8. **Stop.** Press **Stop session**. The banner links the session's two CSV files.
+   - Keys **1** to **3** when a unit leaves that station.
+   - At QA, **P** for pass or **F** for fail, then pick the fail reason. P or F also closes S4's
+     unit, so S4 has no number key (pressing 4 only says so).
+8. **Stop.** Press **Stop session**. The banner links the session's three CSV files (the raw
+   event log and session record fold under **raw**).
 
 Keep the page in the front tab the whole time; a background tab slows to about one check per
 second.
@@ -115,10 +117,10 @@ browsers block it before that. To keep the beeps but drop the chirp on every cor
 `"sounds": { "verified": false }` in `data/meta/wire-line.json`.
 
 Without its model a station only catches skipped steps. "Looks done but I'm not sure", a missing
-part and a part in the wrong spot need **Model: on** and that station's model, and only a station
-whose config has a position check gets the **Save correct state** button:
+part and a part in the wrong spot need that station's model (it runs by itself once it is added),
+and only a station whose config has a position check gets the **Save correct state** button:
 
-1. Build one unit correctly and turn the model on.
+1. Build one unit correctly with the model running.
 2. Take your hands away, open **Setup** on that station and press **Save correct state**. It
    saves where each listed part sits in the station's anchor zone, on this laptop, like the zones.
 3. Live, a part more than 14% of the zone away from its saved spot is "in the wrong position", and
@@ -176,8 +178,8 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions and expor
        }
 
    List the classes in exactly the order you trained them.
-3. Reload `/line` and press **Model: on**. Your station's tile shows your file name, and each
-   substep your model can see switches to it.
+3. Reload `/line`. Every station with a model runs it by itself: your station's tile shows your
+   file name, and each substep your model can see switches to it.
 4. A red banner such as "s1-cut-strip.onnx outputs 3 classes but the config lists 4 for S1" means
    your class list does not match the model. Fix the list; the station stays on zones until then.
 5. Run `npm run test:line` (it must pass), then commit the `.onnx` file and your config line on a
@@ -186,9 +188,9 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions and expor
 
 ## 8. Test your model against the answer key
 
-1. On your station, pick a past session's video as the source (past recordings are in the clip
-   list).
-2. Press **Model: on**, then **Start session**, play the clip through, and **Stop session**.
+1. On your station, pick a past session's video as the source (each station's camera list has its
+   own 10 newest recordings).
+2. Press **Start session**, play the clip through, and **Stop session**.
 3. Compare the detected cycles in the new `cycles.csv` (`basis` = `detected`) with the original
    session's key presses (`basis` = `manual`). The go-live targets are in Stage 5 of the Playbook:
    95% or more of steps confirmed, timing within 0.3 s.
@@ -197,10 +199,10 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions and expor
 
 | Problem | Fix |
 |---|---|
-| A camera is missing | Close other camera apps, or move it to another USB port |
+| A camera is missing | Close other camera apps, or move it to another USB port. The list updates by itself |
 | Red banner on load | A typo in `wire-line.json`, or a rule that names a zone the station does not have |
-| Red banner after Model: on | The class list does not match the model file, or the file is missing from `app/models/` |
-| The page is slow | Keep it in the front tab; export your model at 416 or 320 |
+| Red banner about a model | The class list does not match the model file, or the file is missing from `app/models/` |
+| The page is slow | Keep it in the front tab; export your model at 416 or 320. **Model: off** stops every model on this laptop (it remembers that) |
 | A `.webm` video will not seek | `ffmpeg -i s1.webm -c copy s1-fixed.webm` |
 | Unit counts go negative | Units were already in the trays when the session started |
 | No alert sounds | Click anywhere on the page once, check that **Sound** is on and the station is not on **Mute** |

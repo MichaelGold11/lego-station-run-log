@@ -82,11 +82,12 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
 .form .acts { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; }
 @media (max-width: 900px) { .form { grid-template-columns: 1fr; } }
 
-.summary { display: grid; grid-template-columns: repeat(4, minmax(110px, auto)) minmax(0, 1fr); gap: 0; align-items: stretch; }
-.sum-tile { padding: 8px 14px; border-right: 1px solid var(--line); }
+.summary { display: grid; }
+.sum-row { display: flex; flex-wrap: wrap; align-items: stretch; }
+.sum-tile { padding: 8px 14px; border-right: 1px solid var(--line); min-width: 150px; }
 .sum-tile .v { font-family: var(--f-mono); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.15; }
 .sum-tile .s { font-size: 11.5px; color: var(--muted); }
-.flow { grid-column: 1 / -1; display: flex; align-items: center; gap: 4px; padding: 6px 14px; flex-wrap: wrap; border-top: 1px solid var(--line); }
+.flow { display: flex; align-items: center; gap: 4px; padding: 6px 14px; flex-wrap: wrap; border-top: 1px solid var(--line); }
 .fl-st { display: flex; gap: 8px; align-items: baseline; border: 1px solid var(--line-2); border-radius: 6px; padding: 2px 10px; background: var(--surface-2); }
 .fl-st b { font-size: 12.5px; }
 .fl-st span { font-family: var(--f-mono); font-size: 12px; color: var(--ink-2); }
@@ -96,8 +97,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
 .fl-ar { display: flex; align-items: center; gap: 3px; font-family: var(--f-mono); font-size: 12px; color: var(--ink-2); padding: 0 6px; }
 .fl-ar i { font-style: normal; color: var(--muted); font-size: 14px; line-height: 1; }
 .fl-ar.neg { color: var(--crit-ink); }
-.fails { padding: 8px 14px; display: grid; gap: 3px; align-content: center; font-size: 12.5px; }
-@media (max-width: 900px) { .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .sum-tile { border-right: 0; border-bottom: 1px solid var(--line); } .fails { grid-column: 1 / -1; } }
+.sum-tile .s .chip { margin-left: 4px; }
 
 .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); }
 .toolbar .sep { width: 1px; height: 20px; background: var(--line-2); }
@@ -197,6 +197,10 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
 .sessions td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .sessions td a { color: var(--accent-2); margin-right: 8px; white-space: nowrap; }
 .sessions .tbl { max-height: 320px; overflow: auto; }
+details.raw { display: inline; font-size: 12px; }
+details.raw summary { display: inline; cursor: pointer; color: var(--muted); }
+details.raw[open] summary { margin-right: 6px; }
+.banner details.raw summary { color: inherit; }
 </style>
 </head>
 <body>
@@ -228,16 +232,17 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
   </form>
 
   <section class="panel pad sessions" id="sessionsPanel" hidden aria-label="Sessions">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span class="eyebrow">Sessions</span><button class="btn sm" id="btnRefresh" type="button">Refresh</button></div>
+    <div style="margin-bottom:6px"><span class="eyebrow">Sessions</span> <span class="muted">(updates by itself)</span></div>
     <div class="tbl" id="sessTbl"><div class="muted">Loading...</div></div>
   </section>
 
   <section class="panel summary" id="summary" aria-label="Line summary">
-    <div class="sum-tile"><div class="eyebrow">Units done</div><div class="v" id="sUnits">0</div><div class="s" id="sUnitsS">tested at QA</div></div>
-    <div class="sum-tile"><div class="eyebrow">Units per hour</div><div class="v" id="sUph">--</div><div class="s" id="sUphS">since start</div></div>
-    <div class="sum-tile"><div class="eyebrow">First-pass yield</div><div class="v" id="sFpy">--</div><div class="s" id="sFpyS">pass / tested</div></div>
-    <div class="sum-tile"><div class="eyebrow">Takt</div><div class="v" id="sTakt">--</div><div class="s" id="sTaktS">not set</div></div>
-    <div class="fails" id="sFails"></div>
+    <div class="sum-row">
+      <div class="sum-tile"><div class="eyebrow">Units done</div><div class="v" id="sUnits">0</div><div class="s" id="sUnitsS">tested at QA</div></div>
+      <div class="sum-tile"><div class="eyebrow">Units per hour</div><div class="v" id="sUph">--</div><div class="s" id="sUphS">since start</div></div>
+      <div class="sum-tile"><div class="eyebrow">First-pass yield</div><div class="v" id="sFpy">--</div><div class="s" id="sFpyS">pass / tested</div><div class="s" id="sFails"></div></div>
+      <div class="sum-tile" id="sTaktTile" hidden><div class="eyebrow">Takt</div><div class="v" id="sTakt">--</div><div class="s" id="sTaktS"></div></div>
+    </div>
     <div class="flow" id="sFlow"></div>
   </section>
 
@@ -247,12 +252,11 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     <button class="btn sm" id="btnSound" type="button" title="Mistake alert sounds for every station (each station also has its own Mute)">Sound: on</button>
     <span class="muted" id="detNote"></span>
     <span class="sep"></span>
-    <button class="btn sm" id="btnCams" type="button">Find cameras</button>
     <button class="btn sm" id="btnPair" type="button" title="Make a new pairing code for the iPhone cameras. Every phone link and QR code so far stops working, and connected phones are cut off.">New pairing code</button>
     <span class="sep"></span>
     <span>Count</span><span class="seg" id="basisSeg"><button type="button" data-b="auto">Auto</button><button type="button" data-b="detected">Detected</button><button type="button" data-b="manual">Manual</button></span>
     <button class="btn sm" id="btnReset" type="button">Reset counts</button>
-    <span class="keys"><span><kbd>1</kbd>-<kbd id="kLast">4</kbd> cycle done</span><span><kbd>P</kbd> pass</span><span><kbd>F</kbd> fail</span><span><kbd>Esc</kbd> close</span></span>
+    <span class="keys"><span><kbd>1</kbd>-<kbd id="kLast">3</kbd> cycle done</span><span><kbd>P</kbd> pass</span><span><kbd>F</kbd> fail</span><span><kbd>Esc</kbd> close</span></span>
   </div>
 
   <div class="grid" id="grid"></div>
@@ -396,7 +400,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
         </div>
       </div>
       <div class="st-foot">
-        <button class="btn primary cyc" type="button">Cycle done <kbd>${idx + 1}</kbd></button>
+        ${isQa ? '' : `<button class="btn primary cyc" type="button">Cycle done <kbd>${idx + 1}</kbd></button>`}
         ${isQa ? '<button class="btn pass passb" type="button">Pass <kbd>P</kbd></button><button class="btn fail failb" type="button">Fail <kbd>F</kbd></button>' : ''}
         <span class="stmsg"></span>
         <span class="meta mono"></span>
@@ -404,8 +408,8 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       ${isQa ? '<div class="reasons" hidden></div>' : ''}
       <div class="setup-panel" hidden>
         <div class="zbtns"></div>
-        <div class="calrow"><button class="btn sm calb" type="button">Calibrate empty</button>${bulbs.length ? '<button class="btn sm boff" type="button">Bulb off</button><button class="btn sm bon" type="button">Bulb on</button>' : ''}<button class="btn sm clr" type="button">Clear zones</button><span class="calst muted"></span></div>
-        <div class="muted">Pick a zone, then drag a box on the video. Calibrate with the work area empty${bulbs.length ? ' and the bulb off; then light the bulb and press Bulb on' : ''}.</div>
+        <div class="calrow"><button class="btn sm calb" type="button">Calibrate empty</button>${bulbs.length ? '<button class="btn sm bon" type="button">Bulb on</button>' : ''}<button class="btn sm clr" type="button">Clear zones</button><span class="calst muted"></span></div>
+        <div class="muted">Pick a zone, then drag a box on the video. Calibrate with the work area empty${bulbs.length ? ' and the bulb dark, then light the bulb and press Bulb on' : ''}.</div>
         ${cfg.positionCheck ? `<div class="calrow"><button class="btn sm refb" type="button">Save correct state</button><span class="refst muted"></span></div>
         <div class="muted">Position check: build it correctly, turn the model on, take your hands away, then press Save correct state. It saves where the model sees ${esc(cfg.positionCheck.classes.join(', '))} inside the ${esc((cfg.zones.find(z => z.id === cfg.positionCheck.anchor) || {}).label || cfg.positionCheck.anchor)} zone.</div>` : ''}
       </div>`;
@@ -422,17 +426,16 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     st.pctx = st.proc.getContext('2d', { willReadFrequently: true });
     st.video.loop = true;
     // Blur after picking, so the number and letter hotkeys reach the page instead of the list.
-    st.sel.onchange = () => { st.sel.blur(); setSource(st, st.sel.value); };
+    st.sel.onchange = () => { st.sel.blur(); if (st.sel.value === 'askcam') askCameras(st); else setSource(st, st.sel.value); };
     st.recBox.onchange = () => setRec(st, st.recBox.checked);
     const muteBox = q('.mute');
     muteBox.checked = st.mute;
     muteBox.onchange = () => { st.mute = muteBox.checked; store.set('wire-line:mute:' + st.id, st.mute); };
     if (cfg.positionCheck) q('.refb').onclick = () => saveRef(st);
     st.setupBtn.onclick = () => toggleSetup(st);
-    q('.cyc').onclick = () => manualCycle(st);
-    if (isQa) { q('.passb').onclick = () => manualPass(); q('.failb').onclick = () => openFail(); }
+    if (isQa) { q('.passb').onclick = () => manualPass(); q('.failb').onclick = () => openFail(); } else q('.cyc').onclick = () => manualCycle(st);
     q('.calb').onclick = () => calibrate(st, 'empty');
-    if (bulbs.length) { q('.boff').onclick = () => calibrate(st, 'off'); q('.bon').onclick = () => calibrate(st, 'on'); }
+    if (bulbs.length) q('.bon').onclick = () => calibrate(st, 'on');
     q('.clr').onclick = () => clearZones(st);
     bindDrawing(st);
     if (window.ResizeObserver) new ResizeObserver(() => { sizeCanvas(st); drawOverlay(st); }).observe(st.stage);
@@ -441,16 +444,22 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
   }
 
   // ---------- sources ----------
+  const OWN_CLIPS = 10;    // a station lists its own newest recordings only
+  // Which station a session recording belongs to: its file is <station>.mp4, or <station>-<part>.mp4.
+  function clipStation(c) { const m = /^(.+?)(-\d+)?\.\w+$/.exec(String(c.key).split(':')[2] || ''); return m ? m[1] : null; }
   function sourceOptions(st) {
     const used = {};
     for (const s of LIST) if (s !== st && s.source.type === 'camera') used[s.source.key] = s.id.toUpperCase();
     let html = '<option value="none">None (manual only)</option>';
-    if (G.cameras.length) html += '<optgroup label="Cameras">' + G.cameras.map(c => `<option value="${esc(c.key)}"${used[c.key] ? ' disabled' : ''}>${esc(c.label)}${used[c.key] ? ' (on ' + used[c.key] + ')' : ''}</option>`).join('') + '</optgroup>';
-    else html += '<optgroup label="Cameras"><option disabled>Press Find cameras</option></optgroup>';
+    if (G.cameras.length) html += '<optgroup label="USB cameras">' + G.cameras.map(c => `<option value="${esc(c.key)}"${used[c.key] ? ' disabled' : ''}>${esc(c.label)}${used[c.key] ? ' (on ' + used[c.key] + ')' : ''}</option>`).join('') + '</optgroup>';
+    else html += '<optgroup label="USB cameras">' + (G.camAllowed ? '<option disabled>No USB camera plugged in</option>' : '<option value="askcam">USB camera: allow access</option>') + '</optgroup>';
     html += '<optgroup label="iPhones"><option value="phone">iPhone (scan a QR code)</option></optgroup>';
-    const a = G.clips.filter(c => c.group === 'assets'), s = G.clips.filter(c => c.group === 'sessions');
-    if (a.length) html += '<optgroup label="Recorded clips">' + a.map(c => `<option value="clip:${esc(c.key)}">${esc(c.label)}</option>`).join('') + '</optgroup>';
-    if (s.length) html += '<optgroup label="Session recordings">' + s.map(c => `<option value="clip:${esc(c.key)}">${esc(c.label)}</option>`).join('') + '</optgroup>';
+    // The LEGO run videos are demo clips for every station; past session recordings only for their own station, newest first.
+    const a = G.clips.filter(c => c.group === 'assets'), s = G.clips.filter(c => c.group === 'sessions' && clipStation(c) === st.id).slice(0, OWN_CLIPS);
+    const cur = st.source.type === 'clip' && G.clips.find(c => 'clip:' + c.key === st.source.key && c.group === 'sessions');
+    if (cur && !s.includes(cur)) s.push(cur);
+    if (a.length) html += '<optgroup label="Demo clips">' + a.map(c => `<option value="clip:${esc(c.key)}">${esc(c.label)}</option>`).join('') + '</optgroup>';
+    if (s.length) html += `<optgroup label="${esc(st.id.toUpperCase())}'s recordings">` + s.map(c => `<option value="clip:${esc(c.key)}">${esc(c.label)}</option>`).join('') + '</optgroup>';
     return html;
   }
   function rebuildPickers() {
@@ -465,17 +474,29 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     try { G.clips = (await (await fetch('/api/line/clips', { cache: 'no-store' })).json()).clips || []; } catch (e) { G.clips = []; }
     rebuildPickers();
   }
+  // USB cameras are found by themselves: at load when access was given before, whenever one is plugged in or out, and
+  // the first time someone picks "USB camera: allow access" (ask). Without access the browser hides their names and ids.
   async function findCameras(ask) {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) { banner('cam', 'This browser gives no camera access here. Clips and the buttons still work.'); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) { banner('cam', 'This browser gives no camera access here. iPhones and clips still work.'); return; }
     if (ask) {
-      try { const tmp = await navigator.mediaDevices.getUserMedia({ video: true }); tmp.getTracks().forEach(t => t.stop()); G.camAllowed = true; banner('cam', ''); }
-      catch (e) { banner('cam', 'Camera permission was not given (' + esc(e && e.name || 'error') + '). Clips and the buttons still work.'); }
+      try { const tmp = await navigator.mediaDevices.getUserMedia({ video: true }); tmp.getTracks().forEach(t => t.stop()); banner('cam', ''); }
+      catch (e) { banner('cam', 'Camera access was not given (' + esc(e && e.name || 'error') + '). iPhones and clips still work.'); }
     }
     const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
-    G.cameras = devs.map((d, i) => ({ key: 'cam:' + (d.label || d.deviceId || String(i)), deviceId: d.deviceId, label: d.label || 'Camera ' + (i + 1) }));
-    if (devs.some(d => d.label)) G.camAllowed = true;
-    $('btnCams').textContent = G.cameras.length ? 'Cameras: ' + G.cameras.length + ' (refresh)' : 'Find cameras';
+    G.camAllowed = devs.some(d => d.label);
+    G.cameras = G.camAllowed ? devs.map((d, i) => ({ key: 'cam:' + (d.label || d.deviceId || String(i)), deviceId: d.deviceId, label: d.label || 'Camera ' + (i + 1) })) : [];
     rebuildPickers();
+  }
+  // "USB camera: allow access": ask once, put back any saved cameras, and give this station the first free one.
+  async function askCameras(st) {
+    st.sel.value = st.source.key;
+    await findCameras(true);
+    await restoreSources(true);
+    const free = G.cameras.find(c => !LIST.some(s => s.source.key === c.key));
+    if (free && st.source.type === 'none') await setSource(st, free.key);
+  }
+  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+    navigator.mediaDevices.addEventListener('devicechange', async () => { if (!LIST.length) return; await findCameras(false); await restoreSources(true); });
   }
 
   async function stopSource(st) {
@@ -1058,7 +1079,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     const c = st.setup.calib, nm = Object.keys(c.motion || {}).length;
     const bulb = st.bulbs.map(z => c.bright[z] || {}).find(Boolean) || {};
     let txt = nm ? 'Calibrated' + (st.setup.updatedAt ? ' ' + new Date(st.setup.updatedAt).toLocaleTimeString() : '') : 'Not calibrated';
-    if (st.bulbs.length) txt += ' | bulb off ' + (bulb.off != null ? Math.round(bulb.off) : '--') + ', on ' + (bulb.on != null ? Math.round(bulb.on) : '--');
+    if (st.bulbs.length) txt += ' | bulb dark ' + (bulb.off != null ? Math.round(bulb.off) : '--') + ', lit ' + (bulb.on != null ? Math.round(bulb.on) : '--');
     if (st.calib) txt = 'Calibrating... keep still';
     st.calst.textContent = txt;
     if (st.refst) st.refst.textContent = st.refMsg || (st.setup.ref ? 'Correct state saved ' + new Date(st.setup.ref.saved).toLocaleString() + '.' : 'No correct state saved yet.');
@@ -1121,7 +1142,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     const c = LE.calibrationFrom(st.calib.samples);
     st.calib = null;
     const cal = st.setup.calib;
-    if (kind === 'empty') {
+    if (kind === 'empty') {    // also the dark bulb: every zone's brightness is its "off" level
       cal.motion = c.motion;
       for (const z of Object.keys(c.brightness)) cal.bright[z] = Object.assign({}, cal.bright[z], { off: c.brightness[z] });
     } else {
@@ -1192,11 +1213,12 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     if (st.calib) {
       ctx.fillStyle = 'rgba(15,17,19,.7)'; ctx.fillRect(cr.x, cr.y, cr.w, 22 * k);
       ctx.fillStyle = '#fff'; ctx.font = `600 ${Math.max(11, 12 * k)}px Saira, sans-serif`;
-      ctx.fillText(st.calib.kind === 'on' ? 'Recording the lit bulb...' : st.calib.kind === 'off' ? 'Recording the dark bulb...' : 'Calibrating: keep the area empty', cr.x + 8 * k, cr.y + 4 * k);
+      ctx.fillText(st.calib.kind === 'on' ? 'Recording the lit bulb...' : 'Calibrating: keep the area empty and the bulb dark', cr.x + 8 * k, cr.y + 4 * k);
     }
   }
 
   // ---------- manual buttons (the answer key) ----------
+  function hint(text) { banner('hint', esc(text)); clearTimeout(G.hintT); G.hintT = setTimeout(() => banner('hint', ''), 3000); }
   function flash(btn) { if (!btn) return; btn.classList.add('flash'); setTimeout(() => btn.classList.remove('flash'), 300); }
   function manualCycle(st) {
     emit({ type: 'manual', station: st.id, action: 'cycle_done', source: 'manual', t: now(), cycle: ++st.manualN });
@@ -1245,7 +1267,12 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) && e.target.type !== 'checkbox') return;
     if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
     const n = Number(e.key);
-    if (n >= 1 && n <= LIST.length) { e.preventDefault(); manualCycle(LIST[n - 1]); }
+    if (n >= 1 && n <= LIST.length) {
+      e.preventDefault();
+      const st = LIST[n - 1];
+      // P or F closes the QA station's cycle, so its number key only says so.
+      if (st.isQa) hint(st.id.toUpperCase() + ' closes its cycle with P or F.'); else manualCycle(st);
+    }
     else if (e.key === 'p' || e.key === 'P') { e.preventDefault(); manualPass(); }
     else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); openFail(); }
     else if (e.key === 'Escape') closeFail(true);
@@ -1295,7 +1322,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       const L = doc.summary && doc.summary.line;
       const base = '/api/sessions/' + sess.id;
       banner('session', `Session saved: <b>${esc(sess.title || sess.id)}</b>${L ? ` | ${L.units} units, FPY ${L.fpy == null ? '--' : Math.round(L.fpy * 100) + '%'}` : ''} | ` +
-        `<a href="${base}/substeps.csv" download>substeps.csv</a> <a href="${base}/cycles.csv" download>cycles.csv</a> <a href="${base}/verdicts.csv" download>verdicts.csv</a> <a href="${base}/events.jsonl" download>events.jsonl</a> <a href="${base}" target="_blank" rel="noopener">session.json</a>` +
+        `<a href="${base}/substeps.csv" download>substeps.csv</a> <a href="${base}/cycles.csv" download>cycles.csv</a> <a href="${base}/verdicts.csv" download>verdicts.csv</a> ${rawLinks(base)}` +
         (G.queue.length ? ` | <b>${G.queue.length} events were not sent</b>` : ''), G.queue.length ? 'crit' : 'good');
     } catch (e) {
       banner('session', 'Stopping had a problem: ' + esc(e && e.message || e) + '. The data sent so far is on disk.', 'crit');
@@ -1309,6 +1336,8 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       renderSession(); loadClips(); if (!$('sessionsPanel').hidden) loadSessions();
     }
   }
+  // The model team's files (every event, the session record) fold under "raw"; the three CSVs stay in view.
+  const rawLinks = base => `<details class="raw"><summary>raw</summary><a href="${base}/events.jsonl" download>events.jsonl</a><a href="${base}" target="_blank" rel="noopener">session.json</a></details>`;
   async function loadSessions() {
     try {
       const j = await (await fetch('/api/sessions', { cache: 'no-store' })).json();
@@ -1316,7 +1345,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
         const base = '/api/sessions/' + s.id, bytes = s.videos.reduce((a, v) => a + (v.bytes || 0), 0);
         return `<tr><td class="mono">${esc(s.id)}</td><td>${esc(s.title || '')}</td><td>${esc(s.crew || '')}</td><td>${esc(s.shift || '')}</td>` +
           `<td>${s.startedAt ? esc(new Date(s.startedAt).toLocaleString()) : ''}</td><td>${s.endedAt ? esc(new Date(s.endedAt).toLocaleTimeString()) : '<span class="chip warn">not ended</span>'}</td>` +
-          `<td class="mono">${s.videos.length} (${fmtMB(bytes)})</td><td><a href="${base}/substeps.csv" download>substeps.csv</a><a href="${base}/cycles.csv" download>cycles.csv</a><a href="${base}/verdicts.csv" download>verdicts.csv</a><a href="${base}/events.jsonl" download>events</a><a href="${base}" target="_blank" rel="noopener">json</a></td></tr>`;
+          `<td class="mono">${s.videos.length} (${fmtMB(bytes)})</td><td><a href="${base}/substeps.csv" download>substeps.csv</a><a href="${base}/cycles.csv" download>cycles.csv</a><a href="${base}/verdicts.csv" download>verdicts.csv</a>${rawLinks(base)}</td></tr>`;
       }).join('');
       $('sessTbl').innerHTML = rows ? `<table><thead><tr><th>Id</th><th>Title</th><th>Crew / group</th><th>Shift</th><th>Started</th><th>Ended</th><th>Videos</th><th>Exports</th></tr></thead><tbody>${rows}</tbody></table>` : '<div class="muted">No sessions yet.</div>';
     } catch (e) { $('sessTbl').innerHTML = '<div class="muted">The local server is not answering.</div>'; }
@@ -1339,7 +1368,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     let lab, cur, big = '', cls = 'nowbox';
     if (s.inCycle) { lab = 'Now (cycle ' + s.cycle + ')'; cur = label(s.current); big = fmtS((t - s.since) / 1000); cls += ' incycle'; if (takt && (t - s.cycleStart) / 1000 > takt) cls += ' over'; }
     else if (st.source.type === 'phone' && !phoneLive(st)) { lab = 'iPhone'; cur = st.phone && st.phone.state === 'lost' ? 'Phone lost: it reconnects by itself' : 'Waiting for the phone: scan its QR code'; }
-    else if (st.source.type === 'none') { lab = 'Manual only'; cur = 'No video: press Cycle done when a unit leaves'; }
+    else if (st.source.type === 'none') { lab = 'Manual only'; cur = st.isQa ? 'No video: press Pass or Fail for each unit' : 'No video: press Cycle done when a unit leaves'; }
     else { lab = 'Between cycles'; cur = s.cycle ? 'Waiting for the next unit' : 'Waiting for the first step'; big = s.since ? fmtS((t - s.since) / 1000) : ''; }
     st.elNow.className = cls; st.elNowLab.textContent = lab; st.elCur.textContent = cur; st.elBig.textContent = big;
     const d = ss ? ss.detected : null, m = ss ? ss.manual : null, over = v => (takt && v != null && v > takt ? ' class="over"' : '');
@@ -1400,9 +1429,10 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     $('sUphS').textContent = L.elapsedSec < 60 ? 'after the first minute' : 'over ' + fmtClock(L.elapsedSec * 1000);
     $('sFpy').textContent = L.fpy == null ? '--' : Math.round(L.fpy * 100) + '%';
     $('sFpyS').textContent = L.passed + ' pass / ' + (L.passed + L.defectFails) + ' tested' + (L.nonDefectFails ? ', ' + L.nonDefectFails + ' retest' : '');
+    // Takt shows only when the config sets it.
     const takt = G.config.taktSec;
-    $('sTakt').textContent = takt ? fmtS(takt) : '--';
-    $('sTaktS').textContent = takt ? (L.overTakt.length ? 'over: ' + L.overTakt.map(x => x.toUpperCase()).join(', ') : 'all stations within') : 'not set in the config';
+    $('sTaktTile').hidden = !takt;
+    if (takt) { $('sTakt').textContent = fmtS(takt); $('sTaktS').textContent = L.overTakt.length ? 'over: ' + L.overTakt.map(x => x.toUpperCase()).join(', ') : 'all stations within'; }
     let flow = '';
     ids.forEach((id, i) => {
       const s = sum.stations[id];
@@ -1411,10 +1441,10 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       if (i + 1 < ids.length) { const w = L.wip[i]; flow += `<div class="fl-ar${w.n < 0 ? ' neg' : ''}" title="Work in progress between ${id.toUpperCase()} and ${ids[i + 1].toUpperCase()}${i === 0 ? ' (pairs of wires)' : ''}"><i>→</i>WIP ${w.n}<i>→</i></div>`; }
     });
     $('sFlow').innerHTML = '<span class="eyebrow" style="margin-right:6px">Flow</span>' + flow;
-    const fc = L.failsByCause, parts = ids.map(id => `${id.toUpperCase()} <b>${fc[id] || 0}</b>`);
-    if (fc.unknown) parts.push(`no cause <b>${fc.unknown}</b>`);
-    $('sFails').innerHTML = `<span class="eyebrow">Fails by cause</span><span class="mono">${parts.join(' | ')}</span>` +
-      `<span class="muted">${L.nonDefectFails ? L.nonDefectFails + ' test setup (retest) | ' : ''}${L.mismatches ? `<span class="chip crit">${L.mismatches} mismatch</span>` : '0 mismatches'}</span>`;
+    // Fails by cause: the yield tile's second line.
+    const fc = L.failsByCause, causes = ids.filter(id => fc[id]).map(id => id.toUpperCase() + ' ' + fc[id]);
+    if (fc.unknown) causes.push('no cause ' + fc.unknown);
+    $('sFails').innerHTML = 'Fails: ' + (causes.length ? esc(causes.join(', ')) : 'none') + (L.mismatches ? `<span class="chip crit">${L.mismatches} mismatch</span>` : '');
   }
   function renderSession() {
     const on = !!G.session;
@@ -1461,11 +1491,10 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
   $('startForm').onsubmit = e => { e.preventDefault(); startSession({ title: $('fTitle').value.trim(), crew: $('fCrew').value.trim(), shift: $('fShift').value.trim(), notes: $('fNotes').value.trim() }); };
   $('btnStop').onclick = () => stopSession();
   $('btnSessions').onclick = () => { const p = $('sessionsPanel'); p.hidden = !p.hidden; $('btnSessions').classList.toggle('on', !p.hidden); if (!p.hidden) loadSessions(); };
-  $('btnRefresh').onclick = () => { loadSessions(); loadClips(); };
-  $('btnModel').onclick = () => setModel(!G.modelOn);
+  setInterval(() => { if (!$('sessionsPanel').hidden) loadSessions(); }, 10000);    // the panel keeps itself current while open
+  $('btnModel').onclick = () => { const on = !G.modelOn; store.set('wire-line:model', on); setModel(on); };
   $('btnHands').onclick = () => setHands(!G.handsOn);
   $('btnSound').onclick = () => { G.soundOn = !G.soundOn; store.set('wire-line:sound', G.soundOn); unlockAudio(); renderToolbar(); };
-  $('btnCams').onclick = async () => { await findCameras(true); await restoreSources(true); };
   // Two clicks, no dialog: the first arms it for 3 seconds.
   $('btnPair').onclick = async () => {
     const b = $('btnPair');
@@ -1532,18 +1561,19 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     LIST = G.config.stations.map((cfg, i) => (ST[cfg.id] = makeStation(cfg, i)));
     const grid = $('grid');
     LIST.forEach(st => grid.appendChild(st.el));
-    $('kLast').textContent = LIST.length;
+    $('kLast').textContent = LIST.filter(st => !st.isQa).length;
     $('hdrNote').textContent = (G.config.name || 'Line') + ': ' + (G.config.product || '') + ' ' + LIST.length + ' stations, one overhead camera each.';
     renderToolbar(); renderSession(); rebuildPickers();
     await loadPhoneInfo();
     LIST.forEach(st => { sizeCanvas(st); emit({ type: 'source_change', station: st.id, t: now(), input: 'none', note: st.source.label }); });
     await loadClips();
-    // Camera labels need permission. Only ask when it was given before; else the Find cameras button asks.
+    // Camera labels need permission. Only ask when it was given before; else the "allow access" item in a camera list asks.
     try {
       const perm = navigator.permissions ? await navigator.permissions.query({ name: 'camera' }) : null;
       if (perm && perm.state === 'granted') await findCameras(false);
     } catch (e) { /* no permissions API */ }
     await restoreSources(false);
+    if (LIST.some(modelOf) && store.get('wire-line:model') !== false) setModel(true);
   })();
 })();
 </script>

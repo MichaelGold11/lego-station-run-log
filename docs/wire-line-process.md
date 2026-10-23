@@ -135,25 +135,30 @@ First-pass yield = passes / (passes + defect fails). Test setup fails are left o
 1. Mount each camera straight above its station so every tray, bin and work area is in view. Plug
    all four into the laptop, spread over different USB ports (a powered hub helps). Close any other
    app that uses a camera.
-2. `npm start`, open http://localhost:4173/line in Chrome, press **Find cameras** and allow access.
-   Pick one camera per station (a camera can only serve one station). To tell them apart, cover one
-   lens and see which tile goes dark. The page asks for 640x480 at 15 fps.
+2. `npm start`, open http://localhost:4173/line in Chrome and pick one camera per station in its
+   camera list (a camera can only serve one station). The first time, pick **USB camera: allow
+   access**; once access is given the page finds the cameras by itself, at load and whenever one is
+   plugged in or out. To tell them apart, cover one lens and see which tile goes dark. The page asks
+   for 640x480 at 15 fps.
 3. On each station press **Setup**. Pick a zone and drag a box on the video around that tray, bin or
    work area. The next zone is picked for you. Zones save to the laptop
    (`data/meta/wire-line-setup.json`) and come back after a reload.
-4. With the work area empty and still, press **Calibrate empty** (2 seconds). On S4, with the bulb
-   dark press **Bulb off**, then light the bulb in the fixture and press **Bulb on**.
+4. With the work area empty and still, press **Calibrate empty** (2 seconds). It also records every
+   zone's dark brightness, so on S4 keep the bulb dark for it; then light the bulb in the fixture
+   and press **Bulb on**.
 5. Leave **Rec** on (it is on by default for cameras). Press **Start session** and fill in the title,
    the crew / training group and the shift. Counts start from zero.
-6. While the line runs, one person keeps the answer key: keys **1** to **4** when a unit leaves that
-   station, **P** or **F** at QA (F opens the reason chips; pick one). On S4, Pass or Fail also counts
-   as that station's cycle done, so do not press 4 as well. Manual presses are stored separately from
-   what the cameras detect; they are how we score the detection.
-7. Press **Stop session**. The banner links the two CSVs. Copy the session folder off the laptop:
-   video is about 1 GB per hour for four cameras.
+6. While the line runs, one person keeps the answer key: keys **1** to **3** when a unit leaves that
+   station, **P** or **F** at QA (F opens the reason chips; pick one). Pass or Fail also closes S4's
+   manual cycle, so S4 has no number key (4 only shows "S4 closes its cycle with P or F"). Manual
+   presses are stored separately from what the cameras detect; they are how we score the detection.
+7. Press **Stop session**. The banner links the three CSVs; `events.jsonl` and `session.json` fold
+   under **raw**. Copy the session folder off the laptop: video is about 1 GB per hour for four
+   cameras.
 
-No camera handy? Pick a **recorded clip** as a station's source (they loop at normal speed). Past
-session recordings are in the same list, which is also how a new model can re-score old footage.
+No camera handy? Pick a **demo clip** (the LEGO run videos) as a station's source; clips loop at
+normal speed. Each station's list also has its own 10 newest session recordings (S1 lists only
+`s1` files), which is how a new model re-scores old footage.
 
 ## iPhones as station cameras
 
@@ -227,7 +232,8 @@ Folder `data/sessions/<id>/` (git-ignored), id like `20261015-233956-7509`:
 | `s1.mp4` ... `s4.mp4` | each station's video (`.webm` on browsers without MP4 recording). `s1-2.mp4` is a second part if the source changed or Rec was switched off and on |
 
 Exports: `/api/sessions/<id>/substeps.csv`, `/cycles.csv`, `/verdicts.csv` and `/events.jsonl`
-(also linked from **Sessions and exports**).
+(also linked from **Sessions and exports**, which updates by itself every 10 seconds while open;
+the last two under **raw**).
 
 ### Event fields
 
@@ -324,8 +330,9 @@ shapes work:
 List the classes in training order. Only add your own station's entry, so four people can edit the
 file without clashing. A station with no entry uses the top-level `"model"` if there is one (a
 shared fallback, `null` by default), else it stays on zones. Two stations can point at the same
-file; the page loads it once. Reload `/line` and press **Model: on**: every station that has a
-model runs it, and each station tile shows the file name it runs (or `zones`). Each substep whose
+file; the page loads it once. Reload `/line`: every station that has a model runs it by itself,
+and each station tile shows the file name it runs (or `zones`). **Model: off** stops them on a slow
+laptop, and the laptop remembers that until someone turns it back on. Each substep whose
 model rule uses only classes that station's model knows switches to the model; the rest keep their
 zones rule. "Unclip" has no rule yet: pick a class and add `"model": { "zone": "fixture", "class": "<class>" }`
 to `s4_disconnect`.
