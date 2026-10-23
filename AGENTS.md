@@ -3,6 +3,13 @@
 Instructions for any coding agent (Claude Code, Codex, Cursor, others) working in this repo.
 People: start with `README.md`.
 
+| Page | What it is |
+|---|---|
+| `/line` (`/` opens it) | The wire line, the team's main tool (section "Wire line platform" below) |
+| `/phone` on port 4174 | A station's iPhone camera page (HTTPS) |
+| `/runs` | Archived: the LEGO run log this section and "Analyze runs" are about ([docs/lego-run-log.md](docs/lego-run-log.md)) |
+| `/live` | Archived: the LEGO single-station live prototype |
+
 ## What this is
 
 A time-study tool for one simulated manual assembly station: a LEGO build (white 4×6 plate,
@@ -16,7 +23,7 @@ become process data without the operator entering anything.
 
 | Path | What it is |
 |---|---|
-| `app/lego-station-run-log.html` | The whole web app. The same file runs as a claude.ai artifact. |
+| `app/lego-station-run-log.html` | The run log's web app (`/runs`). The same file runs as a claude.ai artifact. |
 | `app/local-runtime.js` | Stands in for the claude.ai runtime when the app runs locally. |
 | `server.mjs` | Local server: the app, a JSON document store, stored files. No dependencies. |
 | `scripts/runlog.mjs` | Command-line helper for everything below. `node scripts/runlog.mjs help` |
@@ -37,7 +44,7 @@ CSV columns, model export contract) is [docs/wire-line-process.md](docs/wire-lin
 
 | Path | What it is |
 |---|---|
-| `app/line.html`, `app/line-engine.js` | The 4-station page and its config-driven engine |
+| `app/line.html`, `app/line-engine.js` | The 4-station page and its config-driven engine. The screen is lean on purpose ([docs/lean-plan.md](docs/lean-plan.md)): run controls only, everything else in Setup |
 | `data/meta/wire-line.json` | The process: stations, zones, substeps, fail reasons, and `models` (one entry per station) |
 | `app/models/` | Model files (`.onnx`) the page loads |
 | `data/sessions/<id>/` | Recorded sessions (video per station, `events.jsonl`). Git-ignored, about 1 GB per hour |
@@ -222,4 +229,4 @@ a run marked running.
 ### 8. Report
 
 One line per run: run id, reference, cycle time, status, and the main difference. Mention
-that the web app (`npm start`, http://localhost:4173) now shows it. Do not commit unless asked.
+that the run log (`npm start`, http://localhost:4173/runs) now shows it. Do not commit unless asked.

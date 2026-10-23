@@ -310,6 +310,8 @@ details.raw[open] summary { margin-right: 6px; }
 <script>
 (() => {
   'use strict';
+  // The LEGO run log used to live at /, with its routes after a #: an old link like /#runs goes on to /runs.
+  if (location.hash.length > 1) { location.replace('/runs' + location.hash); return; }
   const LE = window.LineEngine, LD = window.LiveDetect;
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));

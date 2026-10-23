@@ -1,10 +1,10 @@
-// Local server for the LEGO Station Run Log.
-// Serves the app, a small JSON document store (data/<collection>/<id>.json) and the
-// uploaded files (data/assets/<id>.<ext>). No dependencies; Node 18 or newer.
-// Also serves the wire line page (/line) and its session store (data/sessions/<id>/), and on a second port, over HTTPS
-// on the local network, the iPhone camera page (/phone) that streams a phone's camera into /line.
+// Local server for the wire line platform. No dependencies; Node 18 or newer.
+// Serves the wire line page (/line, also where / goes) and its session store (data/sessions/<id>/), and on a second
+// port, over HTTPS on the local network, the iPhone camera page (/phone) that streams a phone's camera into /line.
+// Also the archived LEGO run log (/runs): its app, a small JSON document store (data/<collection>/<id>.json) and the
+// uploaded files (data/assets/<id>.<ext>).
 //
-//   npm start                  -> http://localhost:4173, and https://<this laptop>:4174/phone for iPhones
+//   npm start                  -> http://localhost:4173 (the wire line), and https://<this laptop>:4174/phone for iPhones
 //   PORT=5000 npm start        -> another port
 //   PHONE_PORT=4175 npm start  -> another port for the iPhone page (PHONE_PORT=off: no iPhone page)
 //   DATA_DIR=/tmp/x npm start  -> another data folder (the tests use this)
@@ -27,7 +27,7 @@ const PORT = Number(process.env.PORT) || 4173;
 const MAX_UPLOAD = 500 * 1024 * 1024;
 
 // /live runs the YOLO model and the hand model in the browser. WASM threads need cross-origin isolation, so /live and its
-// vendor and model files carry COOP and COEP (credentialless keeps the Google Fonts link working). / is left alone.
+// vendor and model files carry COOP and COEP (credentialless keeps the Google Fonts link working). /runs is left alone.
 // Libraries come from node_modules (npm install); if that is missing the request is sent on to the pinned jsdelivr copy.
 const ISOLATE = { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'credentialless', 'Cross-Origin-Resource-Policy': 'same-origin' };
 const DEPS = (() => { try { return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).dependencies || {}; } catch (e) { return {}; } })();
@@ -143,7 +143,10 @@ async function handle(req, res) {
   const url = new URL(req.url, 'http://localhost');
   const p = decodeURIComponent(url.pathname);
 
-  if (p === '/' || p === '/index.html') {
+  // The front door is the wire line. The LEGO run log (the first study: one station's videos analyzed by an agent)
+  // lives at /runs; it uses hash routes and absolute paths, so it works there unchanged.
+  if (p === '/' || p === '/index.html') { res.writeHead(302, { Location: '/line' + url.search }); return res.end(); }
+  if (p === '/runs') {
     const html = HEAD + fs.readFileSync(APP_FILE, 'utf8') + '\n</body></html>';
     return send(res, 200, html, 'text/html; charset=utf-8');
   }
@@ -716,7 +719,8 @@ function startPhone() {
 http.createServer((req, res) => {
   handle(req, res).catch(e => { console.error(e); if (!res.headersSent) fail(res, 500, 'unavailable', String(e && e.message || e)); });
 }).listen(PORT, '127.0.0.1', () => {
-  console.log(`LEGO Station Run Log: http://localhost:${PORT}`);
+  console.log(`Wire line: http://localhost:${PORT}/line`);
+  console.log(`LEGO run log (archived): http://localhost:${PORT}/runs`);
   console.log(`Data folder: ${DATA}`);
   if (!hasFfmpeg) console.log('ffmpeg not found: uploads are stored as-is, and agents cannot analyze videos until it is installed.');
   startPhone();

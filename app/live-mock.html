@@ -28,6 +28,8 @@
   }
 }
 * { box-sizing: border-box; }
+.archived { margin: 0; padding: 8px 12px; border-radius: 6px; border: 1px solid color-mix(in srgb, var(--warn) 60%, transparent); background: color-mix(in srgb, var(--warn) 12%, var(--surface)); color: var(--warn-ink); font-size: 13px; }
+.archived a { color: inherit; font-weight: 600; }
 [hidden] { display: none !important; }
 html { color-scheme: light; }
 body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-ui); font-size: 15px; line-height: 1.45; }
@@ -169,6 +171,7 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
 </head>
 <body>
 <div class="wrap">
+  <p class="archived">Archived: the LEGO single-station prototype. The wire line is <a href="/line">/line</a>.</p>
   <header>
     <h1>Live station</h1>
     <p class="note" id="hdrNote">The team YOLO model finds the plate, the pink brick and the blue slope. Color + motion stays as a fallback.</p>

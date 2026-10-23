@@ -70,6 +70,13 @@ startServer();
 try {
   check('server starts on a spare port with DATA_DIR', await ready(), log);
 
+  console.log('pages');
+  const root = await req('GET', '/'), rootQ = await req('GET', '/?gpu'), idx = await req('GET', '/index.html');
+  check('GET / sends you to the wire line (/line), keeping the query', root.status === 302 && root.headers.location === '/line' && rootQ.headers.location === '/line?gpu' && idx.status === 302 && idx.headers.location === '/line', [root.status, root.headers.location, rootQ.headers.location, idx.status].join());
+  const runs = await req('GET', '/runs');
+  check('GET /runs serves the LEGO run log with its local runtime', runs.status === 200 && /<title>LEGO Station Run Log<\/title>/.test(runs.text) && /\/local-runtime\.js/.test(runs.text));
+  check('npm start prints the wire line first and the run log second', /Wire line: http:\/\/localhost:\d+\/line\n[^]*LEGO run log \(archived\): http:\/\/localhost:\d+\/runs/.test(log), log.split('\n').slice(0, 2).join(' | '));
+
   console.log('config and setup');
   const cfg = await req('GET', '/api/line/config');
   check('GET /api/line/config falls back to the repo config (4 stations)', cfg.status === 200 && cfg.json.stations.length === 4);
@@ -300,7 +307,7 @@ try {
     const hello = await sreq('GET', `/phone/hello?s=s2&k=${keys.s2}`);
     check('S2\'s own key works and says no /line page is open', hello.status === 200 && hello.json.station === 's2' && hello.json.laptop === 'closed', hello.text);
     const iso = [];
-    for (const p of ['/line', '/api/line/config', '/api/sessions', '/api/db/runs', '/_blob/' + 'a'.repeat(32), '/api/phone/info', '/line-engine.js', '/vendor/qrcode.js', '/models/lego-parts.onnx', '/local-runtime.js', '/live'])
+    for (const p of ['/line', '/api/line/config', '/api/sessions', '/api/db/runs', '/_blob/' + 'a'.repeat(32), '/api/phone/info', '/line-engine.js', '/vendor/qrcode.js', '/models/lego-parts.onnx', '/local-runtime.js', '/live', '/runs'])
       iso.push((await sreq('GET', p + `?s=s1&k=${keys.s1}`)).status);
     iso.push((await sreq('POST', '/api/phone/rotate', { client: 'abcdefgh12' })).status, (await sreq('POST', '/api/sessions', { title: 'x' })).status);
     check('the phone port serves nothing else, even with a key: the app, data, sessions, models and /line\'s signaling all 404', iso.every(c => c === 404), iso.join());
