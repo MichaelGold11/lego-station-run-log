@@ -35,7 +35,7 @@ Open http://localhost:4173. `npm install` fetches two browser libraries for the 
 The wire line dashboard (four stations, four cameras, one laptop, one model per station) is at
 http://localhost:4173/line. It records cycle and substep times, QA results and every camera's video for training.
 The cameras can be USB cameras or iPhones: `npm start` also runs an HTTPS page for phones on port 4174, and each
-station's tile shows a QR code for its phone (needs `openssl`, which macOS and Git for Windows include).
+station's **Connect a camera** button offers a QR code for its phone (needs `openssl`, which macOS and Git for Windows include).
 **Team step-by-step** (run day, training your station's model, adding it, testing it):
 [docs/team-guide.md](docs/team-guide.md). Technical reference: [docs/wire-line-process.md](docs/wire-line-process.md).
 

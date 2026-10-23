@@ -79,7 +79,7 @@ Rules (the thresholds are live_check.py's):
   review, and so does a wrong-order jump confirmed by a model rule under 0.60. A missing part is
   always a mistake.
 - Model checks (confidence, missing, position) only use model results taken while the station's
-  view is clear: no hand in its tile (when Hands is on; a hand result counts for 5 s) and every
+  view is clear: no hand in its tile (when Hand tracking is on; a hand result counts for 5 s) and every
   drawn zone's activity under 0.05, for 0.3 s. The last 3 such results vote, and the kind 2 of
   them agree on wins. A check runs once per clear spell, again when the tracker confirms a new
   model substep, and every 1.0 s while a mistake or review shows. A station without a model checks
@@ -95,7 +95,7 @@ Rules (the thresholds are live_check.py's):
   row the verdict is about says "Mistake - fix and clear the view" or "Needs review".
 - Sounds (Web Audio, live_check.py's tones): mistake 3 beeps of 880 Hz for 220 ms each, review
   600 Hz for 300 ms, verified 1320 Hz for 120 ms. One per new verdict, none for cleared. The
-  toolbar's **Sound** switches all stations, each tile has **Mute**, and the audio starts after
+  **Sound** at the top switches all stations, each station has **Mute sounds** in Setup, and the audio starts after
   the first click on the page.
 
 Config (all optional):
@@ -135,19 +135,25 @@ First-pass yield = passes / (passes + defect fails). Test setup fails are left o
 1. Mount each camera straight above its station so every tray, bin and work area is in view. Plug
    all four into the laptop, spread over different USB ports (a powered hub helps). Close any other
    app that uses a camera.
-2. `npm start`, open http://localhost:4173/line in Chrome and pick one camera per station in its
-   camera list (a camera can only serve one station). The first time, pick **USB camera: allow
-   access**; once access is given the page finds the cameras by itself, at load and whenever one is
-   plugged in or out. To tell them apart, cover one lens and see which tile goes dark. The page asks
-   for 640x480 at 15 fps.
-3. On each station press **Setup**. Pick a zone and drag a box on the video around that tray, bin or
-   work area. The next zone is picked for you. Zones save to the laptop
-   (`data/meta/wire-line-setup.json`) and come back after a reload.
+2. `npm start`, open http://localhost:4173/line in Chrome. A station with no camera shows **Connect
+   a camera**: pick **USB camera** (the first time this asks for camera access). One free camera is
+   taken at once; with several, pick one (a camera can only serve one station). Once access is
+   given the page finds the cameras by itself, at load and whenever one is plugged in or out. To tell
+   them apart, cover one lens and see which tile goes dark. The page asks for 640x480 at 15 fps. The
+   choice is saved per laptop; **Setup** has each station's full Camera list to change it.
+3. Press **Setup** (top right, or a station's **Setup needed**). Setup opens every station at once,
+   plus a bar with the line's switches (Models, Hand tracking, Count by, Reset counts, New pairing
+   code). Pick a zone and drag a box on the video around that tray, bin or work area. The next zone
+   is picked for you. Zones save to the laptop (`data/meta/wire-line-setup.json`) and come back after
+   a reload. During a session, Setup warns that changes count from then on.
 4. With the work area empty and still, press **Calibrate empty** (2 seconds). It also records every
    zone's dark brightness, so on S4 keep the bulb dark for it; then light the bulb in the fixture
    and press **Bulb on**.
-5. Leave **Rec** on (it is on by default for cameras). Press **Start session** and fill in the title,
-   the crew / training group and the shift. Counts start from zero.
+5. Press **Done**. Each station's head says **Ready**, or what is missing ("Setup needed", which opens
+   Setup). Recording is on for cameras and iPhones (Setup's **Record video**, per station, off by
+   default for replayed clips); a recording station shows **REC** and its size in its head. Press
+   **Start session** and fill in the title, the crew / training group and the shift. Counts start
+   from zero.
 6. While the line runs, one person keeps the answer key: keys **1** to **3** when a unit leaves that
    station, **P** or **F** at QA (F opens the reason chips; pick one). Pass or Fail also closes S4's
    manual cycle, so S4 has no number key (4 only shows "S4 closes its cycle with P or F"). Manual
@@ -156,15 +162,16 @@ First-pass yield = passes / (passes + defect fails). Test setup fails are left o
    under **raw**. Copy the session folder off the laptop: video is about 1 GB per hour for four
    cameras.
 
-No camera handy? Pick a **demo clip** (the LEGO run videos) as a station's source; clips loop at
+No camera handy? **Connect a camera** > **Recorded clip** offers the **demo clips** (the LEGO run
+videos); clips loop at
 normal speed. Each station's list also has its own 10 newest session recordings (S1 lists only
 `s1` files), which is how a new model re-scores old footage.
 
 ## iPhones as station cameras
 
 Any station can use an iPhone instead of a USB camera, so four iPhones can run the whole line with
-nothing plugged into the laptop. Pick **iPhone (scan a QR code)** as the station's source: the tile
-shows a QR code. Scan it with that station's iPhone (the Camera app), open the link in Safari, allow
+nothing plugged into the laptop. Press **Connect a camera** on the station and pick **iPhone (scan a
+QR code)**: the tile shows a QR code. Scan it with that station's iPhone (the Camera app), open the link in Safari, allow
 the camera, and within a few seconds the tile shows the phone's video. From then on the phone is
 the station's camera like any other: zones, Calibrate, the model, mistake alerts and Rec all work
 the same.
@@ -178,12 +185,13 @@ How it works:
   data, the sessions and the models stay on http://localhost:4173, which the network cannot reach.
 - The video goes straight from the phone to the laptop's browser over the local network (WebRTC).
   It never leaves the network; the server only passes one offer and one answer per connection.
-- The phone sends its back camera at 640x480 and 15 fps, the same as the USB cameras. The tile's
-  chip and footer show what it actually sends ("iPhone sends 640x480 at 15 fps").
+- The phone sends its back camera at 640x480 and 15 fps, the same as the USB cameras. The chip on
+  the video and the station's diagnostics row in Setup show what it actually sends ("iPhone sends
+  640x480 at 15 fps"). **Show QR** in Setup brings a live phone's QR code back, to swap phones.
 - **Each station has its own link and key** (`k=` in the link), so S1's link cannot be edited into
   S2's. The keys come from a secret saved in `data/phone-cert/pairing-secret`, so links and QR codes
-  keep working when `npm start` restarts: phones only scan again after **New pairing code** (the
-  toolbar; two clicks). That makes new keys for every station, cuts off every phone, and the old
+  keep working when `npm start` restarts: phones only scan again after **New pairing code** (in
+  Setup; two clicks). That makes new keys for every station, cuts off every phone, and the old
   links stop working.
 - If a phone drops (Safari closed, the phone locked, the network hiccups), its tile says "Phone
   lost" after about 10 to 15 seconds and shows the QR code again. The station counts as no video
@@ -232,7 +240,7 @@ Folder `data/sessions/<id>/` (git-ignored), id like `20261015-233956-7509`:
 | `s1.mp4` ... `s4.mp4` | each station's video (`.webm` on browsers without MP4 recording). `s1-2.mp4` is a second part if the source changed or Rec was switched off and on |
 
 Exports: `/api/sessions/<id>/substeps.csv`, `/cycles.csv`, `/verdicts.csv` and `/events.jsonl`
-(also linked from **Sessions and exports**, which updates by itself every 10 seconds while open;
+(also linked from **Sessions**, which updates by itself every 10 seconds while open;
 the last two under **raw**).
 
 ### Event fields
@@ -275,7 +283,7 @@ video_file, video_start_t, video_end_t, notes`
 `mistakes` and `reviews` count the cycle's mistake and review verdicts (an alert that stays on screen counts once).
 
 `basis` is `detected` (from the cameras) or `manual` (from the buttons; `cycle_s` is the time since
-the previous press). The dashboard's **Count** switch picks which one the line numbers use; **Auto**
+the previous press). The **Count by** switch in Setup picks which one the line numbers use; **Auto**
 uses detected counts where a station has any, else manual.
 
 ### verdicts.csv (one row per verdict, in time order)
@@ -331,7 +339,7 @@ List the classes in training order. Only add your own station's entry, so four p
 file without clashing. A station with no entry uses the top-level `"model"` if there is one (a
 shared fallback, `null` by default), else it stays on zones. Two stations can point at the same
 file; the page loads it once. Reload `/line`: every station that has a model runs it by itself,
-and each station tile shows the file name it runs (or `zones`). **Model: off** stops them on a slow
+and each station's diagnostics row in Setup shows the file name it runs (or `zones`). **Models: off** in Setup stops them on a slow
 laptop, and the laptop remembers that until someone turns it back on. Each substep whose
 model rule uses only classes that station's model knows switches to the model; the rest keep their
 zones rule. "Unclip" has no rule yet: pick a class and add `"model": { "zone": "fixture", "class": "<class>" }`
@@ -356,7 +364,7 @@ with a class number beyond your list drops that station back to zones with the s
   four stations on models (one result per station every 2 to 4 s), well under 1 s with one. A
   cycle whose first substep the zones missed starts with a wrong-order mistake, the same moment
   that raises the "skipped" flag.
-- Activity is motion. A hand resting still is not activity unless **Hands** is on; a person walking
+- Activity is motion. A hand resting still is not activity unless **Hand tracking** is on (Setup); a person walking
   through a zone is. Zones should cover the tray or bin, not the walkway.
 - MP4 chunks arrive every 2 to 5 seconds (on keyframes). A `.webm` file has no duration header; fix
   it with `ffmpeg -i s1.webm -c copy s1-fixed.webm` if a player cannot seek.

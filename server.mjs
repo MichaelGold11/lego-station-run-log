@@ -656,7 +656,7 @@ function phoneGate() {
     + '<style>body{margin:0;padding:24px 18px;font:17px/1.45 -apple-system,system-ui,sans-serif;background:#eef0ee;color:#15181b}h1{font-size:22px;margin:0 0 10px}a{color:#a3522a;font-weight:600}'
     + '@media (prefers-color-scheme: dark){body{background:#101214;color:#eff1ef}a{color:#dc8b55}}</style></head><body>'
     + '<h1>This link does not work</h1><p>It is old (someone made a new pairing code on the laptop) or it is not complete. On the laptop, open <b>/line</b>, '
-    + 'pick <b>iPhone</b> as the station\'s source, and scan the QR code it shows with this iPhone\'s Camera app.</p></body></html>';
+    + 'press <b>Connect a camera</b> on the station, pick <b>iPhone</b>, and scan the QR code it shows with this iPhone\'s Camera app.</p></body></html>';
 }
 
 // The phones' half (HTTPS on the local network). Nothing here reads or writes the data folder.
@@ -707,7 +707,7 @@ function startPhone() {
   server.listen(PHONE_PORT, host, () => {
     PH.on = true;
     const h = phoneHosts()[0], base = `https://${h ? h.host : 'localhost'}:${PHONE_PORT}`;
-    console.log(`iPhone cameras: ${base} (on /line, pick iPhone as a station's source and scan its QR code)`);
+    console.log(`iPhone cameras: ${base} (on /line, press Connect a camera on a station, pick iPhone and scan its QR code)`);
     const s1 = stationIds(lineConfig())[0];
     if (s1) console.log(`  ${s1.toUpperCase()} phone link: ${base}/phone?s=${s1}&k=${stationKey(s1)} (every station has its own key: /line shows each one's QR code)`);
   });

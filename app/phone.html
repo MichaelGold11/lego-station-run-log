@@ -102,7 +102,7 @@ a { color: var(--accent); font-weight: 600; }
     else if (P.discAt) show('wait', 'Connection unstable', 'Reconnecting...');
     else if (P.netHint) show('bad', 'The video cannot get through', 'The laptop found this phone, but the network blocks video between devices (common on campus Wi-Fi). Use a home router or a Personal Hotspot. Trying again...');
     else if (P.laptop === 'closed') show('wait', 'Waiting for the laptop', 'Open /line on the laptop.');
-    else if (P.laptop === 'not_picked') show('wait', 'Waiting for the laptop', 'On /line, pick iPhone as the source for ' + SID + '.');
+    else if (P.laptop === 'not_picked') show('wait', 'Waiting for the laptop', 'On /line, press Connect a camera on ' + SID + ' and pick iPhone.');
     else if (P.applied) show('wait', 'Connecting...', '');
     else show('wait', 'Connecting to the laptop...', '');
     const tr = P.stream && P.stream.getVideoTracks()[0], s = tr ? tr.getSettings() : {};

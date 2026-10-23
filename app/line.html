@@ -99,9 +99,13 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
 .fl-ar.neg { color: var(--crit-ink); }
 .sum-tile .s .chip { margin-left: 4px; }
 
-.toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); }
-.toolbar .sep { width: 1px; height: 20px; background: var(--line-2); }
-.toolbar .keys { margin-left: auto; display: flex; gap: 10px; flex-wrap: wrap; }
+/* Setup mode: one bar for the line-wide switches, and every tile opens its setup panel */
+.setupbar { display: grid; gap: 8px; padding: 10px 14px; border-color: var(--accent); }
+.sb-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.sb-head .eyebrow { color: var(--accent-2); margin-right: 6px; }
+.sb-row { display: flex; gap: 8px 16px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); }
+.sb-item { display: inline-flex; gap: 6px; align-items: center; }
+.sb-warn { color: var(--warn-ink); font-size: 13px; }
 
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
@@ -109,8 +113,16 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
 .st-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .st-badge { font-family: var(--f-mono); font-weight: 600; font-size: 12px; background: var(--ink); color: var(--surface); border-radius: 4px; padding: 1px 6px; }
 .st-head h2 { font-size: 16px; margin-right: auto; }
-.st-head select { max-width: 230px; min-width: 0; padding: 3px 6px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--surface); font-size: 12.5px; }
+.st-head .srcst { font-size: 12.5px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+.st-head .recst { font: 600 11.5px var(--f-mono); color: var(--crit-ink); white-space: nowrap; }
+.st-head .recst.off { color: var(--muted); font-weight: 500; }
+button.chip { cursor: pointer; font-family: inherit; }
+button.chip:hover { border-color: var(--warn-ink); }
+.opslot:empty { display: none; }    /* reserved: the dashboard's operator chip */
+.setup-panel select { max-width: 260px; min-width: 0; padding: 3px 6px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--surface); font-size: 12.5px; }
 .recl { display: inline-flex; gap: 4px; align-items: center; font-size: 12.5px; color: var(--ink-2); }
+.srow { display: flex; gap: 6px 14px; flex-wrap: wrap; align-items: center; }
+.diag { font-size: 11.5px; color: var(--ink-2); border-top: 1px dashed var(--line-2); padding-top: 5px; }
 .st-body { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 10px; padding: 8px 10px; min-height: 0; }
 @media (max-width: 640px) { .st-body { grid-template-columns: 1fr; } }
 .stage { position: relative; aspect-ratio: 4 / 3; background: #0b0c0d; border-radius: 6px; overflow: hidden; align-self: start; }
@@ -118,6 +130,16 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
 .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .stage.setup canvas { cursor: crosshair; touch-action: none; }
 .nosrc { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 16px; color: #aab0b6; font-size: 13px; }
+/* Connect a camera: on the dark stage of a station with no camera */
+.con { display: grid; gap: 8px; justify-items: center; max-width: 100%; }
+.con .con-t { color: #eff1ef; font-size: 14px; }
+.con-opts { display: grid; gap: 6px; width: min(240px, 100%); }
+.nosrc .btn { background: #1f2225; color: #eff1ef; border-color: #4a4f56; }
+.nosrc .btn:hover { border-color: #aab0b6; }
+.nosrc .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.nosrc select { width: min(260px, 100%); font-size: 12.5px; padding: 4px 6px; border-radius: 6px; background: #1f2225; color: #eff1ef; border: 1px solid #3a3f45; }
+.con-msg { font-size: 12px; color: #fab219; max-width: 280px; }
+.con-msg:empty { display: none; }
 .info { display: grid; gap: 6px; align-content: start; min-width: 0; }
 .nowbox { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; border-left: 4px solid var(--line-2); padding: 2px 0 2px 8px; }
 .nowbox.incycle { border-left-color: var(--accent); }
@@ -146,8 +168,6 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
 .check .tag { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--accent-2); }
 .check .rep { font-family: var(--f-mono); font-size: 11px; color: var(--ink-2); }
 .st-foot { display: flex; gap: 8px; align-items: center; padding: 7px 10px; border-top: 1px solid var(--line); flex-wrap: wrap; }
-.st-foot .meta { margin-left: auto; font-size: 12px; color: var(--ink-2); }
-.st-foot .meta .recd { color: var(--crit-ink); font-weight: 600; }
 .reasons { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 8px 10px; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--crit) 6%, var(--surface)); font-size: 13px; }
 .reasons .btn { font-size: 12.5px; }
 .setup-panel { display: grid; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--line); background: var(--surface-2); font-size: 12.5px; }
@@ -189,8 +209,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
 .phonep .plink { font-family: var(--f-mono); font-size: 10.5px; color: #aab0b6; word-break: break-all; user-select: all; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .phonep .pbtns { display: flex; gap: 6px; flex-wrap: wrap; }
 .phonep .pnote { color: #8a8f96; font-size: 11px; }
-.pchip { position: absolute; top: 6px; right: 6px; display: flex; gap: 6px; align-items: center; font: 600 11px var(--f-mono); color: #fff; background: rgba(15, 17, 19, .78); border-radius: 4px; padding: 2px 3px 2px 7px; }
-.pchip button { font: inherit; border: 1px solid rgba(255, 255, 255, .35); background: transparent; color: #fff; border-radius: 3px; padding: 0 5px; cursor: pointer; }
+.pchip { position: absolute; top: 6px; right: 6px; font: 600 11px var(--f-mono); color: #fff; background: rgba(15, 17, 19, .78); border-radius: 4px; padding: 2px 7px; pointer-events: none; }
 
 .sessions table { border-collapse: collapse; width: 100%; font-size: 13px; }
 .sessions th { text-align: left; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 4px 8px; border-bottom: 1px solid var(--line); }
@@ -213,9 +232,11 @@ details.raw[open] summary { margin-right: 6px; }
     <div class="sess" id="sessBox">
       <span class="live" id="sessLive" hidden><span class="dot rec"></span><span id="sessTitle"></span><span class="mono" id="sessClock">0:00</span></span>
       <span class="muted mono" id="sessInfo"></span>
+      <button class="btn" id="btnSound" type="button" title="Mistake alert sounds for every station">Sound: on</button>
       <button class="btn primary" id="btnStart" type="button">Start session</button>
       <button class="btn" id="btnStop" type="button" hidden>Stop session</button>
-      <button class="btn" id="btnSessions" type="button">Sessions and exports</button>
+      <button class="btn" id="btnSessions" type="button">Sessions</button>
+      <button class="btn" id="btnSetup" type="button" title="Cameras, boxes, calibration and the line's switches">Setup</button>
     </div>
   </header>
 
@@ -236,6 +257,19 @@ details.raw[open] summary { margin-right: 6px; }
     <div class="tbl" id="sessTbl"><div class="muted">Loading...</div></div>
   </section>
 
+  <section class="panel setupbar" id="setupBar" hidden aria-label="Setup">
+    <div class="sb-head"><div><span class="eyebrow">Setup</span>Each station: pick its camera, draw its boxes, calibrate. This laptop remembers it all.</div><button class="btn primary" id="btnDone" type="button">Done</button></div>
+    <div class="sb-warn" id="sbWarn" hidden>A session is recording: boxes and calibration change the counts from now on.</div>
+    <div class="sb-row">
+      <span class="sb-item"><button class="btn sm" id="btnModel" type="button">Models: off</button><span class="muted" id="mdlNote"></span></span>
+      <span class="sb-item"><button class="btn sm" id="btnHands" type="button" title="Hand tracking: a hand resting in a zone counts as activity, and model checks wait for a clear view. Slows each station's model results to every 4 to 5 seconds.">Hand tracking: off</button></span>
+      <span class="sb-item">Count by<span class="seg" id="basisSeg"><button type="button" data-b="auto">Auto</button><button type="button" data-b="detected">Detected</button><button type="button" data-b="manual">Manual</button></span></span>
+      <button class="btn sm" id="btnReset" type="button">Reset counts</button>
+      <button class="btn sm" id="btnPair" type="button" title="Make a new pairing code for the iPhone cameras. Every phone link and QR code so far stops working, and connected phones are cut off.">New pairing code</button>
+      <span class="muted mono" id="detNote"></span>
+    </div>
+  </section>
+
   <section class="panel summary" id="summary" aria-label="Line summary">
     <div class="sum-row">
       <div class="sum-tile"><div class="eyebrow">Units done</div><div class="v" id="sUnits">0</div><div class="s" id="sUnitsS">tested at QA</div></div>
@@ -246,18 +280,6 @@ details.raw[open] summary { margin-right: 6px; }
     <div class="flow" id="sFlow"></div>
   </section>
 
-  <div class="toolbar">
-    <button class="btn sm" id="btnModel" type="button">Model: off</button>
-    <button class="btn sm" id="btnHands" type="button">Hands: off</button>
-    <button class="btn sm" id="btnSound" type="button" title="Mistake alert sounds for every station (each station also has its own Mute)">Sound: on</button>
-    <span class="muted" id="detNote"></span>
-    <span class="sep"></span>
-    <button class="btn sm" id="btnPair" type="button" title="Make a new pairing code for the iPhone cameras. Every phone link and QR code so far stops working, and connected phones are cut off.">New pairing code</button>
-    <span class="sep"></span>
-    <span>Count</span><span class="seg" id="basisSeg"><button type="button" data-b="auto">Auto</button><button type="button" data-b="detected">Detected</button><button type="button" data-b="manual">Manual</button></span>
-    <button class="btn sm" id="btnReset" type="button">Reset counts</button>
-    <span class="keys"><span><kbd>1</kbd>-<kbd id="kLast">3</kbd> cycle done</span><span><kbd>P</kbd> pass</span><span><kbd>F</kbd> fail</span><span><kbd>Esc</kbd> close</span></span>
-  </div>
 
   <div class="grid" id="grid"></div>
 </div>
@@ -289,7 +311,7 @@ details.raw[open] summary { margin-right: 6px; }
   const G = {
     config: null, setup: {}, events: [], queue: [], session: null, lastSession: null, basis: store.get('wire-line:basis') || 'auto',
     modelOn: false, handsOn: false, cameras: [], clips: [], camAllowed: false, failPick: null, sending: false, summary: null, sumAt: 0, evSeen: -1,
-    qaId: null, saveTimer: null, starting: false, stopping: false, soundOn: store.get('wire-line:sound') !== false
+    qaId: null, saveTimer: null, starting: false, stopping: false, soundOn: store.get('wire-line:sound') !== false, setupMode: false
   };
   // Y.files: one entry per distinct model file ({ status, session, size, canvas, ctx, ... }); each station points at its file through st.mdl.
   const Y = { status: 'off', backend: '', ort: null, files: {}, error: '', loading: null, errs: 0 };
@@ -383,14 +405,14 @@ details.raw[open] summary { margin-right: 6px; }
     el.innerHTML = `
       <div class="st-head">
         <span class="st-badge">${esc(cfg.id.toUpperCase())}</span><h2>${esc(cfg.label)}</h2>
-        <select class="src" aria-label="Video source for ${esc(cfg.label)}"></select>
-        <label class="recl" title="Record this station's video while a session runs"><input type="checkbox" class="rec"> Rec</label>
-        <label class="recl" title="Mute this station's mistake alert sounds"><input type="checkbox" class="mute"> Mute</label>
-        <button class="btn sm setupb" type="button">Setup</button>
+        <span class="opslot"></span><span class="srcst"></span><span class="chip rdy" hidden></span><button type="button" class="chip warn needb" hidden title="Open Setup">Setup needed</button><span class="recst"></span>
       </div>
       <div class="st-body">
-        <div class="stage"><video muted playsinline></video><canvas></canvas><div class="nosrc">No video. Pick a camera, an iPhone or a clip above, or use the buttons below.</div>
-          <div class="phonep" hidden></div><div class="pchip" hidden><span class="pchip-t"></span><button type="button" class="pqr" title="Show this station's iPhone QR code and link">QR</button></div>
+        <div class="stage"><video muted playsinline></video><canvas></canvas>
+          <div class="nosrc"><div class="con"><b class="con-t">No camera</b><button type="button" class="btn primary conb">Connect a camera</button>
+            <div class="con-opts" hidden><button type="button" class="btn con-phone">iPhone (scan a QR code)</button><button type="button" class="btn con-usb">USB camera</button><button type="button" class="btn con-clip">Recorded clip</button></div>
+            <select class="con-list" hidden aria-label="Camera or clip for ${esc(cfg.label)}"></select><span class="con-msg"></span><button type="button" class="btn sm con-x" hidden>Back</button></div></div>
+          <div class="phonep" hidden></div><div class="pchip" hidden></div>
           <div class="vcard" hidden role="status" aria-live="assertive"><div class="vc-top"><b class="vc-title"></b><span class="vc-st">${esc(cfg.id.toUpperCase())} ${esc(cfg.label)}</span></div><div class="vc-msg"></div></div></div>
         <div class="info">
           <div class="nowbox"><div><div class="eyebrow nowlab">Now</div><div class="cur">Waiting for the first step</div></div><div class="big mono"></div></div>
@@ -403,24 +425,32 @@ details.raw[open] summary { margin-right: 6px; }
         ${isQa ? '' : `<button class="btn primary cyc" type="button">Cycle done <kbd>${idx + 1}</kbd></button>`}
         ${isQa ? '<button class="btn pass passb" type="button">Pass <kbd>P</kbd></button><button class="btn fail failb" type="button">Fail <kbd>F</kbd></button>' : ''}
         <span class="stmsg"></span>
-        <span class="meta mono"></span>
       </div>
       ${isQa ? '<div class="reasons" hidden></div>' : ''}
       <div class="setup-panel" hidden>
+        <div class="srow"><label class="recl">Camera <select class="src" aria-label="Video source for ${esc(cfg.label)}"></select></label>
+          <label class="recl" title="Record this station's video while a session runs (on by default for cameras and iPhones)"><input type="checkbox" class="rec"> Record video</label>
+          <label class="recl" title="Mute this station's mistake alert sounds"><input type="checkbox" class="mute"> Mute sounds</label>
+          <button type="button" class="btn sm pqr" hidden title="Show this station's iPhone QR code and link, to swap in another phone">Show QR</button></div>
         <div class="zbtns"></div>
         <div class="calrow"><button class="btn sm calb" type="button">Calibrate empty</button>${bulbs.length ? '<button class="btn sm bon" type="button">Bulb on</button>' : ''}<button class="btn sm clr" type="button">Clear zones</button><span class="calst muted"></span></div>
         <div class="muted">Pick a zone, then drag a box on the video. Calibrate with the work area empty${bulbs.length ? ' and the bulb dark, then light the bulb and press Bulb on' : ''}.</div>
         ${cfg.positionCheck ? `<div class="calrow"><button class="btn sm refb" type="button">Save correct state</button><span class="refst muted"></span></div>
-        <div class="muted">Position check: build it correctly, turn the model on, take your hands away, then press Save correct state. It saves where the model sees ${esc(cfg.positionCheck.classes.join(', '))} inside the ${esc((cfg.zones.find(z => z.id === cfg.positionCheck.anchor) || {}).label || cfg.positionCheck.anchor)} zone.</div>` : ''}
+        <div class="muted">Position check: build it correctly with the model running, take your hands away, then press Save correct state. It saves where the model sees ${esc(cfg.positionCheck.classes.join(', '))} inside the ${esc((cfg.zones.find(z => z.id === cfg.positionCheck.anchor) || {}).label || cfg.positionCheck.anchor)} zone.</div>` : ''}
+        <div class="diag mono"></div>
       </div>`;
     const q = s => el.querySelector(s);
     Object.assign(st, {
-      el, video: q('video'), canvas: q('canvas'), stage: q('.stage'), nosrc: q('.nosrc'), sel: q('.src'), recBox: q('.rec'), setupBtn: q('.setupb'),
+      el, video: q('video'), canvas: q('canvas'), stage: q('.stage'), nosrc: q('.nosrc'), sel: q('.src'), recBox: q('.rec'),
+      elSrc: q('.srcst'), elRdy: q('.rdy'), needBtn: q('.needb'), elRec: q('.recst'),
       elNow: q('.nowbox'), elNowLab: q('.nowlab'), elCur: q('.cur'), elBig: q('.big'), elKv: q('.kv'), elQa: q('.qa'), elCheck: q('.check'),
-      elMeta: q('.meta'), elMsg: q('.stmsg'), setupPanel: q('.setup-panel'), zbtns: q('.zbtns'), calst: q('.calst'), reasons: q('.reasons'),
-      vcard: q('.vcard'), vcTitle: q('.vc-title'), vcMsg: q('.vc-msg'), refst: q('.refst'), phoneEl: q('.phonep'), pchip: q('.pchip'), pchipT: q('.pchip-t')
+      elMeta: q('.diag'), elMsg: q('.stmsg'), setupPanel: q('.setup-panel'), zbtns: q('.zbtns'), calst: q('.calst'), reasons: q('.reasons'),
+      vcard: q('.vcard'), vcTitle: q('.vc-title'), vcMsg: q('.vc-msg'), refst: q('.refst'), phoneEl: q('.phonep'), pchip: q('.pchip'), qrBtn: q('.pqr'),
+      con: { btn: q('.conb'), opts: q('.con-opts'), list: q('.con-list'), msg: q('.con-msg'), back: q('.con-x'), step: null }
     });
-    q('.pqr').onclick = () => { if (st.phone) { st.phone.showQr = !st.phone.showQr; renderPhone(st, true); } };
+    st.qrBtn.onclick = () => { if (st.phone) { st.phone.showQr = !st.phone.showQr; renderPhone(st, true); } };
+    st.needBtn.onclick = () => openSetup(st);
+    bindConnect(st);
     st.ctx = st.canvas.getContext('2d');
     st.proc = document.createElement('canvas');
     st.pctx = st.proc.getContext('2d', { willReadFrequently: true });
@@ -432,7 +462,6 @@ details.raw[open] summary { margin-right: 6px; }
     muteBox.checked = st.mute;
     muteBox.onchange = () => { st.mute = muteBox.checked; store.set('wire-line:mute:' + st.id, st.mute); };
     if (cfg.positionCheck) q('.refb').onclick = () => saveRef(st);
-    st.setupBtn.onclick = () => toggleSetup(st);
     if (isQa) { q('.passb').onclick = () => manualPass(); q('.failb').onclick = () => openFail(); } else q('.cyc').onclick = () => manualCycle(st);
     q('.calb').onclick = () => calibrate(st, 'empty');
     if (bulbs.length) q('.bon').onclick = () => calibrate(st, 'on');
@@ -447,20 +476,56 @@ details.raw[open] summary { margin-right: 6px; }
   const OWN_CLIPS = 10;    // a station lists its own newest recordings only
   // Which station a session recording belongs to: its file is <station>.mp4, or <station>-<part>.mp4.
   function clipStation(c) { const m = /^(.+?)(-\d+)?\.\w+$/.exec(String(c.key).split(':')[2] || ''); return m ? m[1] : null; }
-  function sourceOptions(st) {
+  // USB cameras (freeOnly: leave out the ones other stations use).
+  function cameraOptions(st, freeOnly) {
     const used = {};
     for (const s of LIST) if (s !== st && s.source.type === 'camera') used[s.source.key] = s.id.toUpperCase();
-    let html = '<option value="none">None (manual only)</option>';
-    if (G.cameras.length) html += '<optgroup label="USB cameras">' + G.cameras.map(c => `<option value="${esc(c.key)}"${used[c.key] ? ' disabled' : ''}>${esc(c.label)}${used[c.key] ? ' (on ' + used[c.key] + ')' : ''}</option>`).join('') + '</optgroup>';
-    else html += '<optgroup label="USB cameras">' + (G.camAllowed ? '<option disabled>No USB camera plugged in</option>' : '<option value="askcam">USB camera: allow access</option>') + '</optgroup>';
-    html += '<optgroup label="iPhones"><option value="phone">iPhone (scan a QR code)</option></optgroup>';
-    // The LEGO run videos are demo clips for every station; past session recordings only for their own station, newest first.
+    return G.cameras.filter(c => !freeOnly || !used[c.key]).map(c => `<option value="${esc(c.key)}"${used[c.key] ? ' disabled' : ''}>${esc(c.label)}${used[c.key] ? ' (on ' + used[c.key] + ')' : ''}</option>`).join('');
+  }
+  // The LEGO run videos are demo clips for every station; past session recordings only for their own station, newest first.
+  function clipOptions(st) {
     const a = G.clips.filter(c => c.group === 'assets'), s = G.clips.filter(c => c.group === 'sessions' && clipStation(c) === st.id).slice(0, OWN_CLIPS);
     const cur = st.source.type === 'clip' && G.clips.find(c => 'clip:' + c.key === st.source.key && c.group === 'sessions');
     if (cur && !s.includes(cur)) s.push(cur);
+    let html = '';
     if (a.length) html += '<optgroup label="Demo clips">' + a.map(c => `<option value="clip:${esc(c.key)}">${esc(c.label)}</option>`).join('') + '</optgroup>';
     if (s.length) html += `<optgroup label="${esc(st.id.toUpperCase())}'s recordings">` + s.map(c => `<option value="clip:${esc(c.key)}">${esc(c.label)}</option>`).join('') + '</optgroup>';
     return html;
+  }
+  // The full camera list in Setup.
+  function sourceOptions(st) {
+    const cams = cameraOptions(st);
+    return '<option value="none">No camera</option>' +
+      '<optgroup label="USB cameras">' + (cams || (G.camAllowed ? '<option disabled>No USB camera plugged in</option>' : '<option value="askcam">USB camera: allow access</option>')) + '</optgroup>' +
+      '<optgroup label="iPhones"><option value="phone">iPhone (scan a QR code)</option></optgroup>' + clipOptions(st);
+  }
+  // ---------- Connect a camera: a station with no camera offers an iPhone, a USB camera or a recorded clip ----------
+  function bindConnect(st) {
+    const c = st.con, q = sel => st.el.querySelector(sel);
+    c.btn.onclick = () => showConnect(st, 'choose');
+    c.back.onclick = () => showConnect(st, null);
+    q('.con-phone').onclick = () => setSource(st, 'phone');
+    q('.con-usb').onclick = () => connectUsb(st);
+    q('.con-clip').onclick = () => showConnect(st, 'clip');
+    c.list.onchange = () => { const v = c.list.value; c.list.blur(); if (v) setSource(st, v); };
+  }
+  // step: null (only the button), 'choose' (the three ways), 'usb' or 'clip' (a list to pick from).
+  function showConnect(st, step, msg) {
+    const c = st.con, list = step === 'usb' ? cameraOptions(st, true) : step === 'clip' ? clipOptions(st) : '';
+    if (step === 'clip' && !list) { step = 'choose'; msg = 'No clips yet. Recordings show up here after a session.'; }
+    c.step = step;
+    c.btn.hidden = !!step; c.opts.hidden = step !== 'choose'; c.back.hidden = !step;
+    c.msg.textContent = msg || '';
+    c.list.hidden = !list;
+    if (list) { c.list.innerHTML = `<option value="">${step === 'usb' ? 'Pick the camera' : 'Pick a clip'}</option>` + list; c.list.value = ''; }
+  }
+  // One free camera: take it. Several: pick from a list. The first time this asks the browser for camera access.
+  async function connectUsb(st) {
+    if (!G.camAllowed) await findCameras(true);
+    const free = G.cameras.filter(c => !LIST.some(s => s !== st && s.source.key === c.key));
+    if (!free.length) return showConnect(st, 'choose', G.camAllowed ? 'No free USB camera. Plug one in and press USB camera again.' : 'Camera access was not given. Allow it next to the address bar, then try again.');
+    if (free.length === 1) return setSource(st, free[0].key);
+    showConnect(st, 'usb');
   }
   function rebuildPickers() {
     for (const st of LIST) {
@@ -542,6 +607,7 @@ details.raw[open] summary { margin-right: 6px; }
       emit({ type: 'source_change', station: st.id, t: now(), input: 'none', note: 'failed: ' + src.label });
     }
     st.nosrc.hidden = st.source.type !== 'none';
+    showConnect(st, null);
     if (st.source.type === 'phone') { if (!PHN.info) await loadPhoneInfo(); phonePoll(); }
     renderPhone(st, true);
     rebuildPickers();
@@ -736,13 +802,14 @@ details.raw[open] summary { margin-right: 6px; }
     if (ph.state === 'lost') return ['Phone lost at ' + new Date(ph.lostAt).toLocaleTimeString() + '. Its page reconnects by itself: keep Safari open on it.', 'bad'];
     return ['Waiting: scan the code with the iPhone\'s Camera app.', ''];
   }
-  // The panel shows while the station waits for its phone (or when QR is pressed on the live chip).
+  // The panel shows while the station waits for its phone (or when Show QR is pressed in Setup).
   function renderPhone(st, force) {
     const ph = st.phone, on = st.source.type === 'phone' && !!ph, live = on && ph.state === 'live';
-    st.pchip.hidden = !live;
+    st.pchip.hidden = !live; st.qrBtn.hidden = !live;
     if (live) {
       const s = ph.stats || {}, txt = 'iPhone' + (s.w ? ' ' + s.w + 'x' + s.h : '') + (s.fps != null ? ' ' + Math.round(s.fps) + ' fps' : '');
-      if (txt !== st.lastChip) { st.pchipT.textContent = txt; st.lastChip = txt; }
+      if (txt !== st.lastChip) { st.pchip.textContent = txt; st.lastChip = txt; }
+      st.qrBtn.textContent = ph.showQr ? 'Hide QR' : 'Show QR';
     }
     const show = on && (!live || ph.showQr);
     st.phoneEl.hidden = !show;
@@ -1039,7 +1106,7 @@ details.raw[open] summary { margin-right: 6px; }
     if (on && !LIST.some(modelOf)) return;
     G.modelOn = !!on;
     if (G.modelOn) {
-      renderToolbar();
+      renderSetupBar();
       await loadModel();
       if (Y.status !== 'ready') { G.modelOn = false; banner('model', 'The model could not load: ' + esc(Y.error), 'crit'); }
       else { const probs = assignModels(); banner('model', probs.join('<br>'), probs.length ? 'crit' : ''); }
@@ -1048,31 +1115,38 @@ details.raw[open] summary { margin-right: 6px; }
       st.eng.setModel(G.modelOn && st.mdl ? st.mdl.classes : null);
       if (!G.modelOn) { st.dets = st.detsPrev = null; st.mdl = null; banner('model-' + st.id, ''); }
     }
-    renderToolbar();
+    renderSetupBar();
     if (G.modelOn || G.handsOn) detectLoop();
   }
   async function setHands(on) {
     G.handsOn = !!on;
     if (G.handsOn) {
-      renderToolbar();
+      renderSetupBar();
       await loadHands();
       if (H.status !== 'ready') { G.handsOn = false; banner('hands', 'The hand model could not load: ' + esc(H.error), 'crit'); } else banner('hands', '');
     }
     if (!G.handsOn) for (const st of LIST) st.hands = null;
-    renderToolbar();
+    renderSetupBar();
     if (G.modelOn || G.handsOn) detectLoop();
   }
 
-  // ---------- setup mode: draw zones, calibrate ----------
-  function toggleSetup(st) {
-    st.setupOn = !st.setupOn;
-    st.setupPanel.hidden = !st.setupOn;
-    st.refMsg = '';
-    st.setupBtn.classList.toggle('on', st.setupOn);
-    st.stage.classList.toggle('setup', st.setupOn);
-    if (st.setupOn && !st.drawZone) st.drawZone = (st.cfg.zones.find(z => !st.setup.zones[z.id]) || st.cfg.zones[0]).id;
-    renderSetup(st); drawOverlay(st);
+  // ---------- setup mode: every station at once (camera, boxes, calibration), plus the line-wide switches ----------
+  function setSetupMode(on) {
+    G.setupMode = !!on;
+    document.body.classList.toggle('setup-mode', G.setupMode);
+    $('setupBar').hidden = !G.setupMode;
+    $('btnSetup').classList.toggle('on', G.setupMode);
+    for (const st of LIST) {
+      st.setupOn = G.setupMode; st.setupPanel.hidden = !G.setupMode; st.refMsg = ''; st.drag = null;
+      st.stage.classList.toggle('setup', G.setupMode);
+      if (G.setupMode && !st.drawZone) st.drawZone = (st.cfg.zones.find(z => !st.setup.zones[z.id]) || st.cfg.zones[0]).id;
+      if (!G.setupMode && st.phone && st.phone.showQr) { st.phone.showQr = false; renderPhone(st, true); }
+      renderSetup(st); drawOverlay(st);
+    }
+    renderSetupBar();
   }
+  // "Setup needed" on a tile: Setup mode, scrolled to that tile.
+  function openSetup(st) { if (!G.setupMode) setSetupMode(true); st.el.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
   function renderSetup(st) {
     st.zbtns.innerHTML = '<span class="muted">Draw:</span>' + st.cfg.zones.map((z, i) => `<button type="button" class="btn sm${st.drawZone === z.id ? ' on' : ''}" data-z="${esc(z.id)}"><span class="zsw" style="background:${ZONE_COLORS[i % ZONE_COLORS.length]}"></span>${esc(z.label)}${st.setup.zones[z.id] ? ' ✓' : ''}</button>`).join('');
     st.zbtns.querySelectorAll('button').forEach(b => { b.onclick = () => { st.drawZone = b.dataset.z; renderSetup(st); }; });
@@ -1082,6 +1156,9 @@ details.raw[open] summary { margin-right: 6px; }
     if (st.bulbs.length) txt += ' | bulb dark ' + (bulb.off != null ? Math.round(bulb.off) : '--') + ', lit ' + (bulb.on != null ? Math.round(bulb.on) : '--');
     if (st.calib) txt = 'Calibrating... keep still';
     st.calst.textContent = txt;
+    // The next step lights up: Calibrate once every box is drawn, then Bulb on.
+    st.el.querySelector('.calb').classList.toggle('primary', st.cfg.zones.every(z => st.setup.zones[z.id]) && !nm);
+    if (st.bulbs.length) st.el.querySelector('.bon').classList.toggle('primary', nm > 0 && bulb.on == null);
     if (st.refst) st.refst.textContent = st.refMsg || (st.setup.ref ? 'Correct state saved ' + new Date(st.setup.ref.saved).toLocaleString() + '.' : 'No correct state saved yet.');
   }
   function contentRect(st) {
@@ -1352,23 +1429,53 @@ details.raw[open] summary { margin-right: 6px; }
   }
 
   // ---------- rendering (4 times a second) ----------
-  function missingText(st, r) {
+  // What a substep still waits for. bare: without the "(Setup)" pointer.
+  function missingText(st, r, bare) {
     if (st.source.type === 'none' || (st.source.type === 'phone' && !phoneLive(st))) return 'no video';
     const m = r.missing[0];
     if (!m) return '';
-    const z = st.cfg.zones.find(x => x.id === m.zone), zl = z ? z.label : m.zone;
-    if (!m.signal) return 'draw the ' + zl + ' zone (Setup)';
-    if (m.signal === 'bright') return 'calibrate the bulb (Setup)';
+    const z = st.cfg.zones.find(x => x.id === m.zone), zl = z ? z.label : m.zone, tail = bare ? '' : ' (Setup)';
+    if (!m.signal) return 'draw the ' + zl + ' zone' + tail;
+    if (m.signal === 'bright') return 'calibrate the bulb' + tail;
     if (m.signal.startsWith('class:')) return 'model is off';
     return 'waiting for video';
   }
+  // The tile's status: Ready, waiting, or what Setup still has to do (need). None for a station without a camera.
+  function readiness(st, rules) {
+    if (st.source.type === 'none') return null;
+    if (st.source.type === 'phone' && !phoneLive(st)) return { text: st.phone && st.phone.state === 'lost' ? 'Phone lost' : 'Waiting for the iPhone' };
+    if (!Object.keys(st.setup.zones).length) return { need: 'Draw its boxes' };
+    const r = rules.find(x => x.kind && !x.ready), m = r ? missingText(st, r, true) : '';
+    if (m === 'waiting for video') return { text: 'Starting the video' };
+    if (m) return { need: m[0].toUpperCase() + m.slice(1) };
+    if (!Object.keys(st.setup.calib.motion || {}).length) return { need: 'Calibrate it with the work area empty' };
+    return { ok: true, text: 'Ready' };
+  }
+  function sourceText(st) {
+    const t = st.source.type, ph = st.phone;
+    if (t === 'phone') return 'iPhone, ' + (!ph || ph.state === 'waiting' ? 'waiting' : ph.state);
+    if (t === 'camera') return 'USB camera';
+    if (t === 'clip') return 'Clip: ' + st.source.label;
+    return '';
+  }
   function renderStation(st, sum, t) {
     const s = st.eng.state(), cfg = st.cfg, label = id => (cfg.substeps.find(x => x.id === id) || {}).label || id;
-    const ss = sum && sum.stations[st.id], takt = G.config.taktSec;
+    const ss = sum && sum.stations[st.id], takt = G.config.taktSec, rules = st.eng.rules(), rd = readiness(st, rules);
+    // head: what films the station, Ready or what is missing, and the REC readout
+    const recTxt = st.rec ? 'REC ' + fmtMB(st.rec.bytes) + (st.rec.dropped ? ' (' + st.rec.dropped + ' chunks lost)' : '') : G.session && st.source.type !== 'none' && !st.recOn ? 'not recording' : '';
+    const head = [sourceText(st), rd && rd.text, rd && rd.need, rd && rd.ok, recTxt].join('|');
+    if (head !== st.lastHead) {
+      st.lastHead = head;
+      st.elSrc.textContent = sourceText(st); st.elSrc.title = st.source.type === 'none' ? '' : st.source.label;
+      st.elRdy.hidden = !rd || !rd.text; st.elRdy.textContent = rd && rd.text || ''; st.elRdy.className = 'chip rdy' + (rd && rd.ok ? ' good' : ' warn');
+      st.needBtn.hidden = !rd || !rd.need; st.needBtn.title = rd && rd.need ? 'Open Setup: ' + rd.need : '';
+      st.elRec.textContent = recTxt; st.elRec.className = 'recst' + (st.rec ? '' : ' off');
+    }
     let lab, cur, big = '', cls = 'nowbox';
     if (s.inCycle) { lab = 'Now (cycle ' + s.cycle + ')'; cur = label(s.current); big = fmtS((t - s.since) / 1000); cls += ' incycle'; if (takt && (t - s.cycleStart) / 1000 > takt) cls += ' over'; }
     else if (st.source.type === 'phone' && !phoneLive(st)) { lab = 'iPhone'; cur = st.phone && st.phone.state === 'lost' ? 'Phone lost: it reconnects by itself' : 'Waiting for the phone: scan its QR code'; }
-    else if (st.source.type === 'none') { lab = 'Manual only'; cur = st.isQa ? 'No video: press Pass or Fail for each unit' : 'No video: press Cycle done when a unit leaves'; }
+    else if (st.source.type === 'none') { lab = 'No camera'; cur = st.isQa ? 'Connect a camera, or press Pass or Fail for each unit' : 'Connect a camera, or press Cycle done when a unit leaves'; }
+    else if (rd && rd.need) { lab = 'Setup needed'; cur = rd.need; }
     else { lab = 'Between cycles'; cur = s.cycle ? 'Waiting for the next unit' : 'Waiting for the first step'; big = s.since ? fmtS((t - s.since) / 1000) : ''; }
     st.elNow.className = cls; st.elNowLab.textContent = lab; st.elCur.textContent = cur; st.elBig.textContent = big;
     const d = ss ? ss.detected : null, m = ss ? ss.manual : null, over = v => (takt && v != null && v > takt ? ' class="over"' : '');
@@ -1395,7 +1502,7 @@ details.raw[open] summary { margin-right: 6px; }
     else if (cl && t < cl.until) { ck = 'cleared'; title = 'CLEARED'; msg = cl.message; }
     if (ck + '|' + msg !== st.lastCard) { st.lastCard = ck + '|' + msg; st.vcard.hidden = !ck; st.vcard.className = 'vcard ' + ck; st.vcTitle.textContent = title; st.vcMsg.textContent = msg; }
     // checklist
-    const rules = st.eng.rules(), counts = {};
+    const counts = {};
     s.occ.forEach(o => { counts[o.id] = (counts[o.id] || 0) + 1; });
     const html = rules.map(r => {
       let c = '', why = '';
@@ -1408,7 +1515,12 @@ details.raw[open] summary { margin-right: 6px; }
       return `<li class="${c}" title="${esc(tip)}"><span class="ic"></span><span class="nm">${esc(r.label)}${counts[r.id] > 1 ? ` <span class="rep">x${counts[r.id]}</span>` : ''}${r.kind === 'model' ? ' <span class="tag">model</span>' : ''}${r.closes ? ' <span class="muted" style="font-size:11px">(ends the cycle)</span>' : ''}${why ? `<small>${esc(why)}</small>` : ''}</span><span class="num mono">${avg != null && !r.closes && d.cycles && (r.kind || avg > 0) ? fmtS(avg) : ''}</span></li>`;
     }).join('');
     if (html !== st.lastCheck) { st.elCheck.innerHTML = html; st.lastCheck = html; }
-    const recNow = st.rec ? `<span class="recd">REC ${fmtMB(st.rec.bytes)}</span>` + (st.rec.dropped ? ` (${st.rec.dropped} chunks lost)` : '') : '';
+    if (st.err !== st.lastErr) { st.elMsg.textContent = st.err; st.lastErr = st.err; }
+    if (st.phone || !st.phoneEl.hidden || !st.pchip.hidden) renderPhone(st);
+    if (G.setupMode) renderDiag(st, s);
+  }
+  // Setup's diagnostics row: what the phone sends, frame rate, model and its rate, the last confidence.
+  function renderDiag(st, s) {
     const parts = [];
     if (phoneLive(st)) { const ps = st.phone.stats || {}; parts.push('iPhone sends' + (ps.w ? ' ' + ps.w + 'x' + ps.h : '') + (ps.fps != null ? ' at ' + Math.round(ps.fps) + ' fps' : '')); }
     if (st.source.type !== 'none' && (st.source.type !== 'phone' || phoneLive(st))) parts.push(st.fps.toFixed(1) + ' fps');
@@ -1416,10 +1528,8 @@ details.raw[open] summary { margin-right: 6px; }
     if (G.modelOn && st.mdl) parts.push(esc(baseName(st.mdl.file)) + ' ' + (st.source.type !== 'none' ? st.modelFps.toFixed(1) + '/s' : 'idle'));
     else parts.push(mc ? 'zones (' + (G.modelOn ? 'model not used' : 'model ' + esc(baseName(mc.file)) + ' off') + ')' : 'zones');
     parts.push('conf ' + (s.lastConf != null ? s.lastConf.toFixed(2) + ' ' + (s.lastSource || '') : '--'));
-    const meta = parts.join(' | ') + (recNow ? ' | ' + recNow : '');
+    const meta = parts.join(' | ');
     if (meta !== st.lastMeta) { st.elMeta.innerHTML = meta; st.lastMeta = meta; }
-    if (st.err !== st.lastErr) { st.elMsg.textContent = st.err; st.lastErr = st.err; }
-    if (st.phone || !st.phoneEl.hidden || !st.pchip.hidden) renderPhone(st);
   }
   function renderSummary(sum) {
     const L = sum.line, ids = LIST.map(s => s.id);
@@ -1451,19 +1561,21 @@ details.raw[open] summary { margin-right: 6px; }
     $('sessLive').hidden = !on; $('btnStop').hidden = !on; $('btnStart').hidden = on;
     $('btnStop').disabled = G.stopping; $('btnStop').textContent = G.stopping ? 'Stopping...' : 'Stop session';
     if (on) $('sessTitle').textContent = G.session.title || 'Session';
+    $('sbWarn').hidden = !on;
   }
-  function renderToolbar() {
+  function renderSetupBar() {
     const m = LIST.some(modelOf);
     const bm = $('btnModel');
     bm.disabled = !m;
-    bm.title = m ? 'Run each station\'s model on its camera, one at a time: ' + LIST.map(st => { const x = modelOf(st); return st.id.toUpperCase() + ' ' + (x ? baseName(x.file) : 'zones'); }).join(', ') : 'No model yet: add one under "models" in data/meta/wire-line.json when the model team delivers it';
-    bm.textContent = 'Model: ' + (!m ? 'none yet' : Y.status === 'loading' ? 'loading...' : G.modelOn ? 'on' : 'off');
+    bm.title = m ? 'Each station with a model runs it by itself. Turn them off on a slow laptop; this laptop remembers it.' : 'No model yet: add one under "models" in data/meta/wire-line.json when the model team delivers it';
+    bm.textContent = 'Models: ' + (!m ? 'none yet' : Y.status === 'loading' ? 'loading...' : G.modelOn ? 'on' : 'off');
     bm.classList.toggle('on', G.modelOn);
+    $('mdlNote').textContent = m ? LIST.map(st => { const x = modelOf(st); return st.id.toUpperCase() + ' ' + (x ? baseName(x.file) : 'zones'); }).join(', ') : 'every station on zones';
     const bh = $('btnHands');
-    bh.textContent = 'Hands: ' + (H.status === 'loading' ? 'loading...' : G.handsOn ? 'on' : 'off');
+    bh.textContent = 'Hand tracking: ' + (H.status === 'loading' ? 'loading...' : G.handsOn ? 'on' : 'off');
     bh.classList.toggle('on', G.handsOn);
     $('btnSound').textContent = 'Sound: ' + (G.soundOn ? 'on' : 'off');
-    $('btnSound').classList.toggle('on', G.soundOn);
+    $('sbWarn').hidden = !G.session;
     $('detNote').textContent = (G.modelOn ? Y.backend + (GPU ? '' : ' (add ?gpu for WebGPU)') : '') + (G.handsOn ? (G.modelOn ? ' | ' : '') + 'hands: CPU worker' : '');
     document.querySelectorAll('#basisSeg button').forEach(b => b.classList.toggle('on', b.dataset.b === G.basis));
   }
@@ -1490,11 +1602,13 @@ details.raw[open] summary { margin-right: 6px; }
   $('btnCancelStart').onclick = () => showStartForm(false);
   $('startForm').onsubmit = e => { e.preventDefault(); startSession({ title: $('fTitle').value.trim(), crew: $('fCrew').value.trim(), shift: $('fShift').value.trim(), notes: $('fNotes').value.trim() }); };
   $('btnStop').onclick = () => stopSession();
+  $('btnSetup').onclick = () => setSetupMode(!G.setupMode);
+  $('btnDone').onclick = () => setSetupMode(false);
   $('btnSessions').onclick = () => { const p = $('sessionsPanel'); p.hidden = !p.hidden; $('btnSessions').classList.toggle('on', !p.hidden); if (!p.hidden) loadSessions(); };
   setInterval(() => { if (!$('sessionsPanel').hidden) loadSessions(); }, 10000);    // the panel keeps itself current while open
   $('btnModel').onclick = () => { const on = !G.modelOn; store.set('wire-line:model', on); setModel(on); };
   $('btnHands').onclick = () => setHands(!G.handsOn);
-  $('btnSound').onclick = () => { G.soundOn = !G.soundOn; store.set('wire-line:sound', G.soundOn); unlockAudio(); renderToolbar(); };
+  $('btnSound').onclick = () => { G.soundOn = !G.soundOn; store.set('wire-line:sound', G.soundOn); unlockAudio(); renderSetupBar(); };
   // Two clicks, no dialog: the first arms it for 3 seconds.
   $('btnPair').onclick = async () => {
     const b = $('btnPair');
@@ -1514,7 +1628,7 @@ details.raw[open] summary { margin-right: 6px; }
       setTimeout(() => banner('pair', ''), 6000);
     } catch (e) { banner('pair', 'No new pairing code: ' + esc(e && e.message || e), 'crit'); }
   };
-  $('basisSeg').onclick = e => { const b = e.target.closest('button'); if (!b) return; G.basis = b.dataset.b; store.set('wire-line:basis', G.basis); G.evSeen = -1; renderToolbar(); };
+  $('basisSeg').onclick = e => { const b = e.target.closest('button'); if (!b) return; G.basis = b.dataset.b; store.set('wire-line:basis', G.basis); G.evSeen = -1; renderSetupBar(); };
   $('btnReset').onclick = () => {
     if (G.session) { banner('reset', 'Counts cannot be reset while a session records. Stop the session first.', ''); setTimeout(() => banner('reset', ''), 4000); return; }
     G.events = []; G.evSeen = -1;
@@ -1534,7 +1648,7 @@ details.raw[open] summary { margin-right: 6px; }
 
   // ---------- debug hook (tests and the console) ----------
   window.__line = {
-    G, ST, Y, H, LE, PHN, setSource, loadPhoneInfo, phoneLive: id => phoneLive(ST[id]), startSession, stopSession, manualCycle, manualPass, openFail, pickReason, setModel, setHands,
+    G, ST, Y, H, LE, PHN, setSource, setSetupMode, loadPhoneInfo, phoneLive: id => phoneLive(ST[id]), startSession, stopSession, manualCycle, manualPass, openFail, pickReason, setModel, setHands,
     get summary() { return G.summary; },
     setZones(id, zones) { const st = ST[id]; Object.assign(st.setup.zones, zones); st.prevGray = null; saveSetup(st); if (st.setupOn) renderSetup(st); drawOverlay(st); },
     calibrate(id, kind) { return calibrate(ST[id], kind || 'empty'); },
@@ -1561,9 +1675,8 @@ details.raw[open] summary { margin-right: 6px; }
     LIST = G.config.stations.map((cfg, i) => (ST[cfg.id] = makeStation(cfg, i)));
     const grid = $('grid');
     LIST.forEach(st => grid.appendChild(st.el));
-    $('kLast').textContent = LIST.filter(st => !st.isQa).length;
     $('hdrNote').textContent = (G.config.name || 'Line') + ': ' + (G.config.product || '') + ' ' + LIST.length + ' stations, one overhead camera each.';
-    renderToolbar(); renderSession(); rebuildPickers();
+    renderSetupBar(); renderSession(); rebuildPickers();
     await loadPhoneInfo();
     LIST.forEach(st => { sizeCanvas(st); emit({ type: 'source_change', station: st.id, t: now(), input: 'none', note: st.source.label }); });
     await loadClips();

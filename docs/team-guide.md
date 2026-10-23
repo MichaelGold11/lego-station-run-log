@@ -43,17 +43,20 @@ the matching section here.
 1. **Mount the cameras.** One camera straight above each station, with every tray, bin and work
    area in view. Plug all four into the laptop, spread over different USB ports (a powered hub
    helps). Close any other app that uses a camera.
-2. **Connect them.** Open `/line` and pick one camera in each station's camera list. The first
-   time, pick **USB camera: allow access** and allow it; after that the cameras are found by
-   themselves, also when you plug one in later. To tell them apart, cover one lens and see which
-   tile goes dark.
-3. **Draw the zones.** On each station press **Setup**. Drag a box around each tray, bin or work
-   area it asks for; the next zone is picked for you. Keep boxes off walkways, because a hand
-   passing through counts as activity. Zones are saved on the laptop and come back after a reload.
+2. **Connect them.** Open `/line`. Each station shows **Connect a camera**: press it and pick
+   **USB camera** (the first time, allow camera access). With several cameras plugged in, pick one
+   per station; cameras plugged in later are found by themselves. To tell them apart, cover one
+   lens and see which tile goes dark. The laptop remembers each station's camera.
+3. **Draw the zones.** Press **Setup** at the top (or a station's **Setup needed**). Every station
+   opens its setup panel. Drag a box on each station's video around each tray, bin or work area it
+   asks for; the next zone is picked for you. Keep boxes off walkways, because a hand passing
+   through counts as activity. Zones are saved on the laptop and come back after a reload.
 4. **Calibrate.** With each work area empty and still, press **Calibrate empty** (2 seconds). On
    S4, keep the bulb dark for that, then light the bulb in the fixture and press **Bulb on**.
-5. **Check Rec.** Leave **Rec** ticked on every station (on by default for cameras). Without video
-   there is nothing to train on. The start form warns you if no station is recording.
+   Press **Done**. Each station's head now says **Ready**.
+5. **Recording is on.** Every camera and iPhone records its video during a session (Setup has
+   **Record video** per station, on by default). Each recording station shows **REC** and its size
+   in its head. Without video there is nothing to train on.
 6. **Start.** Clear the trays (counts start from zero), press **Start session**, and fill in the
    title, the crew or training group, and the shift.
 7. **Keep the answer key** while the line runs:
@@ -75,8 +78,8 @@ Steps 1 and 2 change; everything after them is the same.
 2. **Same network.** The laptop and all four phones join the same Wi-Fi. If that is campus Wi-Fi
    and the phones say "The video cannot get through", use a home router or one phone's Personal
    Hotspot instead (that phone can be one of the cameras).
-3. **Pick iPhone.** On `/line`, set each station's source to **iPhone (scan a QR code)**. The
-   tile shows a QR code for that station.
+3. **Connect.** On `/line`, press **Connect a camera** on the station, then **iPhone (scan a QR
+   code)**. The tile shows a QR code for that station.
 4. **Scan.** Point the station's iPhone Camera app at its tile's QR code and tap the link. Safari
    warns that the connection is not private: tap **Show Details**, then **visit this website**.
    Allow the camera. The phone says **LIVE** in green and the tile shows its video.
@@ -84,7 +87,7 @@ Steps 1 and 2 change; everything after them is the same.
    zones and go on with step 3 above.
 
 Each station has its own QR code, and the codes keep working after a restart, so you scan once.
-**New pairing code** (toolbar, two clicks) makes new ones and cuts off every phone; use it if a
+**New pairing code** (in Setup, two clicks) makes new ones and cuts off every phone; use it if a
 link got out. A phone that drops reconnects by itself; its tile says "Phone lost" until it is back.
 Trusting the laptop's certificate on a phone is optional (the phone page shows how); it stops the
 warning, and it only lets this laptop vouch for itself, never for other websites.
@@ -105,14 +108,14 @@ On a MISTAKE:
 
 1. Fix it: do the skipped step, put the part back, or move or turn it.
 2. Move your hands out of the camera view and hold still for a moment. The station checks again
-   once its view is clear (no hand in view when Hands is on, nothing moving in its zones), and
+   once its view is clear (no hand in view when Hand tracking is on, nothing moving in its zones), and
    every second while the card shows. The checklist row it is about says "Mistake - fix and clear
    the view".
 3. The card stays until a check finds it fixed (CLEARED) or the next step replaces it. The same
    mistake does not beep twice.
 
-Sound: **Sound** in the toolbar turns every station's sounds on or off (on by default). **Mute** on
-a station silences only that station. Sound starts after the first click on the page, because
+Sound: **Sound** at the top of the page turns every station's sounds on or off (on by default).
+**Mute sounds** in a station's Setup panel silences only that station. Sound starts after the first click on the page, because
 browsers block it before that. To keep the beeps but drop the chirp on every correct step, set
 `"sounds": { "verified": false }` in `data/meta/wire-line.json`.
 
@@ -121,20 +124,20 @@ part and a part in the wrong spot need that station's model (it runs by itself o
 and only a station whose config has a position check gets the **Save correct state** button:
 
 1. Build one unit correctly with the model running.
-2. Take your hands away, open **Setup** on that station and press **Save correct state**. It
+2. Take your hands away, open **Setup** and press that station's **Save correct state**. It
    saves where each listed part sits in the station's anchor zone, on this laptop, like the zones.
 3. Live, a part more than 14% of the zone away from its saved spot is "in the wrong position", and
    one that turned from lying wide to standing tall (or the reverse) is "turned the wrong way".
    Redrawing the anchor zone drops the saved state: press Save correct state again.
 
-Every alert goes into the session's **verdicts.csv** (under **Sessions and exports**), and
+Every alert goes into the session's **verdicts.csv** (under **Sessions**), and
 **cycles.csv** counts the mistakes and reviews of each unit.
 
 ## 5. Share the footage
 
 - Each session saves a folder `data/sessions/<id>/`: one video per station (`s1.mp4` to `s4.mp4`),
   `events.jsonl` (every detected step and key press, with the time into each video) and
-  `session.json`. The CSVs are under **Sessions and exports**.
+  `session.json`. The CSVs are under **Sessions**.
 - Upload the whole folder to the team's shared Drive folder. It is about 1 GB per hour. Never
   commit it to git (the folder is git-ignored).
 - Each trainer takes their own station's video: `s1.mp4` for S1, `s2.mp4` for S2, and so on.
@@ -178,8 +181,9 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions and expor
        }
 
    List the classes in exactly the order you trained them.
-3. Reload `/line`. Every station with a model runs it by itself: your station's tile shows your
-   file name, and each substep your model can see switches to it.
+3. Reload `/line`. Every station with a model runs it by itself: your station's row in Setup shows
+   your file name, and each substep your model can see switches to it (its checklist row says
+   **model**).
 4. A red banner such as "s1-cut-strip.onnx outputs 3 classes but the config lists 4 for S1" means
    your class list does not match the model. Fix the list; the station stays on zones until then.
 5. Run `npm run test:line` (it must pass), then commit the `.onnx` file and your config line on a
@@ -188,8 +192,8 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions and expor
 
 ## 8. Test your model against the answer key
 
-1. On your station, pick a past session's video as the source (each station's camera list has its
-   own 10 newest recordings).
+1. On your station, play a past session's video: **Connect a camera** > **Recorded clip** (or the
+   Camera list in Setup). Each station lists its own 10 newest recordings.
 2. Press **Start session**, play the clip through, and **Stop session**.
 3. Compare the detected cycles in the new `cycles.csv` (`basis` = `detected`) with the original
    session's key presses (`basis` = `manual`). The go-live targets are in Stage 5 of the Playbook:
@@ -202,10 +206,10 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions and expor
 | A camera is missing | Close other camera apps, or move it to another USB port. The list updates by itself |
 | Red banner on load | A typo in `wire-line.json`, or a rule that names a zone the station does not have |
 | Red banner about a model | The class list does not match the model file, or the file is missing from `app/models/` |
-| The page is slow | Keep it in the front tab; export your model at 416 or 320. **Model: off** stops every model on this laptop (it remembers that) |
+| The page is slow | Keep it in the front tab; export your model at 416 or 320. **Models: off** in Setup stops every model on this laptop (it remembers that) |
 | A `.webm` video will not seek | `ffmpeg -i s1.webm -c copy s1-fixed.webm` |
 | Unit counts go negative | Units were already in the trays when the session started |
-| No alert sounds | Click anywhere on the page once, check that **Sound** is on and the station is not on **Mute** |
+| No alert sounds | Click anywhere on the page once, check that **Sound** is on (top of the page) and the station's **Mute sounds** is off (Setup) |
 | A MISTAKE at the start of many units | The first step's zone missed the hand: make that zone cover where the hand goes |
 | A MISTAKE card never clears | Take your hands fully out of view, and check that nothing moves in the zones (a fan, a screen, a shadow) |
 | The phone cannot open the link | Phone and laptop on the same Wi-Fi? `npm start` running? On an iPhone hotspot use the `.local` link (the default). Try another address from the **Address** list under the QR code |
