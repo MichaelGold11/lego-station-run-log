@@ -1421,7 +1421,8 @@ details.raw[open] summary { margin-right: 6px; }
       const id = st.id.toUpperCase(), rd = readiness(st, st.eng.rules());
       if (st.source.type === 'none') out.push(id + ' has no camera.');
       else if (rd && rd.need) out.push(id + ': ' + rd.need[0].toLowerCase() + rd.need.slice(1) + '.');
-      else if (rd && !rd.ok) out.push(id + ': ' + rd.text.toLowerCase() + '.');
+      else if (rd && rd.wait) out.push(id + ' ' + rd.wait + '.');
+      else if (rd && !rd.ok) out.push(id + ': ' + rd.text[0].toLowerCase() + rd.text.slice(1) + '.');
     }
     const recs = LIST.filter(st => st.recOn && st.source.type !== 'none').length;
     if (!recs) out.push('No station records video: nothing to train on.');
@@ -1510,10 +1511,11 @@ details.raw[open] summary { margin-right: 6px; }
     if (m.signal.startsWith('class:')) return 'model is off';
     return 'waiting for video';
   }
-  // The tile's status: Ready, waiting, or what Setup still has to do (need). None for a station without a camera.
+  // The tile's status: Ready (ok), a passing state (text), what Setup still has to do (need), or an iPhone that is not
+  // live yet (wait: the head's "iPhone, waiting" already says it). None for a station without a camera.
   function readiness(st, rules) {
     if (st.source.type === 'none') return null;
-    if (st.source.type === 'phone' && !phoneLive(st)) return { text: st.phone && st.phone.state === 'lost' ? 'Phone lost' : 'Waiting for the iPhone' };
+    if (st.source.type === 'phone' && !phoneLive(st)) return { wait: st.phone && st.phone.state === 'lost' ? 'lost its iPhone' : 'waits for its iPhone' };
     if (!Object.keys(st.setup.zones).length) return { need: 'Draw its boxes' };
     const r = rules.find(x => x.kind && !x.ready), m = r ? missingText(st, r, true) : '';
     if (m === 'waiting for video') return { text: 'Starting the video' };
