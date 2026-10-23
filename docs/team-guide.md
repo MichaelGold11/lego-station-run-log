@@ -39,12 +39,20 @@ is a pull test. The steps are in `data/meta/wire-line.json`; the table is in
 | Station | Steps | Work areas (zones) |
 |---|---|---|
 | S1 Cut | 1. Cut the wire 2. Check for correct length against the ruler. One cycle is one wire, so a unit is three S1 cycles (red, white, black) | Cut area, Ruler |
-| S2 Arrange and clamp | 1. Open the lever connector 2. Arrange the wires: red top, white middle, black bottom 3. Close the levers on the wires | Lever connectors, Cut wires, Work area |
-| S3 Second connector | 1. Add a new lever connector to the other end of the red wire 2. Get a black wire 3. Insert the black wire into the new connector | Lever connectors, Black wires, Work area |
-| S4 QA pull test | 1. Pull test: no wire comes out of either connector 2. Pass or fail (P or F key) | Test area |
+| S2 Arrange and clamp | 1. Wires arrive from S1 2. Open the lever connector 3. Arrange the wires: red top, white middle, black bottom 4. Close the levers on the wires | Lever connectors, Cut wires (where the wires from S1 land), Work area |
+| S3 Second connector | 1. Unit arrives from S2 2. Add a new lever connector to the other end of the red wire 3. Get a black wire 4. Insert the black wire into the new connector | Lever connectors, Black wires, Work area |
+| S4 QA pull test | 1. Unit arrives from S3 2. Pull test: no wire comes out of either connector, then P or F | Test area |
 
-There are no trays or bins: each station's last step ends its cycle. Mistakes are caught at the station
-where they happen (wrong order, skipped step, wrong color order at S2); QA only does the pull test.
+There are no trays, bins or hand-off zones: the wires or the unit slide straight into the next
+station's view, and that arrival is the station's first step (not a skipped step). Each station's last
+step ends its cycle. Mistakes are caught at the station where they happen (wrong order, skipped step,
+wrong color order at S2); QA only does the pull test.
+
+**Units are linked by order.** Unit 1 is S1's first three wires, then S2's first cycle, S3's first
+cycle and S4's first Pass or Fail; unit 2 is the next of each, and so on. This holds as long as nobody
+reorders or sets aside wires or units. The dashboard's WIP shows the units waiting between stations,
+and **units.csv** (under **Sessions and exports**) has one row per unit: each station's time, the wait
+before it (from the previous station finishing to the arrival), its mistakes, and the QA result.
 
 ## 3. Roles
 
@@ -122,8 +130,8 @@ whose config has a position check gets the **Save correct state** button:
    one that turned from lying wide to standing tall (or the reverse) is "turned the wrong way".
    Redrawing the anchor zone drops the saved state: press Save correct state again.
 
-Every alert goes into the session's **verdicts.csv** (under **Sessions and exports**), and
-**cycles.csv** counts the mistakes and reviews of each unit.
+Every alert goes into the session's **verdicts.csv** (under **Sessions and exports**),
+**cycles.csv** counts the mistakes and reviews of each cycle, and **units.csv** adds them up per unit.
 
 ## 6. Share the footage
 
@@ -157,6 +165,8 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions and expor
    the frames for Colab.
 3. **Label.** Auto-label with Ruza's Colab notebook (`vision/train_colab.ipynb` on the same
    branch) after changing its class names to your station's, then check every box by hand.
+   For S2, S3 and S4, keep the arrival in every clip: the wires or the unit sliding in is a step the
+   model has to see.
 4. **Split by session, never by frame.** Whole sessions go to training or validation. Keep your
    test sessions out of training completely.
 5. **Train** on Colab (free T4 GPU), then export to ONNX:

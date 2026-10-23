@@ -16,29 +16,56 @@ check that the shipped file has no problems.
 Three wires (red, white, black) cut to length against a ruler, laid in color order (red top, white
 middle, black bottom) and closed in a 3-port lever connector. A second lever connector joins the
 other end of the red wire to a separate black wire. QA is a pull test: no wire may come out of either
-connector. There are no trays or bins; each station's last substep ends its cycle.
+connector. There are no trays, bins or hand-off zones: the wires or the unit slide straight into the next
+station's view, and that arrival is the next station's first substep. Each station's last substep ends
+its cycle.
 
 "Camera today" means the substep is seen with zones alone (motion in a drawn box). "With the model"
 is the rule that takes over once that station's trained model is loaded.
 
 | Station | Substep | Camera today | With the model |
 |---|---|---|---|
-| S1 Cut (one cycle = one wire, three per unit) | Cut the wire | activity in Cut area | `cutter` in Cut area |
+| S1 Cut (one cycle = one wire, `perUnit` 3) | Cut the wire | activity in Cut area | `cutter` in Cut area |
 | | Check for correct length against the ruler (ends the cycle) | activity in Ruler | same |
-| S2 Arrange and clamp | Open the lever connector | activity in Lever connectors | `connector_open` in Work area |
+| S2 Arrange and clamp | Wires arrive from S1 (`arrival`) | activity in Cut wires | `red_wire`, `white_wire` or `black_wire` in Cut wires |
+| | Open the lever connector | activity in Lever connectors | `connector_open` in Work area |
 | | Arrange the wires: red top, white middle, black bottom | activity in Cut wires | same; the color order is the position check |
 | | Close the levers on the wires (ends the cycle) | activity in Work area | `connector_closed` in Work area |
-| S3 Second connector | Add a new lever connector to the other end of the red wire | activity in Lever connectors | `connector_open` in Work area |
+| S3 Second connector | Unit arrives from S2 (`arrival`) | activity in Work area | `red_wire` in Work area |
+| | Add a new lever connector to the other end of the red wire | activity in Lever connectors | `connector_open` in Work area |
 | | Get a black wire | activity in Black wires | same |
-| | Insert the black wire into the new connector (ends the cycle) | activity in Work area | `connector_closed` in Work area |
-| S4 QA pull test | Pull test: no wire comes out of either connector | activity in Test area | `connector_closed` in Test area |
-| | Pass or fail (ends the cycle) | the P or F key | same |
+| | Insert the black wire into the new connector (ends the cycle) | activity in Work area | same (zones only: the unit arrives with connector 1 closed, so `connector_closed` cannot tell this step apart) |
+| S4 QA pull test | Unit arrives from S3 (`arrival`) | activity in Test area | `connector_closed` in Test area |
+| | Pull test, then Pass or Fail (ends the cycle) | the P or F key | same |
+
+Two substeps in a row never use the same zone's activity, or the second would fire while the first is
+still going on.
 
 S2 has a `positionCheck` on `red_wire`, `white_wire` and `black_wire` in its Work area: with S2's model
 on and its correct state saved, a wire off its spot (for example red and black swapped) is a
 mistake at S2, not a QA fail. S4 has an empty `qa` block, so it gets the Pass and Fail buttons; with
 no bulb and no bins the result is the P or F press (else `unknown`), and S4's cycle count comes from
 those presses.
+
+### Units, linked by order
+
+There is no marker on the wires, so a unit is followed across the stations by order: unit k is
+cycles `(k-1)*perUnit + 1` to `k*perUnit` of every station (S1 has `"perUnit": 3`, the others 1), using
+each station's detected cycles if it has any, else its manual presses (as **Auto**). This holds as long
+as nobody reorders or sets aside wires or units.
+
+- `perUnit` on a station: cycles per unit, a whole number, default 1. WIP between two stations counts
+  units (S1's cycles divided by 3), and the bottleneck is the station with the longest time per unit
+  (average cycle times `perUnit`).
+- `arrival` on a station: the substep that marks the unit arriving (S2 `s2_arrive`, S3 `s3_arrive`,
+  S4 `s4_arrive`). Being the first substep, an arrival starts a cycle instead of raising a "skipped"
+  flag. The k-th detection of it is unit k's arrival time.
+- `units.csv` (`/api/sessions/<id>/units.csv`): one row per unit. Columns: `session_id, crew, shift, unit,
+  status` (`done` or `at sN`), then per station `sN_basis, sN_cycles, sN_start_ts, sN_end_ts, sN_work_s,
+  sN_wait_s, sN_mistakes, sN_reviews, sN_video_file, sN_video_t`, then `result, reason, cause_station,
+  defect, lead_s`. `sN_wait_s` is from the previous station finishing the unit to this station's
+  arrival (else its first cycle start); `lead_s` is from S1's start to the last station's end.
+  Mistakes and reviews are counted for stations on detected cycles.
 
 How the page counts:
 
@@ -165,7 +192,7 @@ Folder `data/sessions/<id>/` (git-ignored), id like `20261015-233956-7509`:
 | `events.jsonl` | one event per line, appended as they happen (sort by `t`) |
 | `s1.mp4` ... `s4.mp4` | each station's video (`.webm` on browsers without MP4 recording). `s1-2.mp4` is a second part if the source changed or Rec was switched off and on |
 
-Exports: `/api/sessions/<id>/substeps.csv`, `/cycles.csv`, `/verdicts.csv` and `/events.jsonl`
+Exports: `/api/sessions/<id>/substeps.csv`, `/cycles.csv`, `/verdicts.csv`, `/units.csv` and `/events.jsonl`
 (also linked from **Sessions and exports**).
 
 ### Event fields
@@ -225,6 +252,9 @@ kind. A verdict from a check between cycles counts toward the next cycle.
 **One model per station.** Each station gets its own model, trained from that station's footage and
 labeled with that station's SOP substeps (the substep table above). The four trainers work
 separately and do not need to agree on a class list.
+
+**Record the arrivals.** For S2, S3 and S4 keep the wires or the unit sliding in inside each clip; the
+arrival is a substep the model has to see.
 
 **What to label.** States and tools you can see in one still frame, never motions. "Closing the
 levers" is not a class; a `connector_closed` in the work area is. Suggested classes per station

@@ -109,6 +109,8 @@
         }
       }
       if (st.cycleEnds && !st.substeps.some(s => s.id === st.cycleEnds)) errs.push(st.id + ': cycleEnds "' + st.cycleEnds + '" is not one of its substeps.');
+      if (st.perUnit != null && !(Number.isInteger(st.perUnit) && st.perUnit >= 1)) errs.push(st.id + ': perUnit must be a whole number of 1 or more (cycles per unit).');
+      if (st.arrival != null && !st.substeps.some(s => s.id === st.arrival)) errs.push(st.id + ': arrival "' + st.arrival + '" is not one of its substeps.');
       if (st.qa) {
         for (const k of ['lightSubstep', 'sortSubstep']) if (st.qa[k] && !st.substeps.some(s => s.id === st.qa[k])) errs.push(st.id + ': qa.' + k + ' "' + st.qa[k] + '" is not one of its substeps.');
         for (const z of Object.keys(st.qa.bins || {})) if (!zones[z]) errs.push(st.id + ': qa bin zone "' + z + '" is not one of its zones.');
@@ -714,6 +716,8 @@
     return obs;
   }
 
+  const perUnitOf = st => (st && Number.isInteger(st.perUnit) && st.perUnit >= 1 ? st.perUnit : 1);
+
   function reasonInfo(config, id) {
     const r = (config.failReasons || []).find(x => x.id === id);
     return r ? { cause: r.cause, defect: r.defect !== false, label: r.label } : { cause: null, defect: true, label: id || '' };
@@ -749,7 +753,9 @@
       const man = { cycles: m.length, lastSec: r1(ms.length ? ms[ms.length - 1] : null), avgSec: r1(mean(ms)), stdSec: r1(sd(ms)) };
       const basis = o.basis === 'detected' || o.basis === 'manual' ? o.basis : (det.cycles > 0 ? 'detected' : 'manual');
       const use = basis === 'detected' ? det : man;
-      stations[st.id] = { detected: det, manual: man, basis, cycles: use.cycles, avgSec: use.avgSec, lastSec: use.lastSec, stdSec: use.stdSec, _d: d, _m: m };
+      const per = perUnitOf(st);
+      stations[st.id] = { detected: det, manual: man, basis, cycles: use.cycles, avgSec: use.avgSec, lastSec: use.lastSec, stdSec: use.stdSec,
+        perUnit: per, units: Math.floor(use.cycles / per), unitSec: use.avgSec == null ? null : r1(use.avgSec * per), _d: d, _m: m };
     }
 
     // QA at the station that has a qa block
@@ -775,9 +781,11 @@
     const units = qaSt ? stations[qaSt.id].cycles : 0;
     const elapsedSec = Math.max(0, (tEnd - t0) / 1000);
     const wip = [];
-    for (let i = 0; i + 1 < ids.length; i++) wip.push({ from: ids[i], to: ids[i + 1], n: stations[ids[i]].cycles - stations[ids[i + 1]].cycles });
+    // Work in progress counts units (a station with perUnit 3 hands over one unit every 3 cycles).
+    for (let i = 0; i + 1 < ids.length; i++) wip.push({ from: ids[i], to: ids[i + 1], n: stations[ids[i]].units - stations[ids[i + 1]].units });
+    // The bottleneck is the station with the longest time per unit, not per cycle.
     let bottleneck = null;
-    for (const id of ids) { const a = stations[id].avgSec; if (a != null && (bottleneck == null || a > stations[bottleneck].avgSec)) bottleneck = id; }
+    for (const id of ids) { const a = stations[id].unitSec; if (a != null && (bottleneck == null || a > stations[bottleneck].unitSec)) bottleneck = id; }
     const cycleEnds = {};
     for (const id of ids) { cycleEnds[id] = { detected: stations[id].detected.cycles, manual: stations[id].manual.cycles }; delete stations[id]._d; delete stations[id]._m; }
     const takt = isNum(config.taktSec) ? config.taktSec : null;
@@ -852,6 +860,81 @@
     return lines.join('\n') + '\n';
   }
 
+  // ---------- units: link the stations by order ----------
+  // Unit k is the k-th unit out of every station: the first perUnit cycles of a station make unit 1, the next perUnit
+  // unit 2, and so on (S1 cuts three wires per unit). No marker is read, so this holds as long as nobody reorders or
+  // sets aside units. Each station uses its detected cycles if it has any, else the manual presses (as the dashboard's
+  // Auto count). wait_s is the time from the previous station finishing the unit to this station's arrival substep
+  // (the k-th time that substep was detected), else to the start of its first cycle for the unit.
+  function linkUnits(events, config) {
+    const sorted = sortEvents(events);
+    const per = {}, maxUnits = [];
+    for (const st of config.stations) {
+      const d = detectedCycles(sorted, st.id).cycles, m = manualCycles(sorted, st.id);
+      const basis = d.length ? 'detected' : 'manual';
+      const cyc = basis === 'detected'
+        ? d.map(c => ({ start: c.start, end: c.end, sec: c.sec, mistakes: c.mistakes, reviews: c.reviews, result: c.qa ? c.qa.result : null, reason: c.qa ? c.qa.reason : null, videoFile: c.videoFile, videoT: c.videoStart }))
+        : m.map(x => ({ start: x.prevT, end: x.t, sec: x.sec, mistakes: null, reviews: null, result: st.qa ? x.result : null, reason: x.reason, videoFile: x.videoFile, videoT: x.videoT }));
+      const arrivals = st.arrival ? sorted.filter(e => e.type === 'substep' && e.station === st.id && e.substep === st.arrival && isDetected(e)).map(e => e.t) : [];
+      const n = perUnitOf(st);
+      per[st.id] = { st, basis, cyc, arrivals, n };
+      maxUnits.push(Math.ceil(cyc.length / n), arrivals.length);
+    }
+    const total = Math.max(0, ...maxUnits);
+    const units = [];
+    for (let k = 0; k < total; k++) {
+      const u = { unit: k + 1, stations: {}, result: null, reason: null };
+      let prevEnd = null;
+      for (const st of config.stations) {
+        const p = per[st.id], part = p.cyc.slice(k * p.n, (k + 1) * p.n), done = part.length === p.n;
+        const arrival = p.arrivals[k] != null ? p.arrivals[k] : null;
+        const start = part.length ? (part[0].start != null ? part[0].start : arrival) : arrival;
+        const end = done ? part[part.length - 1].end : null;
+        const secs = part.map(c => c.sec).filter(isNum);
+        const sum = key => (p.basis === 'detected' ? part.reduce((a, c) => a + (c[key] || 0), 0) : null);
+        const seen = arrival != null ? arrival : start;
+        u.stations[st.id] = {
+          basis: p.basis, cycles: part.length, done, start, end, arrival,
+          workSec: done && secs.length === part.length ? round(secs.reduce((a, b) => a + b, 0), 3) : null,
+          waitSec: prevEnd != null && seen != null ? round((seen - prevEnd) / 1000, 3) : null,
+          mistakes: sum('mistakes'), reviews: sum('reviews'), videoFile: part.length ? part[0].videoFile : null, videoT: part.length ? part[0].videoT : null
+        };
+        if (st.qa && done) { u.result = part[part.length - 1].result || 'unknown'; u.reason = part[part.length - 1].reason || null; }
+        prevEnd = end;
+      }
+      const ids = config.stations.map(s => s.id), firstStart = u.stations[ids[0]].start, lastEnd = u.stations[ids[ids.length - 1]].end;
+      u.leadSec = firstStart != null && lastEnd != null ? round((lastEnd - firstStart) / 1000, 3) : null;
+      const at = ids.find(id => !u.stations[id].done);
+      u.status = at ? 'at ' + at : 'done';
+      units.push(u);
+    }
+    return units;
+  }
+
+  function unitCols(config) {
+    const cols = ['session_id', 'crew', 'shift', 'unit', 'status'];
+    for (const st of config.stations) cols.push(st.id + '_basis', st.id + '_cycles', st.id + '_start_ts', st.id + '_end_ts', st.id + '_work_s', st.id + '_wait_s', st.id + '_mistakes', st.id + '_reviews', st.id + '_video_file', st.id + '_video_t');
+    cols.push('result', 'reason', 'cause_station', 'defect', 'lead_s');
+    return cols;
+  }
+
+  // One row per unit, linked across the stations by order (see linkUnits).
+  function unitsCsv(events, config, meta) {
+    const m = meta || {}, sorted = sortEvents(events), base = timeBase(sorted, m), ts = t => (t == null ? null : round((t - base) / 1000, 3));
+    const lines = [unitCols(config).join(',')];
+    for (const u of linkUnits(sorted, config)) {
+      const row = [m.id, m.crew, m.shift, u.unit, u.status];
+      for (const st of config.stations) {
+        const x = u.stations[st.id];
+        row.push(x.basis, x.cycles, ts(x.start), ts(x.end), x.workSec, x.waitSec, x.mistakes, x.reviews, x.videoFile, x.videoT);
+      }
+      const info = u.result === 'fail' ? reasonInfo(config, u.reason) : null;
+      row.push(u.result, u.reason, info ? info.cause : null, info ? info.defect : null, u.leadSec);
+      lines.push(csvLine(row));
+    }
+    return lines.join('\n') + '\n';
+  }
+
   // One row per verdict (what the operator heard and saw), in time order across stations. Same columns as live_check.py's
   // session CSV plus session, station, ts and the video position. step is the substep's number at its station.
   const VERDICT_COLS = ['session_id', 'station', 'time', 'ts', 'cycle', 'step', 'event', 'message', 'confidence', 'step_seconds', 'cycle_seconds', 'video_file', 'video_t'];
@@ -870,6 +953,6 @@
     DEFAULTS, MOTION, MISMATCH_NOTE, EVENT_TYPES, CYCLE_ACTIONS, SUBSTEP_COLS, CYCLE_COLS, VERDICT_COLS, CHECK,
     members, activeRule, evalRule, missingOf, ruleText, checkConfig, modelFor, checkModelOutput, e2eBadClass, qaDecide, createStation,
     zoneSignals, calibrationFrom, classSignals, handPresence, steadyClasses, mergeSignals, createChecker,
-    sortEvents, detectedCycles, manualCycles, summarize, substepsCsv, cyclesCsv, verdictsCsv, csvCell
+    sortEvents, detectedCycles, manualCycles, summarize, substepsCsv, cyclesCsv, verdictsCsv, linkUnits, unitCols, unitsCsv, csvCell
   };
 });

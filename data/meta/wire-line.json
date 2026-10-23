@@ -31,6 +31,7 @@
         { "id": "ruler", "label": "Ruler (length check)" }
       ],
       "cycleEnds": "s1_check_length",
+      "perUnit": 3,
       "substeps": [
         { "id": "s1_cut", "label": "Cut the wire", "zones": { "zone": "cut", "signal": "activity" }, "model": { "zone": "cut", "class": "cutter" } },
         { "id": "s1_check_length", "label": "Check for correct length against the ruler", "zones": { "zone": "ruler", "signal": "activity" }, "model": null }
@@ -46,8 +47,10 @@
         { "id": "work", "label": "Work area" }
       ],
       "cycleEnds": "s2_close",
+      "arrival": "s2_arrive",
       "positionCheck": { "anchor": "work", "classes": ["red_wire", "white_wire", "black_wire"], "tolerance": 0.14 },
       "substeps": [
+        { "id": "s2_arrive", "label": "Wires arrive from S1", "zones": { "zone": "wires", "signal": "activity" }, "model": { "anyOf": [{ "zone": "wires", "class": "red_wire" }, { "zone": "wires", "class": "white_wire" }, { "zone": "wires", "class": "black_wire" }] } },
         { "id": "s2_open", "label": "Open the lever connector", "zones": { "zone": "connectors", "signal": "activity" }, "model": { "zone": "work", "class": "connector_open" } },
         { "id": "s2_arrange", "label": "Arrange the wires: red top, white middle, black bottom", "zones": { "zone": "wires", "signal": "activity" }, "model": null },
         { "id": "s2_close", "label": "Close the levers on the wires", "zones": { "zone": "work", "signal": "activity" }, "model": { "zone": "work", "class": "connector_closed" } }
@@ -63,25 +66,28 @@
         { "id": "work", "label": "Work area" }
       ],
       "cycleEnds": "s3_insert",
+      "arrival": "s3_arrive",
       "substeps": [
+        { "id": "s3_arrive", "label": "Unit arrives from S2", "zones": { "zone": "work", "signal": "activity" }, "model": { "zone": "work", "class": "red_wire" } },
         { "id": "s3_add_connector", "label": "Add a new lever connector to the other end of the red wire", "zones": { "zone": "connectors", "signal": "activity" }, "model": { "zone": "work", "class": "connector_open" } },
         { "id": "s3_get_black", "label": "Get a black wire", "zones": { "zone": "wires", "signal": "activity" }, "model": null },
-        { "id": "s3_insert", "label": "Insert the black wire into the new connector", "zones": { "zone": "work", "signal": "activity" }, "model": { "zone": "work", "class": "connector_closed" } }
+        { "id": "s3_insert", "label": "Insert the black wire into the new connector", "zones": { "zone": "work", "signal": "activity" }, "model": null, "note": "Zones only: the unit arrives with connector 1 already closed, so connector_closed cannot tell this step apart." }
       ]
     },
     {
       "id": "s4",
       "label": "QA pull test",
       "output": "one tested unit, pass or fail",
-      "note": "The cameras see the pull test; the result comes from the P or F key. S4's cycle count comes from those presses.",
+      "note": "The camera sees the unit arrive; the pull test result comes from the P or F key, and S4's cycle count comes from those presses.",
       "zones": [
         { "id": "test", "label": "Test area" }
       ],
       "cycleEnds": "s4_result",
+      "arrival": "s4_arrive",
       "qa": {},
       "substeps": [
-        { "id": "s4_pull_test", "label": "Pull test: no wire comes out of either connector", "zones": { "zone": "test", "signal": "activity" }, "model": { "zone": "test", "class": "connector_closed" } },
-        { "id": "s4_result", "label": "Pass or fail (P or F key)", "zones": null, "model": null, "note": "No camera rule: the answer-key keeper presses P or F." }
+        { "id": "s4_arrive", "label": "Unit arrives from S3", "zones": { "zone": "test", "signal": "activity" }, "model": { "zone": "test", "class": "connector_closed" } },
+        { "id": "s4_result", "label": "Pull test: no wire comes out of either connector, then P or F", "zones": null, "model": null, "note": "No camera rule: the answer-key keeper presses P or F after the pull test." }
       ]
     }
   ]

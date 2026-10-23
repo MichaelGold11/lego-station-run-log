@@ -1078,7 +1078,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       const L = doc.summary && doc.summary.line;
       const base = '/api/sessions/' + sess.id;
       banner('session', `Session saved: <b>${esc(sess.title || sess.id)}</b>${L ? ` | ${L.units} units, FPY ${L.fpy == null ? '--' : Math.round(L.fpy * 100) + '%'}` : ''} | ` +
-        `<a href="${base}/substeps.csv" download>substeps.csv</a> <a href="${base}/cycles.csv" download>cycles.csv</a> <a href="${base}/verdicts.csv" download>verdicts.csv</a> <a href="${base}/events.jsonl" download>events.jsonl</a> <a href="${base}" target="_blank" rel="noopener">session.json</a>` +
+        `<a href="${base}/substeps.csv" download>substeps.csv</a> <a href="${base}/cycles.csv" download>cycles.csv</a> <a href="${base}/verdicts.csv" download>verdicts.csv</a> <a href="${base}/units.csv" download>units.csv</a> <a href="${base}/events.jsonl" download>events.jsonl</a> <a href="${base}" target="_blank" rel="noopener">session.json</a>` +
         (G.queue.length ? ` | <b>${G.queue.length} events were not sent</b>` : ''), G.queue.length ? 'crit' : 'good');
     } catch (e) {
       banner('session', 'Stopping had a problem: ' + esc(e && e.message || e) + '. The data sent so far is on disk.', 'crit');
@@ -1099,7 +1099,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
         const base = '/api/sessions/' + s.id, bytes = s.videos.reduce((a, v) => a + (v.bytes || 0), 0);
         return `<tr><td class="mono">${esc(s.id)}</td><td>${esc(s.title || '')}</td><td>${esc(s.crew || '')}</td><td>${esc(s.shift || '')}</td>` +
           `<td>${s.startedAt ? esc(new Date(s.startedAt).toLocaleString()) : ''}</td><td>${s.endedAt ? esc(new Date(s.endedAt).toLocaleTimeString()) : '<span class="chip warn">not ended</span>'}</td>` +
-          `<td class="mono">${s.videos.length} (${fmtMB(bytes)})</td><td><a href="${base}/substeps.csv" download>substeps.csv</a><a href="${base}/cycles.csv" download>cycles.csv</a><a href="${base}/verdicts.csv" download>verdicts.csv</a><a href="${base}/events.jsonl" download>events</a><a href="${base}" target="_blank" rel="noopener">json</a></td></tr>`;
+          `<td class="mono">${s.videos.length} (${fmtMB(bytes)})</td><td><a href="${base}/substeps.csv" download>substeps.csv</a><a href="${base}/cycles.csv" download>cycles.csv</a><a href="${base}/verdicts.csv" download>verdicts.csv</a><a href="${base}/units.csv" download>units.csv</a><a href="${base}/events.jsonl" download>events</a><a href="${base}" target="_blank" rel="noopener">json</a></td></tr>`;
       }).join('');
       $('sessTbl').innerHTML = rows ? `<table><thead><tr><th>Id</th><th>Title</th><th>Crew / group</th><th>Shift</th><th>Started</th><th>Ended</th><th>Videos</th><th>Exports</th></tr></thead><tbody>${rows}</tbody></table>` : '<div class="muted">No sessions yet.</div>';
     } catch (e) { $('sessTbl').innerHTML = '<div class="muted">The local server is not answering.</div>'; }
@@ -1187,8 +1187,8 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     ids.forEach((id, i) => {
       const s = sum.stations[id];
       const c = 'fl-st' + (L.bottleneck === id ? ' bottleneck' : '') + (L.overTakt.includes(id) ? ' over' : '');
-      flow += `<div class="${c}" title="${esc(ST[id].cfg.label)}: ${s.cycles} cycles, average cycle (${s.basis})"><b>${id.toUpperCase()}</b><span>${s.cycles} done | ${fmtS(s.avgSec)}</span></div>`;
-      if (i + 1 < ids.length) { const w = L.wip[i]; flow += `<div class="fl-ar${w.n < 0 ? ' neg' : ''}" title="Work in progress between ${id.toUpperCase()} and ${ids[i + 1].toUpperCase()}${i === 0 ? ' (pairs of wires)' : ''}"><i>→</i>WIP ${w.n}<i>→</i></div>`; }
+      flow += `<div class="${c}" title="${esc(ST[id].cfg.label)}: ${s.cycles} cycles${s.perUnit > 1 ? ' (' + s.perUnit + ' per unit, ' + s.units + ' units)' : ''}, average cycle (${s.basis})"><b>${id.toUpperCase()}</b><span>${s.perUnit > 1 ? s.units + ' units' : s.cycles + ' done'} | ${fmtS(s.avgSec)}</span></div>`;
+      if (i + 1 < ids.length) { const w = L.wip[i]; flow += `<div class="fl-ar${w.n < 0 ? ' neg' : ''}" title="Units waiting between ${id.toUpperCase()} and ${ids[i + 1].toUpperCase()} (linked by order)"><i>→</i>WIP ${w.n}<i>→</i></div>`; }
     });
     $('sFlow').innerHTML = '<span class="eyebrow" style="margin-right:6px">Flow</span>' + flow;
     const fc = L.failsByCause, parts = ids.map(id => `${id.toUpperCase()} <b>${fc[id] || 0}</b>`);

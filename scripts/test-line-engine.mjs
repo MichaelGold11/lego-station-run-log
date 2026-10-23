@@ -654,29 +654,86 @@ console.log('checker: logs (verdicts.csv, cycles.csv counts)');
   check('the server accepts verdict events (EVENT_TYPES)', LE.EVENT_TYPES.includes('verdict'));
 }
 
-console.log('shipped process (v2, lever connectors)');
+console.log('shipped process (v2, lever connectors, arrivals)');
 {
-  const run = (id, seq) => {
+  // seq: a zone id (that zone active) or {zone: {signal: value}}. model: class list when the station's model is on.
+  const run = (id, seq, model) => {
     const st = SHIPPED.stations.find(s => s.id === id);
-    const eng = LE.createStation(st, { holdFrames: SHIPPED.holdFrames, defaults: SHIPPED.defaults, qaGraceSec: SHIPPED.qaGraceSec });
-    const cur = {}; for (const z of st.zones) cur[z.id] = { activity: 0, bright: 0 };
+    const eng = LE.createStation(st, { holdFrames: SHIPPED.holdFrames, defaults: SHIPPED.defaults, qaGraceSec: SHIPPED.qaGraceSec, modelClasses: model || null });
+    const blank = () => { const c = {}; for (const z of st.zones) { c[z.id] = { activity: 0, bright: 0 }; for (const k of model || []) c[z.id]['class:' + k] = 0; } return c; };
     let t = 0; const out = [];
-    const play = (zone, ms) => { for (const z of Object.keys(cur)) cur[z].activity = 0; if (zone) cur[zone].activity = 0.5; const end = t + ms; while (t < end) { out.push(...eng.update(JSON.parse(JSON.stringify(cur)), t)); t += FRAME; } };
+    const play = (step, ms) => {
+      const cur = blank();
+      if (typeof step === 'string') cur[step].activity = 0.5;
+      else if (step) for (const z of Object.keys(step)) Object.assign(cur[z], step[z]);
+      const end = t + ms; while (t < end) { out.push(...eng.update(JSON.parse(JSON.stringify(cur)), t)); t += FRAME; }
+    };
     play(null, 500); for (const z of seq) play(z, 500); play(null, 500);
     return out;
   };
   const subsOf = ev => ev.filter(e => e.type === 'substep').map(e => e.substep).join();
-  const s1 = run('s1', ['cut', 'ruler', 'cut', 'ruler']);
-  check('S1: cut then ruler is one wire; two wires make two cycles', subsOf(s1) === 's1_cut,s1_check_length,s1_cut,s1_check_length' && s1.filter(e => e.type === 'cycle_end').length === 2, subsOf(s1));
-  const s2 = run('s2', ['connectors', 'wires', 'work']);
-  check('S2: connectors, wires, work = open, arrange, close and the cycle ends at close', subsOf(s2) === 's2_open,s2_arrange,s2_close' && s2.some(e => e.type === 'cycle_end' && e.substep === 's2_close'), subsOf(s2));
-  const s2skip = run('s2', ['connectors', 'work']);
-  check('S2: closing without arranging flags "skipped Arrange the wires..."', s2skip.some(e => e.type === 'flag' && /skipped Arrange the wires/.test(e.note)), JSON.stringify(s2skip.filter(e => e.type === 'flag')));
-  const s3 = run('s3', ['connectors', 'wires', 'work']);
-  check('S3: connector, black wire, insert and the cycle ends at insert', subsOf(s3) === 's3_add_connector,s3_get_black,s3_insert' && s3.some(e => e.type === 'cycle_end' && e.substep === 's3_insert'), subsOf(s3));
+  const flagsOf = ev => ev.filter(e => e.type === 'flag').map(e => e.note).join(' | ');
+  const s1 = run('s1', ['cut', 'ruler', 'cut', 'ruler', 'cut', 'ruler']);
+  check('S1: cut then ruler is one wire; three wires make three cycles', subsOf(s1) === 's1_cut,s1_check_length,s1_cut,s1_check_length,s1_cut,s1_check_length' && s1.filter(e => e.type === 'cycle_end').length === 3, subsOf(s1));
+  const s2 = run('s2', ['wires', 'connectors', 'wires', 'work']);
+  check('S2: wires arrive, open, arrange, close; the cycle ends at close with no flag', subsOf(s2) === 's2_arrive,s2_open,s2_arrange,s2_close' && s2.some(e => e.type === 'cycle_end' && e.substep === 's2_close') && !flagsOf(s2), subsOf(s2) + ' / ' + flagsOf(s2));
+  const s2slide = run('s2', ['wires']);
+  check('S2: wires sliding in from S1 start a cycle at "Wires arrive", not a skipped step', subsOf(s2slide) === 's2_arrive' && !flagsOf(s2slide), subsOf(s2slide) + ' / ' + flagsOf(s2slide));
+  const s2skip = run('s2', ['wires', 'connectors', 'work']);
+  check('S2: closing without arranging flags "skipped Arrange the wires..."', /skipped Arrange the wires/.test(flagsOf(s2skip)), flagsOf(s2skip));
+  const s3 = run('s3', ['work', 'connectors', 'wires', 'work']);
+  check('S3: unit arrives, connector, black wire, insert; the cycle ends at insert with no flag', subsOf(s3) === 's3_arrive,s3_add_connector,s3_get_black,s3_insert' && s3.some(e => e.type === 'cycle_end' && e.substep === 's3_insert') && !flagsOf(s3), subsOf(s3) + ' / ' + flagsOf(s3));
+  const S3M = SHIPPED.suggestedClasses.s3;
+  const s3m = run('s3', [
+    { work: { activity: 0.5, 'class:red_wire': 0.9, 'class:connector_closed': 0.9 } },
+    { work: { 'class:red_wire': 0.9, 'class:connector_closed': 0.9 } }
+  ], S3M);
+  check('S3 with its model: the arriving unit already has a closed connector, and that is not "inserted"', subsOf(s3m) === 's3_arrive' && !flagsOf(s3m), subsOf(s3m) + ' / ' + flagsOf(s3m));
   const s4 = run('s4', ['test']);
-  check('S4: the pull test is seen; the result comes from the P or F key', subsOf(s4) === 's4_pull_test' && !s4.some(e => e.type === 'cycle_end'), subsOf(s4));
+  check('S4: the unit arrives; the pull test result comes from the P or F key', subsOf(s4) === 's4_arrive' && !s4.some(e => e.type === 'cycle_end'), subsOf(s4));
   check('S2 checks the color order (positionCheck on red, white, black in the work area)', JSON.stringify(SHIPPED.stations[1].positionCheck.classes) === '["red_wire","white_wire","black_wire"]');
+  check('S1 makes 3 cycles per unit; S2, S3 and S4 name their arrival step', SHIPPED.stations[0].perUnit === 3 && ['s2_arrive', 's3_arrive', 's4_arrive'].join() === SHIPPED.stations.slice(1).map(s => s.arrival).join());
+  const bad = JSON.parse(JSON.stringify(SHIPPED));
+  bad.stations[0].perUnit = 0; bad.stations[1].arrival = 'nowhere';
+  const errs = LE.checkConfig(bad);
+  check('a bad perUnit or arrival is reported', errs.some(e => /s1: perUnit/.test(e)) && errs.some(e => /s2: arrival "nowhere"/.test(e)), errs.join(' | '));
+}
+
+console.log('units linked by order (units.csv)');
+{
+  const T0 = 1000000;
+  const ev = [{ type: 'session_start', t: T0 }];
+  let cyc = {};
+  const cycle = (st, subs, t, dur) => {
+    cyc[st] = (cyc[st] || 0) + 1;
+    subs.forEach((s, k) => ev.push({ type: 'substep', station: st, substep: s, move: k ? 'next' : 'start', source: 'zones', conf: 0.5, t: t + k * (dur / subs.length), cycle: cyc[st] }));
+    ev.push({ type: 'cycle_end', station: st, substep: subs[subs.length - 1], source: 'zones', t: t + dur, cycle: cyc[st], dur: dur / 1000 });
+  };
+  // Unit 1: S1 three wires 0-30 s, S2 arrives at 32 s, S3 arrives at 50 s, S4 arrives at 70 s, then Fail (connector 1).
+  for (let w = 0; w < 3; w++) cycle('s1', ['s1_cut', 's1_check_length'], T0 + w * 10000, 10000);
+  cycle('s2', ['s2_arrive', 's2_open', 's2_arrange', 's2_close'], T0 + 32000, 12000);
+  ev.push({ type: 'verdict', station: 's2', kind: 'mistake', reason: 'wrong_position', message: 'Red wire is in the wrong position', t: T0 + 40000, cycle: 1 });
+  cycle('s3', ['s3_arrive', 's3_add_connector', 's3_get_black', 's3_insert'], T0 + 50000, 15000);
+  ev.push({ type: 'substep', station: 's4', substep: 's4_arrive', move: 'start', source: 'zones', conf: 0.5, t: T0 + 70000, cycle: 1 });
+  ev.push({ type: 'manual', station: 's4', action: 'fail', reason: 'pulled_c1', source: 'manual', t: T0 + 80000 });
+  // Unit 2: S1 three wires 30-60 s, S2 arrives at 62 s and is still working.
+  for (let w = 0; w < 3; w++) cycle('s1', ['s1_cut', 's1_check_length'], T0 + 30000 + w * 10000, 10000);
+  ev.push({ type: 'substep', station: 's2', substep: 's2_arrive', move: 'start', source: 'zones', conf: 0.5, t: T0 + 62000, cycle: 2 });
+  const units = LE.linkUnits(ev, SHIPPED);
+  check('two units: unit 1 done, unit 2 at S2', units.length === 2 && units[0].status === 'done' && units[1].status === 'at s2', JSON.stringify(units.map(u => u.status)));
+  const u1 = units[0];
+  check('unit 1: S1 is its first three wires, 30 s of work', u1.stations.s1.cycles === 3 && u1.stations.s1.workSec === 30, JSON.stringify(u1.stations.s1));
+  check('unit 1: waits are arrival minus the previous station\'s end (S2 2 s, S3 6 s, S4 5 s)', u1.stations.s2.waitSec === 2 && u1.stations.s3.waitSec === 6 && u1.stations.s4.waitSec === 5, [u1.stations.s2.waitSec, u1.stations.s3.waitSec, u1.stations.s4.waitSec].join());
+  check('unit 1: the S2 mistake stays with the unit, and the fail points at S2', u1.stations.s2.mistakes === 1 && u1.result === 'fail' && u1.reason === 'pulled_c1', JSON.stringify(u1));
+  check('unit 1: S4 counts from the Fail press (manual basis), lead time 80 s', u1.stations.s4.basis === 'manual' && u1.leadSec === 80, u1.stations.s4.basis + ' ' + u1.leadSec);
+  check('unit 2: S1 done, arrived at S2 2 s later, not finished there', units[1].stations.s1.done && units[1].stations.s2.waitSec === 2 && !units[1].stations.s2.done);
+  const csv = LE.unitsCsv(ev, SHIPPED, { id: 'sess', crew: 'A', shift: 'Day' }).trim().split('\n');
+  const head = csv[0].split(','), row = csv[1].split(','), col = n => row[head.indexOf(n)];
+  check('units.csv: one row per unit with per-station columns', csv.length === 3 && head[3] === 'unit' && head.includes('s1_work_s') && head.includes('s4_wait_s') && head.includes('lead_s'), csv[0]);
+  check('units.csv: the failed unit has its reason, cause station and the S2 mistake', col('result') === 'fail' && col('reason') === 'pulled_c1' && col('cause_station') === 's2' && col('s2_mistakes') === '1', csv[1]);
+  const sum = LE.summarize(ev, SHIPPED);
+  check('summary: S1 counts 6 wires as 2 units; units waiting S1 to S2 = 2 - 1 = 1', sum.stations.s1.cycles === 6 && sum.stations.s1.units === 2 && sum.line.wip[0].n === 1, JSON.stringify(sum.line.wip));
+  check('summary: the bottleneck compares time per unit (S1 3 x 10 s = 30 s beats S3 15 s)', sum.stations.s1.unitSec === 30 && sum.line.bottleneck === 's1', sum.line.bottleneck);
 }
 
 console.log('\n' + passes + ' passed, ' + fails + ' failed');

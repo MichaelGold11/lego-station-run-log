@@ -144,6 +144,9 @@ try {
   const cycCsv = await req('GET', `/api/sessions/${id}/cycles.csv`);
   const cycLines = cycCsv.text.trim().split('\n');
   check('cycles.csv has the detected cycle and the manual presses', cycCsv.status === 200 && cycLines.length === 4 && cycLines.some(l => l.includes(',s1,detected,1,zones,1,9,8,')) && cycLines.some(l => l.includes(',s4,manual,1,manual,') && l.includes('crimp_a,s2')), cycCsv.text);
+  const unitsCsv = await req('GET', `/api/sessions/${id}/units.csv`);
+  const uLines = unitsCsv.text.trim().split('\n');
+  check('units.csv downloads: one row per unit linked by order', unitsCsv.status === 200 && /text\/csv/.test(unitsCsv.headers['content-type']) && /units\.csv/.test(unitsCsv.headers['content-disposition']) && uLines[0].startsWith('session_id,crew,shift,unit,status,s1_basis,') && uLines.length >= 2, unitsCsv.text);
   const jl = await req('GET', `/api/sessions/${id}/events.jsonl`);
   check('events.jsonl downloads', jl.status === 200 && jl.text.trim().split('\n').length === 7);
   const list = await req('GET', '/api/sessions');
