@@ -96,7 +96,7 @@ a { color: var(--accent); font-weight: 600; }
     $('btnStart').hidden = !P.camErr; $('btnTake').hidden = !P.replaced;
     if (P.camErr) show('bad', 'The camera did not open', P.camErr);
     else if (P.replaced) show('bad', 'Another device is now ' + SID + '\'s camera', 'This one stopped sending. Tap below to take the station back.');
-    else if (P.expired) show('bad', 'This link is old', 'The laptop has a new pairing code. Scan the QR code on /line again.');
+    else if (P.expired) show('bad', 'This link does not work any more', 'The laptop has a new pairing code, or this station is not on its floor layout now. Scan the QR code on /line again.');
     else if (!P.net) show('bad', 'Cannot reach the laptop', 'Is this device on the same Wi-Fi as the laptop, and is npm start running? Trying again...');
     else if (P.live) show('live', 'LIVE: ' + SID + ' is streaming', 'Keep this page open in front.');
     else if (P.discAt) show('wait', 'Connection unstable', 'Reconnecting...');
