@@ -173,3 +173,32 @@ visible controls are counted. Six live stations: frame rate per station and the 
 - **Dashboard Phase 1** adds `operator` and `level` columns to the CSVs from the `operator` events, and reads
   `session.json`'s `layout` (apply it with `LineEngine.applyLayout`) to know which station ran which role.
 - **IP / RTSP cameras**, **floor shapes** (tables, walls, walkways drawn on the floor): in `docs/backlog.md`.
+
+## 8. As built (2026-10-23)
+
+Built as planned, with these calls made along the way:
+
+- **A new station goes to the nearest free spot.** The middle of the view is often another card. Add station puts the
+  new card in the middle when that is free, else at the nearest spot that leaves room for its Setup panel (640 by 520
+  units), and pans the floor to show it.
+- **The frame loop keeps each station's rate.** The browser walk with six fake cameras showed the old loop (one station
+  per 30 ms tick) capped the whole line at about 33 frames a second: 5.6 per station with six, 2.8 with twelve, with the
+  main thread only 12% busy. Each tick now works through every station that is due, within 8 ms. Measured on an Apple
+  M5 Pro: 4, 6 and 12 stations all at 6.7 frames a second each (main thread 10%, 12%, 23% busy); 6 stations recording,
+  13% (all of Chrome about a third of one core). One or four stations behave as before.
+- **A shorter header.** The header note is "Wire splice line, 4 stations, one overhead camera each" (the product
+  sentence moved to its tooltip) and the summary's flow row sits beside the tiles when there is room, so the floor
+  gets more of a laptop screen. No control was added or removed there.
+- **The card's name and badge.** The badge shows the station id (S5, the name of its files); the title is the name
+  without a leading id ("S5 QA test" shows as QA test), and the role follows in grey when the name does not say it.
+- **Operator events are trimmed.** The server keeps only station, code and level of an `operator` event, so nothing
+  about the person can ride along in an extra field.
+- **Copy for any phone.** The phone page, the gate page, the server's log lines and `/line` say phone or tablet. The
+  event notes changed with them ("Phone lost", "Phone (waiting for the phone)"). A phone whose station left the floor
+  layout hears "This link does not work any more".
+- **Checked in Chrome:** a page opened past the certificate warning (Advanced, Proceed) is still a secure page and gets
+  the camera, so Chrome on Android is not blocked by the self-made certificate. Android, iPad and a second laptop are
+  not tested on real devices.
+
+Tests: `npm run test:line` 190 engine checks and 113 server checks. Browser walk: 47 checks in Chrome with fake cameras
+(scratchpad script, not in the repo), screenshots at 1280x800 and 1920x1080.
