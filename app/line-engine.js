@@ -179,6 +179,29 @@
   // Zones and calibration are kept per station and role: "s2" for station s2 running its own role, "s5:s4" otherwise.
   const setupKey = (id, role) => (!role || role === id ? id : id + ':' + role);
   // The lowest free s<n> in a layout.
+  // The spot nearest (x, y) where a new card (width FLOOR.cardW, height h, default 520: room for its Setup panel) does not cover
+  // any of rects ({x, y, w, h}), with a margin of one grid step. Searches rings of 200 by 160 around (x, y); snaps to the grid.
+  function freeSpot(rects, x, y, h) {
+    const w = FLOOR.cardW, m = FLOOR.grid, hh = h || 520, snap = v => Math.round(v / FLOOR.grid) * FLOOR.grid;
+    const free = (px, py) => rects.every(r => px + w + m <= r.x || r.x + r.w + m <= px || py + hh + m <= r.y || r.y + r.h + m <= py);
+    for (let ring = 0; ring <= 12; ring++) {
+      const cand = [];
+      for (let i = -ring; i <= ring; i++) for (let j = -ring; j <= ring; j++) if (Math.max(Math.abs(i), Math.abs(j)) === ring) cand.push([x + i * 200, y + j * 160]);
+      cand.sort((a, c) => Math.hypot(a[0] - x, a[1] - y) - Math.hypot(c[0] - x, c[1] - y));
+      for (const [px, py] of cand) if (free(px, py)) return [snap(px), snap(py)];
+    }
+    return [x, y];
+  }
+  // Delayed layout saves, one pending save per layout id: scheduling a save for one layout does not cancel another's.
+  // timers is { set, clear } (setTimeout and clearTimeout in the page).
+  function saveScheduler(timers) {
+    const pending = {};
+    return {
+      later(id, fn, ms) { timers.clear(pending[id]); pending[id] = timers.set(() => { delete pending[id]; fn(); }, ms); },
+      cancel(id) { timers.clear(pending[id]); delete pending[id]; },
+      pending: () => Object.keys(pending),
+    };
+  }
   function nextStationId(stations) {
     const used = {};
     for (const s of stations || []) used[s.id] = true;
@@ -936,7 +959,7 @@
   return {
     DEFAULTS, MOTION, MISMATCH_NOTE, EVENT_TYPES, CYCLE_ACTIONS, SUBSTEP_COLS, CYCLE_COLS, VERDICT_COLS, CHECK, LEVELS, OPERATOR_CODE, FLOOR, CLASS_TEST,
     members, activeRule, evalRule, missingOf, ruleText, checkConfig, modelFor, checkModelOutput, e2eBadClass, qaDecide, createStation,
-    operatorCode, defaultName, shortName, classTestLayout, setupKey, nextStationId, applyLayout,
+    operatorCode, defaultName, shortName, classTestLayout, setupKey, nextStationId, freeSpot, saveScheduler, applyLayout,
     zoneSignals, calibrationFrom, classSignals, handPresence, steadyClasses, mergeSignals, createChecker,
     sortEvents, detectedCycles, manualCycles, summarize, substepsCsv, cyclesCsv, verdictsCsv, csvCell
   };

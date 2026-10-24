@@ -705,5 +705,27 @@ console.log('operators (dashboard plan, decision 1)');
   check('a name, an empty code or 4 digits is not a code', [null, '', 'Michael', 'Op-Mike', '1234', 'Op-07 Mike'].every(v => LE.operatorCode(v) === null));
 }
 
+console.log('regressions: new station placement and per-layout saves (ea1dcf3, de886c8)');
+{
+  // Class test cards: 640 wide, positions from the layout; the middle of the view lands on s3's card.
+  const rects = LE.classTestLayout(CFG).stations.map(s => ({ x: s.x, y: s.y, w: LE.FLOOR.cardW, h: 320 }));
+  const mid = rects[2], [x, y] = LE.freeSpot(rects, mid.x, mid.y);
+  const overlaps = r => x < r.x + r.w && r.x < x + LE.FLOOR.cardW && y < r.y + r.h && r.y < y + 520;
+  check('a new station asked for a spot on top of a card goes to a free spot, not on the card', !rects.some(overlaps), x + ',' + y);
+  check('a free middle is kept as it is (snapped to the grid)', JSON.stringify(LE.freeSpot([], 80, 120)) === '[80,120]');
+  const dist = Math.hypot(x - mid.x, y - mid.y);
+  check('the free spot is the nearest one: within one ring or two of the wanted spot', dist <= 2 * 200 * Math.SQRT2, String(dist));
+  // Saves: a timer per layout. Fake timers record what is pending.
+  let id = 0; const live = new Map(), ran = [];
+  const sched = LE.saveScheduler({ set: (fn, ms) => { live.set(++id, fn); return id; }, clear: t => { live.delete(t); } });
+  sched.later('a', () => ran.push('a'), 400);
+  sched.later('b', () => ran.push('b'), 400);
+  check('a save for layout b does not cancel the pending save for layout a', live.size === 2 && sched.pending().join() === 'a,b');
+  for (const [k, fn] of [...live]) { live.delete(k); fn(); }
+  check('both saves run', ran.sort().join() === 'a,b' && sched.pending().length === 0);
+  sched.later('a', () => ran.push('a1'), 400); sched.later('a', () => ran.push('a2'), 400);
+  check('a second edit on the same layout replaces its pending save', live.size === 1);
+}
+
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);

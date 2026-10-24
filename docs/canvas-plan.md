@@ -27,10 +27,10 @@ a mode switch, the config decides, nothing is lost, the phone connection does no
    needed, REC, the now box, cycle, last, average and done, the QA line, the checklist, and the operator chip. Flow
    arrows connect the stations in order (1 to 2 to 3 ...), like the arrows in the photo. Detection, zones, Calibrate,
    models, Rec and the step checker work as before at any zoom; the video keeps playing when zoomed out or off screen.
-3. **Lean.** The canvas adds only the zoom cluster, **Edit layout** and **+** (Add station). Moving, renaming,
+3. **Lean.** The canvas adds only the zoom cluster, **Edit layout** and **+ Station** (Add station). Moving, renaming,
    re-roling, reordering and removing stations happen only in Edit layout mode. Layout edits and adding stations are
    blocked while a session records ("Stop the session to change the layout.").
-4. **Add station (+)** puts a new station in the middle of the current view, asks for its role (one of the trained
+4. **Add station (+ Station)** puts a new station in the middle of the current view, asks for its role (one of the trained
    station roles in the config; the models do not change, a station picks which one it runs) and a name (prefilled, like
    "S5 QA test"), then opens the same **Connect a camera** sheet: **Phone or tablet (scan a QR code)**, **USB camera**
    (anything Chrome lists: webcams, capture cards, Continuity Camera, OBS Virtual Camera), **Recorded clip**. IP / RTSP
@@ -106,7 +106,7 @@ page logs one `operator` event per station that has an operator, so `events.json
 ## 3. Screens
 
 **Run screen**: header (Sound, Start or Stop, Sessions, Setup), summary strip, then the floor fills the rest of the
-window. On the floor: top left **Edit layout** and **+**, with the layout's name as a label; bottom right the zoom
+window. On the floor: top left **Edit layout** and **+ Station**, with the layout's name as a label; bottom right the zoom
 cluster. Station cards with **Connect a camera** or **Setup needed** only when something is missing (as today).
 
 **Edit layout mode** (the **Edit layout** button; Setup mode closes): a bar on top with the layout picker, its name
@@ -114,7 +114,7 @@ cluster. Station cards with **Connect a camera** or **Setup needed** only when s
 and **Done**. Each card gets a strip with its name, its role, Earlier / Later in the flow, and **Remove** (two clicks).
 Drag a card to move it; it snaps to the grid. Any change to Class test first makes "Class test copy" and switches to it.
 
-**Add station**: a small panel by the + button: Role, Name (prefilled "S5 QA test", following the role until edited),
+**Add station**: a small panel by the + Station button: Role, Name (prefilled "S5 QA test", following the role until edited),
 **Add station**, **Cancel**. Default role: the last station's role (the first role on an empty floor).
 
 **Operator chip**: "Op --" or "Op-07, in training" in each card's head (the slot the lean plan reserved). Click: a panel
@@ -124,7 +124,7 @@ on the card with the code (digits, shown as Op-07), the three levels, **Save**, 
 
 | File | Change |
 |---|---|
-| `app/line-engine.js` | `operator` in `EVENT_TYPES`; `LEVELS`, `operatorCode`, `FLOOR`, `classTestLayout`, `applyLayout`, `setupKey`, `nextStationId`, `defaultName`, `shortName`; `summarize` counts every QA station and groups side-by-side stations into stages |
+| `app/line-engine.js` | `operator` in `EVENT_TYPES`; `LEVELS`, `operatorCode`, `FLOOR`, `classTestLayout`, `applyLayout`, `setupKey`, `nextStationId`, `freeSpot`, `saveScheduler`, `defaultName`, `shortName`; `summarize` counts every QA station and groups side-by-side stations into stages |
 | `server.mjs` | `/api/line/layouts` (GET, POST, PUT, DELETE, `<id>/use`); setup keys per station and role; sessions take and store the layout, accept its station ids and the operator event; exports and the summary apply the layout; the phone listener and `/api/phone/info` use the active layout's station ids; phone copy for any phone or tablet |
 | `app/line.html` | The floor (pan, zoom, Fit, view memory, grid, arrows); cards at their positions; Edit layout mode and the layout bar; Add station; stations built and torn down from the layout (`reconcile`); the operator chip; the answer key and the flow row for any number of stations; copy for any phone or tablet |
 | `app/phone.html` | Copy for iPhone, iPad, Android and laptop browsers (no code path is iPhone only) |

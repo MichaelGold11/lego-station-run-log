@@ -84,7 +84,7 @@ place in the flow (earlier, later) and **Remove** (two clicks). Drag a card to m
 to the 40-unit grid. Nothing in the layout can change while a session records ("Stop the session
 to change the layout.").
 
-**Add station (+)** asks for the role (default: the last station's) and a name (prefilled, like
+**Add station (+ Station)** asks for the role (default: the last station's) and a name (prefilled, like
 "S5 QA test"), puts the station in the middle of the view (or the nearest free spot), and opens
 its **Connect a camera** sheet.
 

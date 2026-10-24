@@ -86,7 +86,7 @@ right of S3.
 - **Look around.** Drag the floor (or a card outside its buttons), or scroll with two fingers, to
   move it. Pinch or ctrl+scroll to zoom. Bottom right: zoom out, the zoom (click it for 100%), zoom
   in, and **Fit** (every station in view). The browser remembers where you were.
-- **Add a station.** Press **+**, pick its role (which trained station it is: Cut and strip, Crimp
+- **Add a station.** Press **+ Station**, pick its role (which trained station it is: Cut and strip, Crimp
   side A, Crimp side B or QA test) and a name, then **Add station**. It appears in the middle of the
   screen with **Connect a camera** open. The models do not change: the new station runs its role's.
 - **Move, rename, reorder or remove.** Press **Edit layout**. Drag a card to its spot on the floor.

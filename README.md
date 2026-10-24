@@ -38,7 +38,7 @@ Open http://localhost:4173 in **Chrome**. It opens the wire line (`/line`):
    CSVs.
 
 The floor pans (drag it, or scroll with two fingers) and zooms (pinch, or the buttons at the bottom
-right; **Fit** shows every station). **+** adds a station; **Edit layout** moves, renames,
+right; **Fit** shows every station). **+ Station** adds a station; **Edit layout** moves, renames,
 reorders or removes them and switches between saved layouts. Each station's **Op** chip takes the
 operator's code and training level.
 
