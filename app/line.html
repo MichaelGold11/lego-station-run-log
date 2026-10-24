@@ -2057,12 +2057,13 @@ details.raw[open] summary { margin-right: 6px; }
     if (!l) { if (undo) undo(); return null; }
     mutate(l);
     await reconcile(l);
-    clearTimeout(G.layT);
+    G.layT = G.layT || {};
+    clearTimeout(G.layT[l.id]);    // one pending save per layout: an edit on another layout does not cancel this one
     const put = async () => {
       try { await api('PUT', '/api/line/layouts/' + encodeURIComponent(l.id), layoutBody(l)); banner('layout-save', ''); }
       catch (e) { banner('layout-save', 'The layout was not saved: ' + esc(e.message), 'crit'); }
     };
-    if (soon) G.layT = setTimeout(put, 400); else { await put(); loadPhoneInfo(); }
+    if (soon) G.layT[l.id] = setTimeout(put, 400); else { await put(); loadPhoneInfo(); }
     return l;
   }
   function renderLayoutUi() {
@@ -2250,6 +2251,11 @@ details.raw[open] summary { margin-right: 6px; }
   $('floor').addEventListener('pointercancel', floorUp);
   $('floor').addEventListener('wheel', floorWheel, { passive: false });
   if (window.ResizeObserver) new ResizeObserver(() => { if (V.auto && LIST.length) fitView(true); }).observe($('floor'));
+  // A click anywhere else closes the operator panels and Add a station.
+  document.addEventListener('pointerdown', e => {
+    for (const st of LIST) if (!st.opPop.hidden && !st.opPop.contains(e.target) && !st.opBtn.contains(e.target)) st.opPop.hidden = true;
+    if (!$('addPanel').hidden && !$('addPanel').contains(e.target) && !$('btnAdd').contains(e.target)) closeAdd();
+  }, true);
   $('laySel').onchange = () => { const l = G.layouts.find(x => x.id === $('laySel').value); $('laySel').blur(); if (l && l.id !== G.layout.id) switchLayout(l); };
   $('layName').onchange = () => { const v = $('layName').value.trim(); if (G.layout.builtIn || !v || v === G.layout.name) { renderLayoutUi(); return; } commitLayout(l => { l.name = v; }, true); };
   $('layName').onkeydown = e => { if (e.key === 'Enter') e.target.blur(); };
