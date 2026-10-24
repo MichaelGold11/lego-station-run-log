@@ -59,7 +59,7 @@ async function stopServer() {
 // Ready when both listeners have spoken (the phone one makes its certificate first: about a second).
 async function ready() {
   for (let i = 0; i < 300; i++) {
-    if (/localhost:\d+/.test(log) && /iPhone cameras:/.test(log)) return true;
+    if (/localhost:\d+/.test(log) && /Phone cameras:/.test(log)) return true;
     if (server.exitCode != null) return false;
     await new Promise(r => setTimeout(r, 100));
   }
@@ -202,6 +202,95 @@ try {
   const noV = await req('GET', `/api/sessions/${id}/verdicts.csv`);
   check('a session without verdicts gives just the header', noV.status === 200 && noV.text.trim().split('\n').length === 1);
 
+  console.log('floor layouts');
+  const lfile = path.join(DATA, 'meta', 'wire-line-layouts.json');
+  const L0 = await req('GET', '/api/line/layouts');
+  check('GET /api/line/layouts: Class test is built in and active, the L of the config\'s four stations, plus the roles', L0.status === 200 && L0.json.active === 'class-test' && L0.json.layouts.length === 1 && L0.json.layouts[0].builtIn && L0.json.layouts[0].stations.map(s => s.x + ',' + s.y).join(' ') === '0,0 0,560 760,560 1520,560' && L0.json.roles.map(r => r.id).join() === 's1,s2,s3,s4', L0.text.slice(0, 300));
+  const six = { name: 'Six stations', stations: [
+    { id: 's1', name: 'S1 Cut and strip', role: 's1', x: 0, y: 0 }, { id: 's2', name: 'S2 Crimp side A', role: 's2', x: 0, y: 560 },
+    { id: 's3', name: 'S3 Crimp side B', role: 's3', x: 760, y: 560 }, { id: 's4', name: 'S4 QA test', role: 's4', x: 1520, y: 560 },
+    { id: 's5', name: 'S5 QA test', role: 's4', x: 2280.4, y: 560 }, { id: 's6', name: 'S6 Crimp side A', role: 's2', x: 760, y: 0 }] };
+  const cr = await req('POST', '/api/line/layouts', six, jsonHdr);
+  const lid = cr.json && cr.json.layout && cr.json.layout.id;
+  check('POST saves a layout with a new id; positions are rounded to floor units', cr.status === 200 && /^l-[a-f0-9]{8}$/.test(lid || '') && cr.json.layout.stations[4].x === 2280, cr.text.slice(0, 300));
+  check('saved layouts live in meta/wire-line-layouts.json in the data folder (not the built-in)', fs.existsSync(lfile) && JSON.parse(fs.readFileSync(lfile, 'utf8')).layouts.map(l => l.id).join() === lid);
+  const ren = await req('PUT', `/api/line/layouts/${lid}`, Object.assign({}, six, { name: 'Six stations, renamed' }), jsonHdr);
+  const L1 = (await req('GET', '/api/line/layouts')).json;
+  check('PUT renames it; GET lists the built-in first, then the saved ones, and loads them back', ren.status === 200 && L1.layouts.length === 2 && L1.layouts[0].id === 'class-test' && L1.layouts[1].name === 'Six stations, renamed' && L1.layouts[1].stations.length === 6 && L1.layouts[1].stations[5].id === 's6');
+  const bi = [await req('PUT', '/api/line/layouts/class-test', six, jsonHdr), await req('DELETE', '/api/line/layouts/class-test')];
+  check('Class test is protected: PUT and DELETE get 409 built_in', bi.every(r => r.status === 409 && r.json.code === 'built_in'), bi.map(r => r.status).join());
+  const st0 = six.stations[0], badL = [
+    { name: 'x', stations: [Object.assign({}, st0, { role: 's9' })] }, { name: 'x', stations: [st0, st0] }, { name: 'x', stations: [Object.assign({}, st0, { id: '../x' })] },
+    { name: 'x', stations: [Object.assign({}, st0, { name: '  ' })] }, { name: ' ', stations: [] }, { name: 'x', stations: [Object.assign({}, st0, { x: 'left' })] }, { name: 'x' }];
+  const badR = [];
+  for (const b of badL) badR.push((await req('POST', '/api/line/layouts', b, jsonHdr)).status);
+  check('a bad layout is refused: an unknown role, a station twice, a bad id, no station name, no layout name, a position that is not a number, no list', badR.every(c => c === 400), badR.join());
+  const nf = [await req('PUT', '/api/line/layouts/l-00000000', six, jsonHdr), await req('DELETE', '/api/line/layouts/l-00000000'), await req('POST', '/api/line/layouts/l-00000000/use', {}, jsonHdr)];
+  const mal = await req('DELETE', '/api/line/layouts/..%2Fx');
+  check('a layout that does not exist gets 404, a malformed id 400', nf.every(r => r.status === 404) && mal.status === 400, nf.map(r => r.status).join() + ',' + mal.status);
+  const tmpL = await req('POST', '/api/line/layouts', { name: 'Scratch', stations: [] }, jsonHdr);
+  const useT = await req('POST', `/api/line/layouts/${tmpL.json.layout.id}/use`, {}, jsonHdr);
+  const delT = await req('DELETE', `/api/line/layouts/${tmpL.json.layout.id}`);
+  check('an empty layout can be saved and used; deleting the active one goes back to Class test', tmpL.status === 200 && useT.status === 200 && delT.status === 200 && delT.json.active === 'class-test' && !(await req('GET', '/api/line/layouts')).json.layouts.some(l => l.id === tmpL.json.layout.id));
+  const useL = await req('POST', `/api/line/layouts/${lid}/use`, {}, jsonHdr);
+  check('use makes a saved layout the active one', useL.status === 200 && (await req('GET', '/api/line/layouts')).json.active === lid);
+  await req('POST', '/api/line/layouts/class-test/use', {}, jsonHdr);
+
+  console.log('setup per station and role');
+  const s5set = await req('PUT', '/api/line/setup', { s1: setup.s1, 's5:s4': { zones: { bulb: { x: 0.4, y: 0.4, w: 0.1, h: 0.1 }, supply: { x: 0, y: 0, w: 0.1, h: 0.1 } }, calib: { motion: { bulb: 0.01 }, bright: { bulb: { off: 40, on: 200 } } } } }, jsonHdr);
+  const got5 = (await req('GET', '/api/line/setup')).json;
+  check('station s5 running role s4 keeps its zones under "s5:s4", with role s4\'s zones only', s5set.status === 200 && got5['s5:s4'] && got5['s5:s4'].zones.bulb.w === 0.1 && !got5['s5:s4'].zones.supply && got5['s5:s4'].calib.bright.bulb.on === 200 && got5.s1.zones.supply, JSON.stringify(got5));
+  const badSet = [await req('PUT', '/api/line/setup', { 's5:s9': { zones: {} } }, jsonHdr), await req('PUT', '/api/line/setup', { s5: { zones: {} } }, jsonHdr), await req('PUT', '/api/line/setup', { 's5:s4:x': { zones: {} } }, jsonHdr)];
+  check('a setup key with an unknown role, a new station without its role, or a bad key is refused', badSet.every(r => r.status === 400), badSet.map(r => r.status).join());
+
+  console.log('six stations end to end (s5, s6)');
+  const lay6 = (await req('GET', '/api/line/layouts')).json.layouts.find(l => l.id === lid);
+  const sLayout = { id: lid, name: lay6.name, builtIn: false, stations: lay6.stations.map(s => Object.assign({}, s, { input: s.id === 's5' ? 'camera' : s.id === 's6' ? 'phone' : 'clip', operator: s.id === 's5' ? { code: 'Op-07', level: 'training' } : null })) };
+  const c6 = await req('POST', '/api/sessions', { title: 'Six', layout: sLayout, stations: { s5: { input: 'camera', label: 'FaceTime HD Camera', record: true }, s6: { input: 'phone', label: 'Phone', record: true } } }, jsonHdr);
+  const sid6 = c6.json && c6.json.id, d6 = path.join(DATA, 'sessions', sid6 || 'x'), sj6 = () => JSON.parse(fs.readFileSync(path.join(d6, 'session.json'), 'utf8'));
+  check('a session takes stations s5 and s6 from its layout', c6.status === 200 && sj6().stations.s5.input === 'camera' && sj6().stations.s6.input === 'phone', c6.text);
+  const lj = sj6().layout || {};
+  check('session.json records the layout at the start: per station id, name, role, x, y, order, input and operator', lj.id === lid && lj.name === 'Six stations, renamed' && lj.builtIn === false && lj.stations.length === 6 &&
+    JSON.stringify(lj.stations[4]) === JSON.stringify({ id: 's5', name: 'S5 QA test', role: 's4', x: 2280, y: 560, order: 5, input: 'camera', operator: { code: 'Op-07', level: 'training' } }) && lj.stations[0].operator === null, JSON.stringify(lj).slice(0, 400));
+  check('session.json keeps the config as written (4 roles) and the current operator per station', sj6().config.stations.length === 4 && sj6().operators.s5.code === 'Op-07' && sj6().operators.s5.level === 'training');
+  const noSt = await req('POST', '/api/sessions', { layout: sLayout, stations: { s7: { input: 'clip' } } }, jsonHdr);
+  const named = await req('POST', '/api/sessions', { layout: Object.assign({}, sLayout, { stations: [Object.assign({}, sLayout.stations[0], { operator: { code: 'Michael', level: 'new' } })] }) }, jsonHdr);
+  check('at the start, a station not in the layout or an operator with a name is refused', noSt.status === 400 && named.status === 400, noSt.status + ',' + named.status);
+  const t6 = c6.json.startedAtMs;
+  const ev6 = [
+    { type: 'session_start', t: t6, source: 'page' },
+    { type: 'operator', station: 's5', code: 'Op-07', level: 'training', t: t6 },
+    { type: 'substep', station: 's5', substep: 's4_pick', move: 'start', source: 'zones', conf: 0.5, t: t6 + 1000, cycle: 1, videoT: 0.8, videoFile: 's5.webm' },
+    { type: 'substep', station: 's5', substep: 's4_sort', move: 'next', source: 'zones', conf: 0.5, t: t6 + 7000, cycle: 1, videoT: 6.8, videoFile: 's5.webm' },
+    { type: 'cycle_end', station: 's5', substep: 's4_sort', source: 'zones', conf: 0.5, t: t6 + 7000, cycle: 1, dur: 6 },
+    { type: 'qa_result', station: 's5', cycle: 1, t: t6 + 7000, result: 'pass', reason: null, light: true, bin: 'pass', source: 'zones' },
+    { type: 'substep', station: 's6', substep: 's2_pick', move: 'start', source: 'zones', conf: 0.5, t: t6 + 2000, cycle: 1 },
+    { type: 'substep', station: 's6', substep: 's2_handoff', move: 'next', source: 'zones', conf: 0.5, t: t6 + 9000, cycle: 1 },
+    { type: 'cycle_end', station: 's6', substep: 's2_handoff', source: 'zones', conf: 0.5, t: t6 + 9000, cycle: 1, dur: 7 },
+    { type: 'operator', station: 's6', code: 'Op-11', level: 'certified', t: t6 + 9500, name: 'should not be kept' },
+    { type: 'operator', station: 's5', code: null, level: null, t: t6 + 9600 }
+  ];
+  const p6 = await req('POST', `/api/sessions/${sid6}/events`, { events: ev6 }, jsonHdr);
+  check('events for s5 and s6, operator events included, are accepted', p6.status === 200 && p6.json.appended === ev6.length, p6.text);
+  const opLine = fs.readFileSync(path.join(d6, 'events.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l)).find(e => e.type === 'operator' && e.station === 's6');
+  check('an operator event keeps only station, code and level (an extra field about the person is dropped)', opLine && opLine.code === 'Op-11' && opLine.level === 'certified' && !('name' in opLine), JSON.stringify(opLine));
+  const badOps = [
+    { type: 'operator', station: 's5', code: 'Michael', level: 'new', t: t6 + 9700 }, { type: 'operator', station: 's5', code: 'Op-07', level: 'expert', t: t6 + 9700 },
+    { type: 'operator', code: 'Op-07', level: 'new', t: t6 + 9700 }, { type: 'substep', station: 's7', substep: 's2_pick', t: t6 + 9700 }];
+  const badOpR = [];
+  for (const e of badOps) badOpR.push((await req('POST', `/api/sessions/${sid6}/events`, { events: [e] }, jsonHdr)).status);
+  check('refused: an operator with a name, a level that does not exist, no station; an event for a station not in the layout', badOpR.every(c => c === 400), badOpR.join());
+  const v5 = await req('POST', `/api/sessions/${sid6}/video/s5?seq=0&t0=${t6 + 200}`, A, vh), v7 = await req('POST', `/api/sessions/${sid6}/video/s7?seq=0`, A, vh);
+  check('Rec: s5 records into s5.webm; a station not in the layout gets 400', v5.status === 200 && fs.existsSync(path.join(d6, 's5.webm')) && v7.status === 400 && !fs.existsSync(path.join(d6, 's7.webm')), v5.status + ',' + v7.status);
+  const end6 = await req('POST', `/api/sessions/${sid6}/end`, {}, jsonHdr);
+  const sum6 = end6.json.summary;
+  check('the summary covers the layout\'s stations: s5 is a QA station, so its unit counts', sum6 && sum6.stations.s5 && sum6.stations.s6 && sum6.stations.s5.cycles === 1 && sum6.line.units === 1 && sum6.line.passed === 1, JSON.stringify(sum6 && sum6.line).slice(0, 300));
+  check('after the operator events, session.json says s6 is Op-11 (certified) and s5 has nobody', sj6().operators.s6.code === 'Op-11' && sj6().operators.s6.level === 'certified' && sj6().operators.s5 === null, JSON.stringify(sj6().operators));
+  const sc6 = (await req('GET', `/api/sessions/${sid6}/substeps.csv`)).text.trim().split('\n'), cc6 = (await req('GET', `/api/sessions/${sid6}/cycles.csv`)).text.trim().split('\n');
+  check('substeps.csv carries s5 and s6 with their role\'s substep labels and the video position', sc6.some(l => l.startsWith(sid6 + ',,,s5,1,1,s4_pick,Take unit from the in tray,start,zones,1,') && l.endsWith(',s5.webm,0.8')) && sc6.some(l => l.includes(',s6,1,2,s2_handoff,Pass to station 3,')), sc6.join(' / '));
+  check('cycles.csv has an s5 QA row (pass) and an s6 row', cc6.some(l => l.includes(',s5,detected,1,zones,') && l.includes(',pass,')) && cc6.some(l => l.includes(',s6,detected,1,zones,2,9,7,')), cc6.join(' / '));
+  check('a session from before the canvas (no layout) still exports as before', !sj().layout && (await req('GET', `/api/sessions/${id}/cycles.csv`)).text.trim().split('\n').length === 4);
+
   console.log('path tricks are refused');
   const outside = path.join(DATA, 'evil.webm');
   const trav = [
@@ -229,7 +318,7 @@ try {
   const okOrigin = await req('POST', '/api/sessions', { title: 'origin ok', stations: { s4: { input: 'none' } } }, Object.assign({ Origin: 'http://localhost:' + PORT }, jsonHdr));
   check('a POST with the matching Origin still works', okOrigin.status < 300 && okOrigin.json && okOrigin.json.id, okOrigin.text);
 
-  console.log('iPhone cameras: certificate');
+  console.log('phone cameras: certificate');
   const info = (await req('GET', '/api/phone/info')).json;
   const CD = path.join(DATA, 'phone-cert'), OSSL = findOpenssl();
   if (!info.on) {
@@ -296,7 +385,7 @@ try {
       check('the data server (HTTP ' + PORT + ') is not reachable on ' + a.address, plain !== 'connected', plain);
     }
 
-    console.log('iPhone cameras: per-station keys');
+    console.log('phone cameras: per-station keys');
     const keys = info.keys || {}, ids = ['s1', 's2', 's3', 's4'];
     check('/api/phone/info gives each station its own 16-character key, and no shared token', ids.every(id => /^[A-Za-z0-9_-]{16}$/.test(keys[id] || '')) && new Set(ids.map(id => keys[id])).size === 4 && info.token === undefined && info.hosts.length >= 1, JSON.stringify(info));
     const pg = await sreq('GET', `/phone?s=s1&k=${keys.s1}`);
@@ -312,7 +401,7 @@ try {
     iso.push((await sreq('POST', '/api/phone/rotate', { client: 'abcdefgh12' })).status, (await sreq('POST', '/api/sessions', { title: 'x' })).status);
     check('the phone port serves nothing else, even with a key: the app, data, sessions, models and /line\'s signaling all 404', iso.every(c => c === 404), iso.join());
 
-    console.log('iPhone cameras: signaling');
+    console.log('phone cameras: signaling');
     const A = 'laptopAAAA1', B = 'laptopBBBB2', P1 = 'phone11111', P2 = 'phone22222', SDP = 'v=0\r\no=- 1 2 IN IP4 127.0.0.1\r\n';
     const lpoll = (client, want) => req('POST', '/api/phone/poll', { client, want }, jsonHdr);
     const pp = (id, c) => sreq('GET', `/phone/poll?s=s1&k=${keys.s1}&id=${id}&c=${c}`);
@@ -357,7 +446,23 @@ try {
     const ps = await req('POST', '/api/sessions', { title: 'phones', stations: { s1: { input: 'phone', label: 'iPhone', record: true } } }, jsonHdr);
     check('a session keeps "phone" as a station\'s input', ps.status === 200 && JSON.parse(fs.readFileSync(path.join(DATA, 'sessions', ps.json.id, 'session.json'), 'utf8')).stations.s1.input === 'phone');
 
-    console.log('iPhone cameras: pairing code');
+    console.log('phones on a floor layout');
+    await req('POST', `/api/line/layouts/${lid}/use`, {}, jsonHdr);
+    const i6 = (await req('GET', '/api/phone/info')).json;
+    check('/api/phone/info gives a key to each station of the active layout, s5 and s6 included', Object.keys(i6.keys).sort().join() === 's1,s2,s3,s4,s5,s6' && /^[A-Za-z0-9_-]{16}$/.test(i6.keys.s5) && i6.keys.s1 === keys.s1, JSON.stringify(i6.keys));
+    const h5 = await sreq('GET', `/phone/hello?s=s5&k=${i6.keys.s5}`), pg5 = await sreq('GET', `/phone?s=s5&k=${i6.keys.s5}`);
+    check('the phone link for s5 opens the phone page, which names the station and its role', pg5.status === 200 && h5.status === 200 && h5.json.station === 's5' && h5.json.label === 'QA test' && h5.json.role === 'QA test', h5.text);
+    const no3 = await req('POST', '/api/line/layouts', { name: 'No S3', stations: six.stations.filter(x => x.id !== 's3') }, jsonHdr);
+    await req('POST', `/api/line/layouts/${no3.json.layout.id}/use`, {}, jsonHdr);
+    const secret = fs.readFileSync(path.join(CD, 'pairing-secret'), 'utf8').trim(), hkey = sid => crypto.createHmac('sha256', secret).update(sid).digest('base64url').slice(0, 16);
+    const offL = [await sreq('GET', `/phone/hello?s=s3&k=${keys.s3}`), await sreq('GET', `/phone?s=s3&k=${keys.s3}`), await sreq('POST', `/phone/offer?s=s3&k=${keys.s3}`, { client: P1, sdp: SDP }), await sreq('GET', `/phone/hello?s=s9&k=${hkey('s9')}`)];
+    const k3 = (await req('GET', '/api/phone/info')).json.keys, pl3 = await lpoll(A, ['s3', 's5']);
+    check('a station not on the active layout is refused even with its correct key (s3 removed, s9 never there)', hkey('s3') === keys.s3 && offL.every(r => r.status === 403) && !k3.s3 && k3.s5, offL.map(r => r.status).join());
+    check('/line\'s signaling ignores a station not on the layout', pl3.status === 200 && !pl3.json.phones.s3 && pl3.json.phones.s5, pl3.text);
+    await req('POST', '/api/phone/bye', { client: A }, jsonHdr);
+    await req('POST', '/api/line/layouts/class-test/use', {}, jsonHdr);
+
+    console.log('phone cameras: pairing code');
     const secret0 = fs.readFileSync(path.join(CD, 'pairing-secret'), 'utf8');
     const rot = await req('POST', '/api/phone/rotate', { client: A }, jsonHdr);
     const keys2 = (await req('GET', '/api/phone/info')).json.keys;

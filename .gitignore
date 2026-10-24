@@ -11,3 +11,5 @@ data/sessions/
 data/meta/wire-line-setup.json
 # iPhone cameras: this laptop's CA and HTTPS certificate (scripts/phone-cert.mjs). The CA key must never leave the laptop.
 data/phone-cert/
+# Floor layouts saved on this laptop (/line's Edit layout). Michael's own arrangements, not shared.
+data/meta/wire-line-layouts.json
