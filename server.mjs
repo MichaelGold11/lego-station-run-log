@@ -1,18 +1,22 @@
-// Local server for the LEGO Station Run Log.
-// Serves the app, a small JSON document store (data/<collection>/<id>.json) and the
-// uploaded files (data/assets/<id>.<ext>). No dependencies; Node 18 or newer.
-// Also serves the wire line page (/line) and its session store (data/sessions/<id>/).
+// Local server for the wire line platform. No dependencies; Node 18 or newer.
+// Serves the wire line page (/line, also where / goes) and its session store (data/sessions/<id>/), and on a second
+// port, over HTTPS on the local network, the phone camera page (/phone, any phone or tablet) that streams a phone's camera into /line.
+// Also the archived LEGO run log (/runs): its app, a small JSON document store (data/<collection>/<id>.json) and the
+// uploaded files (data/assets/<id>.<ext>).
 //
-//   npm start                  -> http://localhost:4173
+//   npm start                  -> http://localhost:4173 (the wire line), and https://<this laptop>:4174/phone for phones and tablets
 //   PORT=5000 npm start        -> another port
+//   PHONE_PORT=4175 npm start  -> another port for the phone page (PHONE_PORT=off: no phone page)
 //   DATA_DIR=/tmp/x npm start  -> another data folder (the tests use this)
 
 import http from 'node:http';
+import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { ensurePhoneCert, lanAddresses, localNames } from './scripts/phone-cert.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DATA = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(ROOT, 'data');
@@ -23,7 +27,7 @@ const PORT = Number(process.env.PORT) || 4173;
 const MAX_UPLOAD = 500 * 1024 * 1024;
 
 // /live runs the YOLO model and the hand model in the browser. WASM threads need cross-origin isolation, so /live and its
-// vendor and model files carry COOP and COEP (credentialless keeps the Google Fonts link working). / is left alone.
+// vendor and model files carry COOP and COEP (credentialless keeps the Google Fonts link working). /runs is left alone.
 // Libraries come from node_modules (npm install); if that is missing the request is sent on to the pinned jsdelivr copy.
 const ISOLATE = { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'credentialless', 'Cross-Origin-Resource-Policy': 'same-origin' };
 const DEPS = (() => { try { return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).dependencies || {}; } catch (e) { return {}; } })();
@@ -36,10 +40,16 @@ const MODELS = path.join(ROOT, 'app', 'models');
 // Wire line (/line): config, per-station setup and recorded sessions. The CSV exports use the same engine as the page.
 const SESSIONS = path.join(DATA, 'sessions');
 const SETUP_FILE = path.join(DATA, 'meta', 'wire-line-setup.json');
+const LAYOUTS_FILE = path.join(DATA, 'meta', 'wire-line-layouts.json');    // saved floor layouts and the active one (git-ignored)
 const LineEngine = (() => { const mod = { exports: {} }; new Function('module', fs.readFileSync(path.join(ROOT, 'app', 'line-engine.js'), 'utf8'))(mod); return mod.exports; })();
 const SESSION_ID = /^\d{8}-\d{6}-[a-f0-9]{4}$/;
 const STATION_ID = /^[a-z][a-z0-9_]{0,15}$/;
+const SETUP_KEY = /^([a-z][a-z0-9_]{0,15})(?::([a-z][a-z0-9_]{0,15}))?$/;    // "s2", or "s5:s4" (station s5 running role s4)
+const LAYOUT_ID = /^l-[a-f0-9]{8}$/;
+const MAX_STATIONS = 100;    // per layout: a sanity limit on the request, not a design cap
 const VIDEO_EXT = { 'video/mp4': '.mp4', 'video/webm': '.webm', 'video/x-matroska': '.mkv' };
+const PHONE_PORT = process.env.PHONE_PORT === 'off' ? 0 : Number(process.env.PHONE_PORT) || 4174;
+const CERT_DIR = path.join(DATA, 'phone-cert');
 
 // The same minimal page skeleton the claude.ai artifact viewer wraps around the app.
 const HEAD = '<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">'
@@ -137,7 +147,10 @@ async function handle(req, res) {
   const url = new URL(req.url, 'http://localhost');
   const p = decodeURIComponent(url.pathname);
 
-  if (p === '/' || p === '/index.html') {
+  // The front door is the wire line. The LEGO run log (the first study: one station's videos analyzed by an agent)
+  // lives at /runs; it uses hash routes and absolute paths, so it works there unchanged.
+  if (p === '/' || p === '/index.html') { res.writeHead(302, { Location: '/line' + url.search }); return res.end(); }
+  if (p === '/runs') {
     const html = HEAD + fs.readFileSync(APP_FILE, 'utf8') + '\n</body></html>';
     return send(res, 200, html, 'text/html; charset=utf-8');
   }
@@ -156,7 +169,9 @@ async function handle(req, res) {
   if (p === '/line') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'line.html')), 'text/html; charset=utf-8', ISOLATE);
   if (p === '/line-engine.js') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'line-engine.js')), 'text/javascript; charset=utf-8', ISOLATE);
   if (p === '/line-hands-worker.js') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'line-hands-worker.js')), 'text/javascript; charset=utf-8', ISOLATE);
+  if (p === '/vendor/qrcode.js') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'vendor', 'qrcode.js')), 'text/javascript; charset=utf-8', ISOLATE);
   if (p.startsWith('/api/line/')) return lineApi(req, res, p);
+  if (p.startsWith('/api/phone/')) return phoneApi(req, res, p);
   if (p === '/api/sessions' || p.startsWith('/api/sessions/')) return sessionsApi(req, res, p, url);
   if (p === '/local-runtime.js') return send(res, 200, fs.readFileSync(RUNTIME_FILE), 'text/javascript; charset=utf-8');
   if (p === '/api/info') return send(res, 200, { ffmpeg: hasFfmpeg, root: ROOT });
@@ -235,13 +250,15 @@ const num01 = v => typeof v === 'number' && isFinite(v) && v >= 0 && v <= 1;
 const numIn = (v, lo, hi) => typeof v === 'number' && isFinite(v) && v >= lo && v <= hi;
 const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
-// Zones, calibration and the saved correct state per station. Unknown stations are refused; zones the config no longer has are dropped.
+// Zones, calibration and the saved correct state per station and role: key "s2" (station s2 running its own role) or
+// "s5:s4" (station s5 running role s4). Unknown roles are refused; zones the role no longer has are dropped.
 function cleanSetup(body, cfg) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return { error: 'Body must be a JSON object keyed by station.' };
   const out = {};
-  for (const [sid, v] of Object.entries(body)) {
-    const st = STATION_ID.test(sid) && cfg.stations.find(s => s.id === sid);
-    if (!st) return { error: 'Unknown station "' + String(sid).slice(0, 40) + '".' };
+  for (const [key, v] of Object.entries(body)) {
+    const m = SETUP_KEY.exec(key), st = m && cfg.stations.find(s => s.id === (m[2] || m[1]));
+    if (!st) return { error: 'Unknown station "' + String(key).slice(0, 40) + '".' };
+    const sid = LineEngine.setupKey(m[1], st.id);
     if (!v || typeof v !== 'object' || Array.isArray(v)) return { error: 'Station ' + sid + ' must be an object.' };
     const zoneIds = (st.zones || []).map(z => z.id), zones = {}, motion = {}, bright = {};
     for (const [zid, r] of Object.entries(v.zones || {})) {
@@ -280,6 +297,52 @@ function cleanRef(r) {
   return { anchor: r.anchor, classes, frames: numIn(r.frames, 0, 1000) ? r.frames : null, saved: text(r.saved, 40) };
 }
 
+// ---------- wire line: floor layouts (docs/canvas-plan.md) ----------
+// The built-in Class test comes from the config (LineEngine.classTestLayout) and is never stored. Saved layouts and the
+// active one live in meta/wire-line-layouts.json: { active, layouts: [{ id, name, stations: [{ id, name, role, x, y }], updatedAt }] }.
+function readLayouts() {
+  try {
+    const j = readJson(LAYOUTS_FILE);
+    return { active: typeof j.active === 'string' ? j.active : LineEngine.CLASS_TEST, layouts: Array.isArray(j.layouts) ? j.layouts.filter(l => l && LAYOUT_ID.test(l.id)) : [] };
+  } catch (e) { return { active: LineEngine.CLASS_TEST, layouts: [] }; }
+}
+function allLayouts(cfg) { const f = readLayouts(); return { active: f.active, layouts: [LineEngine.classTestLayout(cfg)].concat(f.layouts) }; }
+function activeLayout(cfg) { const a = allLayouts(cfg); return a.layouts.find(l => l.id === a.active) || a.layouts[0]; }
+// The stations the phone listener serves: the active layout's (a phone link for a station not on the floor is refused).
+const phoneIds = cfg => (cfg ? activeLayout(cfg).stations.map(s => s.id) : []);
+const LEVEL_IDS = LineEngine.LEVELS.map(l => l.id);
+// An operator: { code: "Op-07", level: "new" | "training" | "certified" }, or null for nobody. undefined means "not valid".
+function cleanOperator(o) {
+  if (o == null || (o.code == null && o.level == null)) return null;
+  if (typeof o !== 'object' || !LineEngine.OPERATOR_CODE.test(String(o.code)) || !LEVEL_IDS.includes(o.level)) return undefined;
+  return { code: o.code, level: o.level };
+}
+// A layout from the page. session: also each station's input and operator, and its order (for session.json).
+function cleanLayout(b, cfg, session) {
+  if (!b || typeof b !== 'object' || Array.isArray(b)) return { error: 'A layout must be a JSON object.' };
+  const name = text(b.name, 60);
+  if (!name) return { error: 'A layout needs a name.' };
+  if (!Array.isArray(b.stations) || b.stations.length > MAX_STATIONS) return { error: 'stations must be a list of at most ' + MAX_STATIONS + '.' };
+  const roles = stationIds(cfg), seen = {}, stations = [];
+  for (const s of b.stations) {
+    if (!s || typeof s !== 'object' || !STATION_ID.test(String(s.id || ''))) return { error: 'Station id "' + String(s && s.id).slice(0, 40) + '" must be short lowercase letters, digits or _.' };
+    if (seen[s.id]) return { error: 'Station ' + s.id + ' appears twice.' };
+    seen[s.id] = true;
+    if (!roles.includes(s.role)) return { error: s.id + ': role "' + String(s.role).slice(0, 40) + '" is not a station of the config.' };
+    const nm = text(s.name, 40);
+    if (!nm) return { error: s.id + ' needs a name.' };
+    if (!numIn(s.x, -1e5, 1e5) || !numIn(s.y, -1e5, 1e5)) return { error: s.id + ': x and y must be numbers (floor units).' };
+    const out = { id: s.id, name: nm, role: s.role, x: Math.round(s.x), y: Math.round(s.y) };
+    if (session) {
+      const op = cleanOperator(s.operator);
+      if (op === undefined) return { error: s.id + ': an operator is a code like Op-07 and a level (new, training or certified). No names.' };
+      Object.assign(out, { order: stations.length + 1, input: ['camera', 'clip', 'phone', 'none'].includes(s.input) ? s.input : 'none', operator: op });
+    }
+    stations.push(out);
+  }
+  return { layout: { name, stations } };
+}
+
 // Labels for the recorded LEGO runs, so the clip list says "Run 1" instead of a hash.
 function runLabels() {
   const out = {}, dir = path.join(DATA, 'runs');
@@ -308,6 +371,53 @@ async function lineApi(req, res, p) {
     if (r.error) return fail(res, 400, 'invalid_argument', r.error);
     writeJson(SETUP_FILE, r.setup);
     return send(res, 200, { ok: true, setup: r.setup });
+  }
+  if (p === '/api/line/layouts' || p.startsWith('/api/line/layouts/')) {
+    const cfg = lineConfig();
+    if (!cfg) return fail(res, 500, 'unavailable', 'data/meta/wire-line.json is missing or is not valid JSON.');
+    const roles = (cfg.stations || []).map(s => ({ id: s.id, label: s.label }));
+    if (p === '/api/line/layouts') {
+      if (req.method === 'GET') return send(res, 200, Object.assign(allLayouts(cfg), { roles }));
+      if (req.method !== 'POST') return fail(res, 405, 'invalid_argument', 'Method not allowed.');
+      let body;
+      try { body = JSON.parse((await readBody(req, 256 * 1024)).toString('utf8')); } catch (e) { return fail(res, 400, 'invalid_argument', 'Body must be JSON.'); }
+      const r = cleanLayout(body, cfg);
+      if (r.error) return fail(res, 400, 'invalid_argument', r.error);
+      const f = readLayouts();
+      if (f.layouts.length >= 200) return fail(res, 400, 'invalid_argument', 'Too many saved layouts: delete some first.');
+      const layout = Object.assign({ id: 'l-' + crypto.randomBytes(4).toString('hex') }, r.layout, { updatedAt: new Date().toISOString() });
+      f.layouts.push(layout);
+      writeJson(LAYOUTS_FILE, f);
+      return send(res, 200, { ok: true, layout });
+    }
+    const m = /^\/api\/line\/layouts\/([^/]+)(\/use)?$/.exec(p), lid = m ? m[1] : '';
+    if (!m || !(lid === LineEngine.CLASS_TEST || LAYOUT_ID.test(lid))) return fail(res, 400, 'invalid_argument', 'Bad layout id.');
+    const f = readLayouts(), k = f.layouts.findIndex(l => l.id === lid);
+    if (lid !== LineEngine.CLASS_TEST && k < 0) return fail(res, 404, 'not_found', 'No such layout.');
+    if (m[2]) {
+      // The layout /line shows: the phone listener serves its stations.
+      if (req.method !== 'POST') return fail(res, 405, 'invalid_argument', 'Method not allowed.');
+      f.active = lid;
+      writeJson(LAYOUTS_FILE, f);
+      return send(res, 200, { ok: true, active: lid });
+    }
+    if (lid === LineEngine.CLASS_TEST) return fail(res, 409, 'built_in', 'Class test is built in and stays as it is. Duplicate it to change it.');
+    if (req.method === 'PUT') {
+      let body;
+      try { body = JSON.parse((await readBody(req, 256 * 1024)).toString('utf8')); } catch (e) { return fail(res, 400, 'invalid_argument', 'Body must be JSON.'); }
+      const r = cleanLayout(body, cfg);
+      if (r.error) return fail(res, 400, 'invalid_argument', r.error);
+      f.layouts[k] = Object.assign({ id: lid }, r.layout, { updatedAt: new Date().toISOString() });
+      writeJson(LAYOUTS_FILE, f);
+      return send(res, 200, { ok: true, layout: f.layouts[k] });
+    }
+    if (req.method === 'DELETE') {
+      f.layouts.splice(k, 1);
+      if (f.active === lid) f.active = LineEngine.CLASS_TEST;
+      writeJson(LAYOUTS_FILE, f);
+      return send(res, 200, { ok: true, active: f.active });
+    }
+    return fail(res, 405, 'invalid_argument', 'Method not allowed.');
   }
   if (p === '/api/line/clips') {
     const clips = [], runs = runLabels();
@@ -374,6 +484,13 @@ function listSessions() {
   }
   return out;
 }
+// A session's stations: its layout's (sessions since the floor canvas), else its config's.
+function sessionIds(doc) {
+  if (doc.layout && Array.isArray(doc.layout.stations)) return doc.layout.stations.map(s => s.id);
+  return stationIds(doc.config).length ? stationIds(doc.config) : stationIds(lineConfig());
+}
+// The config a session's summary and exports run on: its config snapshot with its layout applied.
+function sessionConfig(doc) { const cfg = doc.config || lineConfig(); return doc.layout ? LineEngine.applyLayout(cfg, doc.layout) : cfg; }
 function newSessionId() {
   const d = new Date(), z = n => String(n).padStart(2, '0');
   return `${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}-${crypto.randomBytes(2).toString('hex')}`;
@@ -383,6 +500,7 @@ function cleanEvent(e, ids) {
   if (!LineEngine.EVENT_TYPES.includes(e.type)) return 'has an unknown type';
   if (typeof e.t !== 'number' || !isFinite(e.t)) return 'has no time t';
   if (e.station != null && !ids.includes(e.station)) return 'names an unknown station';
+  if (e.type === 'operator' && (e.station == null || cleanOperator({ code: e.code, level: e.level }) === undefined)) return 'needs a station, a code like Op-07 and a level (no names)';
   if (JSON.stringify(e).length > 4000) return 'is too long';
   return null;
 }
@@ -396,10 +514,18 @@ async function sessionsApi(req, res, p, url) {
     let body;
     try { body = JSON.parse((await readBody(req, 256 * 1024)).toString('utf8') || '{}'); } catch (e) { return fail(res, 400, 'invalid_argument', 'Body must be JSON.'); }
     if (!body || typeof body !== 'object' || Array.isArray(body)) return fail(res, 400, 'invalid_argument', 'Body must be a JSON object.');
-    const ids = stationIds(cfg), stations = {};
+    // The floor layout at the start: its stations are the session's (s5, s6 ...), each with its role, position, input and operator.
+    let layout = null, ids = stationIds(cfg);
+    if (body.layout != null) {
+      const r = cleanLayout(body.layout, cfg, true);
+      if (r.error) return fail(res, 400, 'invalid_argument', 'Layout: ' + r.error);
+      layout = Object.assign({ id: text(body.layout.id, 40) || null }, r.layout, { builtIn: body.layout.builtIn === true });
+      ids = layout.stations.map(s => s.id);
+    }
+    const stations = {};
     for (const [sid, v] of Object.entries(body.stations || {})) {
       if (!ids.includes(sid)) return fail(res, 400, 'invalid_argument', 'Unknown station "' + String(sid).slice(0, 40) + '".');
-      const input = v && ['camera', 'clip', 'none'].includes(v.input) ? v.input : 'none';
+      const input = v && ['camera', 'clip', 'phone', 'none'].includes(v.input) ? v.input : 'none';
       stations[sid] = { input, label: text(v && v.label, 200), record: !!(v && v.record) };
     }
     let setup = {};
@@ -411,6 +537,12 @@ async function sessionsApi(req, res, p, url) {
       client: body.client && typeof body.client === 'object' && JSON.stringify(body.client).length <= 2000 ? body.client : {},
       config: cfg, setup, recordings: {}
     };
+    if (layout) {
+      doc.layout = layout;
+      // The current operator per station, kept up to date from the operator events.
+      doc.operators = {};
+      for (const st of layout.stations) if (st.operator) doc.operators[st.id] = Object.assign({ at: doc.startedAt }, st.operator);
+    }
     fs.mkdirSync(path.join(SESSIONS, id), { recursive: true });
     fs.writeFileSync(path.join(SESSIONS, id, 'events.jsonl'), '');
     SESS.set(id, { doc, timer: null });
@@ -424,7 +556,7 @@ async function sessionsApi(req, res, p, url) {
   if (!SESSION_ID.test(id)) return fail(res, 400, 'invalid_argument', 'Bad session id.');
   if (!fs.existsSync(sessionFile(id))) return fail(res, 404, 'not_found', 'No such session.');
   const S = loadSession(id), doc = S.doc, dir = path.join(SESSIONS, id);
-  const ids = stationIds(doc.config).length ? stationIds(doc.config) : stationIds(lineConfig());
+  const ids = sessionIds(doc);
 
   if (!rest.length) {
     if (req.method !== 'GET') return fail(res, 405, 'invalid_argument', 'Method not allowed.');
@@ -443,6 +575,14 @@ async function sessionsApi(req, res, p, url) {
         const why = cleanEvent(list[i], ids);
         if (why) return fail(res, 400, 'invalid_argument', 'Event ' + i + ' ' + why + '.');
         if (typeof list[i].ts !== 'number') list[i].ts = Math.round((list[i].t - doc.startedAtMs)) / 1000;
+        // An operator event keeps its known fields only (nothing about the person can ride along), and updates the current operator.
+        if (list[i].type === 'operator') {
+          const e = list[i];
+          list[i] = { type: 'operator', t: e.t, ts: e.ts, station: e.station, code: e.code == null ? null : e.code, level: e.level == null ? null : e.level };
+          doc.operators = doc.operators || {};
+          if (e.code == null) doc.operators[e.station] = null; else doc.operators[e.station] = { code: e.code, level: e.level, at: new Date(e.t).toISOString() };
+          saveSession(id, false);
+        }
       }
       if (list.length) fs.appendFileSync(path.join(dir, 'events.jsonl'), list.map(e => JSON.stringify(e)).join('\n') + '\n');
       return send(res, 200, { ok: true, appended: list.length });
@@ -450,7 +590,7 @@ async function sessionsApi(req, res, p, url) {
     if (what === 'end' && req.method === 'POST') {
       try { await readBody(req, 64 * 1024); } catch (e) { /* ignore the body */ }
       if (!doc.endedAt) { doc.endedAt = new Date().toISOString(); doc.endedAtMs = Date.now(); }
-      try { doc.summary = LineEngine.summarize(readEvents(id), doc.config || lineConfig(), { now: doc.endedAtMs }); } catch (e) { doc.summary = null; console.error(e); }
+      try { doc.summary = LineEngine.summarize(readEvents(id), sessionConfig(doc), { now: doc.endedAtMs }); } catch (e) { doc.summary = null; console.error(e); }
       saveSession(id, true);
       return send(res, 200, Object.assign({}, doc, { videos: videoList(doc) }));
     }
@@ -459,7 +599,7 @@ async function sessionsApi(req, res, p, url) {
     }
     if ((what === 'substeps.csv' || what === 'cycles.csv' || what === 'verdicts.csv' || what === 'units.csv') && req.method === 'GET') {
       const meta = { id, crew: doc.crew, shift: doc.shift, startedAtMs: doc.startedAtMs };
-      const cfg = doc.config || lineConfig();
+      const cfg = sessionConfig(doc);
       const fn = { 'substeps.csv': LineEngine.substepsCsv, 'cycles.csv': LineEngine.cyclesCsv, 'verdicts.csv': LineEngine.verdictsCsv, 'units.csv': LineEngine.unitsCsv }[what];
       const csv = fn(readEvents(id), cfg, meta);
       return send(res, 200, csv, 'text/csv; charset=utf-8', { 'Content-Disposition': `attachment; filename="${id}-${what}"` });
@@ -508,10 +648,214 @@ async function sessionsApi(req, res, p, url) {
   return fail(res, 400, 'invalid_argument', 'Bad session path.');
 }
 
+// ---------- phone cameras (any phone or tablet): the HTTPS listener for the phone page, and the WebRTC signaling ----------
+// Phone browsers (Safari, Chrome) only open the camera on a secure page, so phones get their own listener: HTTPS on every interface
+// (IPv6 and IPv4) on PHONE_PORT, with the certificate from scripts/phone-cert.mjs. It serves the phone page, the CA
+// download (/ca.crt) and the phone half of the signaling, nothing else: the data, session and model API stay on the
+// localhost server above. The video goes from the phone to /line directly over WebRTC on the local network (no STUN,
+// no TURN); this server only passes one offer and one answer per connection. Every phone request needs its station's
+// key (k=), which only /line shows.
+//   phone: POST /phone/offer, then GET /phone/poll until the answer comes, then every 2 s as a heartbeat
+//   /line: POST /api/phone/poll (the stations that want a phone; returns their offers), /api/phone/answer, /drop, /bye
+// A new offer for a station replaces the one before it. The phone sends a new one by itself when its connection drops
+// or /line lets go of it (a reload, another source picked).
+// Each station has its own key: HMAC-SHA256(pairing secret, station id), 16 base64url characters (96 bits). So the link
+// for S1 cannot be edited into S2's and take over S2's phone. The secret is kept in <data>/phone-cert/pairing-secret, so
+// phones keep working across restarts. "New pairing code" on /line (POST /api/phone/rotate) replaces it and cuts off every phone.
+const PH = { on: false, server: null, cert: null, error: '', secret: null, slots: {}, laptops: new Map(), checkedAt: 0 };
+const SECRET_FILE = path.join(CERT_DIR, 'pairing-secret');
+const SECRET_RE = /^[A-Za-z0-9_-]{32,128}$/;
+const PHONE_SEEN_MS = 10000;     // a phone that has not polled for this long is gone: /line does not get its offer
+const LAPTOP_SEEN_MS = 10000;    // likewise a /line page: what it answered is dropped, so its phones send new offers
+const CLIENT_ID = /^[A-Za-z0-9_-]{8,40}$/;
+const PHONE_HDR = { 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' };
+const PHONE_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; media-src blob: mediastream:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+
+const stationKey = sid => crypto.createHmac('sha256', PH.secret).update(sid).digest('base64url').slice(0, 16);
+function keyOk(sid, k) {
+  if (!PH.secret) return false;
+  const a = Buffer.from(String(k || '')), b = Buffer.from(stationKey(sid));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+// Read the saved pairing secret, or make one (fresh: a new one). If it cannot be saved it still works until the next start.
+function loadSecret(fresh) {
+  if (!fresh) { try { const t = fs.readFileSync(SECRET_FILE, 'utf8').trim(); if (SECRET_RE.test(t)) return (PH.secret = t); } catch (e) { /* none yet */ } }
+  PH.secret = crypto.randomBytes(32).toString('base64url');
+  try { fs.mkdirSync(CERT_DIR, { recursive: true }); fs.writeFileSync(SECRET_FILE, PH.secret + '\n', { mode: 0o600 }); }
+  catch (e) { console.error('Phone cameras: could not save the pairing secret in ' + SECRET_FILE + ': ' + (e && e.message || e)); }
+  return PH.secret;
+}
+// Where a phone can reach this laptop, best first. On a Mac the Bonjour name (<LocalHostName>.local) leads: it keeps
+// working when the address changes, and it is the only way in on an IPv6-only hotspot besides the raw IPv6 address.
+function phoneHosts() {
+  const named = localNames().map(n => ({ host: n, kind: 'name' }));
+  const addrs = lanAddresses().map(a => ({ host: a.family === 6 ? '[' + a.address + ']' : a.address, kind: a.kind, iface: a.iface }));
+  return process.platform === 'darwin' ? named.concat(addrs) : addrs.concat(named);
+}
+// Load or make the certificate. A new network gives the laptop new addresses: then it is reissued (same CA) and the
+// running listener switches to it, so a phone that trusted the CA keeps working.
+function loadPhoneCert() {
+  PH.checkedAt = Date.now();
+  try {
+    const c = ensurePhoneCert(CERT_DIR);
+    if (c.created) console.log('Phone cameras: made a new local CA in ' + CERT_DIR + '. Phones that trusted an older one must install this one.');
+    else if (c.reissued) console.log('Phone cameras: new certificate for ' + c.names.concat(c.ips).join(', '));
+    if (c.reissued || !PH.cert) { PH.cert = c; if (PH.server) PH.server.setSecureContext({ key: c.key, cert: c.cert }); }
+    PH.error = '';
+  } catch (e) { PH.error = String(e && e.message || e); console.error('Phone cameras: ' + PH.error); }
+  return PH.cert;
+}
+function laptopsAlive() {
+  const t = Date.now();
+  for (const [id, c] of PH.laptops) if (t - c.seen > LAPTOP_SEEN_MS) { PH.laptops.delete(id); dropAnswered(id); }
+  return PH.laptops;
+}
+function dropAnswered(client, only) { for (const [sid, s] of Object.entries(PH.slots)) if (s.state === 'answered' && s.laptop === client && (!only || only === sid)) s.state = 'dropped'; }
+// For the phone's screen: a /line page wants this station's phone ('open'), /line is open with another source there
+// ('not_picked'), or no /line page is open ('closed').
+function laptopState(sid) {
+  const ls = laptopsAlive();
+  if (!ls.size) return 'closed';
+  for (const c of ls.values()) if (c.want.has(sid)) return 'open';
+  return 'not_picked';
+}
+const sdpOk = v => typeof v === 'string' && v.startsWith('v=0') && v.length <= 100000;
+const cleanSettings = v => (v && typeof v === 'object' ? { width: numIn(v.width, 1, 10000) ? v.width : null, height: numIn(v.height, 1, 10000) ? v.height : null, frameRate: numIn(v.frameRate, 0, 240) ? v.frameRate : null } : {});
+
+// /line's half (localhost only, behind the guard in handle()).
+async function phoneApi(req, res, p) {
+  if (p === '/api/phone/info') {
+    if (req.method !== 'GET') return fail(res, 405, 'invalid_argument', 'Method not allowed.');
+    if (PH.on && Date.now() - PH.checkedAt > 5000) loadPhoneCert();
+    const keys = {};
+    if (PH.on) for (const sid of phoneIds(lineConfig())) keys[sid] = stationKey(sid);
+    // trusted: the addresses the certificate covers (no warning once the phone trusts the CA); the others always warn.
+    return send(res, 200, { on: PH.on, port: PHONE_PORT, keys, hosts: PH.on ? phoneHosts() : [], trusted: PH.cert ? PH.cert.names.concat(PH.cert.ips.map(ip => (ip.includes(':') ? '[' + ip + ']' : ip))) : [],
+      error: PH.error || (PHONE_PORT ? null : 'The phone page is off (PHONE_PORT=off).'), validTo: PH.cert ? PH.cert.validTo : null });
+  }
+  if (req.method !== 'POST') return fail(res, 405, 'invalid_argument', 'Method not allowed.');
+  let b;
+  try { b = JSON.parse((await readBody(req, 256 * 1024)).toString('utf8') || '{}'); } catch (e) { return fail(res, 400, 'invalid_argument', 'Body must be JSON.'); }
+  if (!b || typeof b !== 'object' || !CLIENT_ID.test(String(b.client || ''))) return fail(res, 400, 'invalid_argument', 'client must be the page id.');
+  const t = Date.now(), ids = phoneIds(lineConfig());
+  if (p === '/api/phone/bye') { dropAnswered(b.client); PH.laptops.delete(b.client); return send(res, 200, { ok: true }); }
+  if (p === '/api/phone/rotate') {
+    // A new pairing code: every phone link and QR code so far stops working, and the waiting offers are forgotten.
+    if (!PH.on) return fail(res, 409, 'unavailable', PH.error || 'The phone page is off.');
+    loadSecret(true); PH.slots = {};
+    console.log('Phone cameras: new pairing code. Phones must scan the QR code on /line again.');
+    return send(res, 200, { ok: true });
+  }
+  if (p === '/api/phone/poll') {
+    const want = new Set((Array.isArray(b.want) ? b.want : []).filter(s => ids.includes(s)));
+    laptopsAlive();
+    const me = PH.laptops.get(b.client) || { want: new Set(), seen: t };
+    for (const sid of me.want) if (!want.has(sid)) dropAnswered(b.client, sid);    // this page picked another source there
+    me.want = want; me.seen = t; PH.laptops.set(b.client, me);
+    const offers = [], phones = {};
+    for (const sid of want) {
+      const s = PH.slots[sid];
+      if (!s) { phones[sid] = { state: 'none' }; continue; }
+      let busy = false;
+      // Another /line page has this phone. If that page is gone (a reload) this one takes over; else it waits.
+      if (s.state === 'answered' && s.laptop !== b.client) { if (PH.laptops.has(s.laptop)) busy = true; else s.state = 'dropped'; }
+      const seen = t - s.lastPoll;
+      if (s.state === 'waiting' && seen < PHONE_SEEN_MS) offers.push({ station: sid, id: s.id, sdp: s.sdp, camera: s.camera, settings: s.settings });
+      phones[sid] = { state: s.state, id: s.id, seen, busy, camera: s.camera };
+    }
+    return send(res, 200, { offers, phones });
+  }
+  const sid = String(b.station || ''), s = PH.slots[sid];
+  if (!ids.includes(sid)) return fail(res, 400, 'invalid_argument', 'Unknown station.');
+  if (p === '/api/phone/answer') {
+    if (!sdpOk(b.sdp)) return fail(res, 400, 'invalid_argument', 'sdp must be a session description.');
+    if (!s || s.id !== b.id || s.state === 'dropped') return send(res, 409, { code: 'replaced', message: 'That offer is gone; the phone sends a new one.' });
+    if (s.state === 'answered' && s.laptop !== b.client) return send(res, 409, { code: 'busy', message: 'Another /line page has this phone.' });
+    Object.assign(s, { state: 'answered', answer: b.sdp, laptop: b.client, answeredAt: t });
+    return send(res, 200, { ok: true });
+  }
+  if (p === '/api/phone/drop') {
+    // /line gave up on this connection (it never connected, or it was lost): the phone's next poll says so.
+    if (s && s.id === b.id && (s.state === 'waiting' || s.laptop === b.client)) s.state = 'dropped';
+    return send(res, 200, { ok: true });
+  }
+  return fail(res, 404, 'not_found', 'Nothing here.');
+}
+
+// The page a phone gets without a valid link (a new pairing code, an edited link, a station the config does not have).
+function phoneGate() {
+  return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Wire line camera</title>'
+    + '<style>body{margin:0;padding:24px 18px;font:17px/1.45 -apple-system,system-ui,sans-serif;background:#eef0ee;color:#15181b}h1{font-size:22px;margin:0 0 10px}a{color:#a3522a;font-weight:600}'
+    + '@media (prefers-color-scheme: dark){body{background:#101214;color:#eff1ef}a{color:#dc8b55}}</style></head><body>'
+    + '<h1>This link does not work</h1><p>It is old (someone made a new pairing code on the laptop), it is not complete, or its station is not on the floor layout '
+    + 'the laptop shows. On the laptop, open <b>/line</b>, press <b>Connect a camera</b> on the station, pick <b>Phone or tablet</b>, and scan the QR code it shows '
+    + 'with this phone\'s camera.</p></body></html>';
+}
+
+// The phones' half (HTTPS on the local network). Nothing here reads or writes the data folder.
+async function phoneHandle(req, res) {
+  const url = new URL(req.url, 'https://phone'), p = url.pathname, get = req.method === 'GET' || req.method === 'HEAD';
+  const json = (code, body) => send(res, code, body, 'application/json', PHONE_HDR);
+  if (p === '/ca.crt' && get) return send(res, 200, PH.cert.caDer, 'application/x-x509-ca-cert', PHONE_HDR);
+  // Only the stations on the active floor layout: a link for a station that is not on the floor is refused.
+  const cfg = lineConfig(), lay = cfg ? activeLayout(cfg) : { stations: [] }, ids = lay.stations.map(s => s.id), sid = String(url.searchParams.get('s') || '').toLowerCase(), ok = ids.includes(sid) && keyOk(sid, url.searchParams.get('k'));
+  if ((p === '/' || p === '/phone') && get) {
+    const html = ok ? fs.readFileSync(path.join(ROOT, 'app', 'phone.html')) : phoneGate();
+    return send(res, ok ? 200 : 403, html, 'text/html; charset=utf-8', Object.assign({ 'Content-Security-Policy': PHONE_CSP }, PHONE_HDR));
+  }
+  if (!p.startsWith('/phone/')) return json(404, { code: 'not_found', message: 'Nothing here.' });
+  if (!ok) return json(403, { code: 'bad_key', message: 'This link is old or is not for this station. Scan the QR code on the laptop again.' });
+  if (p === '/phone/hello' && get) {
+    const ls = lay.stations.find(x => x.id === sid), role = cfg.stations.find(x => x.id === ls.role) || {};
+    return json(200, { station: sid, label: text(LineEngine.shortName(sid, ls.name, role.label), 80), role: text(role.label, 80), laptop: laptopState(sid) });
+  }
+  if (p === '/phone/offer' && req.method === 'POST') {
+    let b;
+    try { b = JSON.parse((await readBody(req, 128 * 1024)).toString('utf8')); } catch (e) { return json(400, { code: 'invalid_argument', message: 'Body must be JSON.' }); }
+    if (!b || typeof b !== 'object' || !CLIENT_ID.test(String(b.client || '')) || !sdpOk(b.sdp)) return json(400, { code: 'invalid_argument', message: 'Send { client, sdp } with the offer.' });
+    const id = crypto.randomBytes(8).toString('hex'), t = Date.now();
+    PH.slots[sid] = { id, client: b.client, sdp: b.sdp, camera: text(b.camera, 80), settings: cleanSettings(b.settings), at: t, lastPoll: t, state: 'waiting', answer: null, laptop: null };
+    return json(200, { id, laptop: laptopState(sid) });
+  }
+  if (p === '/phone/poll' && get) {
+    const s = PH.slots[sid], laptop = laptopState(sid);
+    // Not this phone's offer any more: another phone took the station ('replaced'), or the server forgot it ('unknown': send a new one).
+    if (!s || s.id !== url.searchParams.get('id')) return json(200, { state: s && s.client !== url.searchParams.get('c') ? 'replaced' : 'unknown', laptop });
+    s.lastPoll = Date.now();
+    return json(200, { state: s.state, answer: s.state === 'answered' ? s.answer : null, laptop });
+  }
+  return json(405, { code: 'invalid_argument', message: 'Method not allowed.' });
+}
+
+function startPhone() {
+  if (!PHONE_PORT || !loadPhoneCert()) return;    // no certificate: /line shows why next to each phone source
+  loadSecret(false);
+  const server = https.createServer({ key: PH.cert.key, cert: PH.cert.cert }, (req, res) => {
+    phoneHandle(req, res).catch(e => { console.error(e); if (!res.headersSent) send(res, 500, { code: 'unavailable', message: 'The laptop had a problem.' }, 'application/json', PHONE_HDR); });
+  });
+  let host = '::';    // dual stack: IPv6 (an iPhone hotspot can be IPv6 only) and IPv4
+  server.on('error', e => {
+    if (host === '::' && (e.code === 'EAFNOSUPPORT' || e.code === 'EADDRNOTAVAIL')) { host = '0.0.0.0'; server.listen(PHONE_PORT, host); return; }    // no IPv6 here
+    PH.on = false;
+    PH.error = e.code === 'EADDRINUSE' ? 'Port ' + PHONE_PORT + ' is busy (another npm start?). Stop it, or start with PHONE_PORT=<another port>.' : String(e && e.message || e);
+    console.error('Phone cameras: ' + PH.error);
+  });
+  PH.server = server;
+  server.listen(PHONE_PORT, host, () => {
+    PH.on = true;
+    const h = phoneHosts()[0], base = `https://${h ? h.host : 'localhost'}:${PHONE_PORT}`;
+    console.log(`Phone cameras: ${base} (on /line, press Connect a camera on a station, pick Phone or tablet and scan its QR code)`);
+    const s1 = phoneIds(lineConfig())[0];
+    if (s1) console.log(`  ${s1.toUpperCase()} phone link: ${base}/phone?s=${s1}&k=${stationKey(s1)} (every station has its own key: /line shows each one's QR code)`);
+  });
+}
+
 http.createServer((req, res) => {
   handle(req, res).catch(e => { console.error(e); if (!res.headersSent) fail(res, 500, 'unavailable', String(e && e.message || e)); });
 }).listen(PORT, '127.0.0.1', () => {
-  console.log(`LEGO Station Run Log: http://localhost:${PORT}`);
+  console.log(`Wire line: http://localhost:${PORT}/line`);
+  console.log(`LEGO run log (archived): http://localhost:${PORT}/runs`);
   console.log(`Data folder: ${DATA}`);
   if (!hasFfmpeg) console.log('ffmpeg not found: uploads are stored as-is, and agents cannot analyze videos until it is installed.');
+  startPhone();
 });

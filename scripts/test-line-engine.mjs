@@ -736,5 +736,83 @@ console.log('units linked by order (units.csv)');
   check('summary: the bottleneck compares time per unit (S1 3 x 10 s = 30 s beats S3 15 s)', sum.stations.s1.unitSec === 30 && sum.line.bottleneck === 's1', sum.line.bottleneck);
 }
 
+console.log('floor layouts (docs/canvas-plan.md)');
+{
+  const ct = LE.classTestLayout(CFG);
+  check('Class test: the config\'s four stations, built in, named "S1 Cut and strip" and so on', ct.id === 'class-test' && ct.builtIn && ct.stations.map(s => s.id + '/' + s.role).join() === 's1/s1,s2/s2,s3/s3,s4/s4' && ct.stations[0].name === 'S1 Cut and strip' && ct.stations[3].name === 'S4 QA test', JSON.stringify(ct.stations));
+  check('Class test is the L from the photo: S1 on top, S2 below it, S3 right of S2, S4 right of S3', ct.stations.map(s => s.x + ',' + s.y).join(' ') === '0,0 0,560 760,560 1520,560', ct.stations.map(s => s.x + ',' + s.y).join(' '));
+  check('positions sit on the 40-unit grid', ct.stations.every(s => s.x % LE.FLOOR.grid === 0 && s.y % LE.FLOOR.grid === 0));
+  check('the next station id is the lowest free s<n>', LE.nextStationId(ct.stations) === 's5' && LE.nextStationId([{ id: 's1' }, { id: 's2' }, { id: 's4' }]) === 's3' && LE.nextStationId([]) === 's1');
+  check('setup keys: s2 for its own role, s5:s4 for station s5 running role s4', LE.setupKey('s2', 's2') === 's2' && LE.setupKey('s5', 's4') === 's5:s4' && LE.setupKey('s3') === 's3');
+  check('short name drops a leading station id only', LE.shortName('s5', 'S5 QA test', 'QA test') === 'QA test' && LE.shortName('s1', 'S10 tester', 'QA test') === 'S10 tester' && LE.shortName('s5', 'Back tester', 'QA test') === 'Back tester' && LE.shortName('s5', 'S5', 'QA test') === 'QA test');
+  const cfgM = Object.assign({}, CFG, { models: { s2: { file: '/models/crimp.onnx', classes: ['wire', 'splice', 'crimp_tool', 'crimped_splice'] } } });
+  const lay = { id: 'l-test', name: 'Two crimpers, two testers', stations: [
+    { id: 's1', name: 'S1 Cut and strip', role: 's1', x: 0, y: 0 }, { id: 's2', name: 'S2 Crimp side A', role: 's2', x: 0, y: 560 },
+    { id: 's5', name: 'S5 Crimp side A', role: 's2', x: 760, y: 560 }, { id: 's3', name: 'S3 Crimp side B', role: 's3', x: 1520, y: 560 },
+    { id: 's4', name: 'S4 QA test', role: 's4', x: 2280, y: 560 }, { id: 's6', name: 'Second tester', role: 's4', x: 3040, y: 560 },
+    { id: 's7', name: 'Ghost', role: 'nope', x: 0, y: 0 }] };
+  const eff = LE.applyLayout(cfgM, lay);
+  check('applyLayout: one station per entry in flow order, unknown roles left out', eff.stations.map(s => s.id).join() === 's1,s2,s5,s3,s4,s6' && eff.stations.map(s => s.order).join() === '1,2,3,4,5,6');
+  const s5 = eff.stations.find(s => s.id === 's5'), s6 = eff.stations.find(s => s.id === 's6');
+  check('a station is a copy of its role with its own id, name and position', s5.role === 's2' && s5.label === 'Crimp side A' && s5.name === 'S5 Crimp side A' && s5.x === 760 && s5.substeps.map(x => x.id).join() === CFG.stations[1].substeps.map(x => x.id).join() && s6.qa && s6.cycleEnds === 's4_sort');
+  check('models are keyed by station id: s5 runs its role\'s model; the config itself is untouched', eff.models.s5 && eff.models.s5.file === '/models/crimp.onnx' && eff.models.s2 && !eff.models.s1 && LE.modelFor(eff, 's5') === eff.models.s5 && cfgM.stations.length === 4 && !cfgM.stations[0].role);
+  check('a fail reason\'s cause goes to the first station in flow order with that role', eff.failReasons.find(r => r.id === 'crimp_a').cause === 's2' && eff.failReasons.find(r => r.id === 'other').cause === null);
+  const noS1 = LE.applyLayout(CFG, { stations: [{ id: 's2', role: 's2' }, { id: 's4', role: 's4' }] });
+  check('a cause role with no station in the layout gives no cause station', noS1.failReasons.find(r => r.id === 'strip').cause === null && noS1.stations[0].name === 'S2 Crimp side A');
+  check('the config check still runs on the file as written', LE.checkConfig(CFG).length === 0);
+
+  // Shared roles: s1 4 cycles of 10 s; s2 and s5 side by side, 2 cycles of 20 s each; s3 3 of 12 s; testers s4 (2) and s6 (1).
+  const ev = [{ type: 'session_start', t: 0 }];
+  ev.push(...cycleEvents('s1', 4, 10, 1000, 2, ['s1_pick_wire', 's1_measure_cut', 's1_handoff']));
+  ev.push(...cycleEvents('s2', 2, 20, 2000, 2, ['s2_pick', 's2_insert', 's2_handoff']));
+  ev.push(...cycleEvents('s5', 2, 20, 3000, 2, ['s2_pick', 's2_insert', 's2_handoff']));
+  ev.push(...cycleEvents('s3', 3, 12, 4000, 2, ['s3_pick', 's3_insert', 's3_handoff']));
+  const e4 = cycleEvents('s4', 2, 8, 5000, 2, ['s4_pick', 's4_connect', 's4_sort']), e6 = cycleEvents('s6', 1, 8, 6000, 2, ['s4_pick', 's4_connect', 's4_sort']);
+  ev.push(...e4, ...e6);
+  e4.filter(e => e.type === 'cycle_end').forEach((e, k) => ev.push({ type: 'qa_result', station: 's4', cycle: k + 1, t: e.t, result: 'pass', light: true, bin: 'pass', source: 'zones' }));
+  ev.push({ type: 'qa_result', station: 's6', cycle: 1, t: e6[e6.length - 1].t, result: 'fail', reason: 'crimp_a', light: false, bin: 'fail', source: 'manual' });
+  ev.push({ type: 'session_end', t: 100000 });
+  const sum = LE.summarize(ev, eff), L = sum.line;
+  check('two QA stations: units, passes and fails add up (3 units, 2 pass, 1 fail)', L.units === 3 && L.passed === 2 && L.failed === 1 && near(L.fpy, 2 / 3, 1e-3), JSON.stringify(L));
+  check('side by side (s2 and s5): no WIP between them; WIP between stages adds the stage up', L.wip.map(w => w.n === null ? '-' : w.n).join() === '0,-,1,0,-', JSON.stringify(L.wip));
+  check('bottleneck: a station\'s average over its stage (s2 and s5 20 s / 2 = 10 s), so s3 at 12 s sets the pace', L.bottleneck === 's3', L.bottleneck);
+  check('fails by cause: crimp_a is charged to s2, the first Crimp side A in flow order', L.failsByCause.s2 === 1 && L.failsByCause.s5 === 0);
+  const csv = LE.substepsCsv(ev, eff, { id: 'x' }).trim().split('\n'), cyc = LE.cyclesCsv(ev, eff, { id: 'x' }).trim().split('\n');
+  check('CSVs carry the new station ids with their role\'s substep labels and QA columns', csv.some(l => l.startsWith('x,,,s5,1,1,s2_pick,Take a wire pair from the in tray,')) && cyc.some(l => l.includes(',s6,detected,1,') && l.includes(',fail,crimp_a,s2,1,')), cyc.join(' / '));
+  // With one station per role, the Class test layout gives the same numbers as the bare config.
+  const ev2 = [{ type: 'session_start', t: 0 }].concat(cycleEvents('s1', 3, 20, 1000, 5, ['s1_pick_wire', 's1_handoff']), cycleEvents('s2', 2, 30, 2000, 5, ['s2_pick', 's2_handoff']), cycleEvents('s4', 1, 10, 3000, 5, ['s4_pick', 's4_sort']), [{ type: 'session_end', t: 90000 }]);
+  check('Class test numbers are the same as before the canvas', JSON.stringify(LE.summarize(ev2, LE.applyLayout(CFG, ct))) === JSON.stringify(LE.summarize(ev2, CFG)));
+}
+
+console.log('operators (dashboard plan, decision 1)');
+{
+  check('operator is an event type the server accepts', LE.EVENT_TYPES.includes('operator'));
+  check('levels: new, in training, certified (ids new, training, certified)', LE.LEVELS.map(l => l.id).join() === 'new,training,certified' && LE.LEVELS[1].label === 'In training');
+  check('codes: 7, 07, op-7 and Op-07 all become Op-07; 123 stays 3 digits', ['7', '07', 'op-7', 'Op-07', ' OP 7 '].every(v => LE.operatorCode(v) === 'Op-07') && LE.operatorCode('123') === 'Op-123' && LE.OPERATOR_CODE.test('Op-123'));
+  check('a name, an empty code or 4 digits is not a code', [null, '', 'Michael', 'Op-Mike', '1234', 'Op-07 Mike'].every(v => LE.operatorCode(v) === null));
+}
+
+console.log('regressions: new station placement and per-layout saves (ea1dcf3, de886c8)');
+{
+  // Class test cards: 640 wide, positions from the layout; the middle of the view lands on s3's card.
+  const rects = LE.classTestLayout(CFG).stations.map(s => ({ x: s.x, y: s.y, w: LE.FLOOR.cardW, h: 320 }));
+  const mid = rects[2], [x, y] = LE.freeSpot(rects, mid.x, mid.y);
+  const overlaps = r => x < r.x + r.w && r.x < x + LE.FLOOR.cardW && y < r.y + r.h && r.y < y + 520;
+  check('a new station asked for a spot on top of a card goes to a free spot, not on the card', !rects.some(overlaps), x + ',' + y);
+  check('a free middle is kept as it is (snapped to the grid)', JSON.stringify(LE.freeSpot([], 80, 120)) === '[80,120]');
+  const dist = Math.hypot(x - mid.x, y - mid.y);
+  check('the free spot is the nearest one: within one ring or two of the wanted spot', dist <= 2 * 200 * Math.SQRT2, String(dist));
+  // Saves: a timer per layout. Fake timers record what is pending.
+  let id = 0; const live = new Map(), ran = [];
+  const sched = LE.saveScheduler({ set: (fn, ms) => { live.set(++id, fn); return id; }, clear: t => { live.delete(t); } });
+  sched.later('a', () => ran.push('a'), 400);
+  sched.later('b', () => ran.push('b'), 400);
+  check('a save for layout b does not cancel the pending save for layout a', live.size === 2 && sched.pending().join() === 'a,b');
+  for (const [k, fn] of [...live]) { live.delete(k); fn(); }
+  check('both saves run', ran.sort().join() === 'a,b' && sched.pending().length === 0);
+  sched.later('a', () => ran.push('a1'), 400); sched.later('a', () => ran.push('a2'), 400);
+  check('a second edit on the same layout replaces its pending save', live.size === 1);
+}
+
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);

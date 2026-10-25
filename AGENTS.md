@@ -3,6 +3,13 @@
 Instructions for any coding agent (Claude Code, Codex, Cursor, others) working in this repo.
 People: start with `README.md`.
 
+| Page | What it is |
+|---|---|
+| `/line` (`/` opens it) | The wire line, the team's main tool (section "Wire line platform" below) |
+| `/phone` on port 4174 | A station's phone or tablet camera page (HTTPS) |
+| `/runs` | Archived: the LEGO run log this section and "Analyze runs" are about ([docs/lego-run-log.md](docs/lego-run-log.md)) |
+| `/live` | Archived: the LEGO single-station live prototype |
+
 ## What this is
 
 A time-study tool for one simulated manual assembly station: a LEGO build (white 4×6 plate,
@@ -16,7 +23,7 @@ become process data without the operator entering anything.
 
 | Path | What it is |
 |---|---|
-| `app/lego-station-run-log.html` | The whole web app. The same file runs as a claude.ai artifact. |
+| `app/lego-station-run-log.html` | The run log's web app (`/runs`). The same file runs as a claude.ai artifact. |
 | `app/local-runtime.js` | Stands in for the claude.ai runtime when the app runs locally. |
 | `server.mjs` | Local server: the app, a JSON document store, stored files. No dependencies. |
 | `scripts/runlog.mjs` | Command-line helper for everything below. `node scripts/runlog.mjs help` |
@@ -29,27 +36,40 @@ Requirements: Node 18+ and ffmpeg/ffprobe on PATH. Do not add npm dependencies.
 
 ## Wire line platform (`/line`)
 
-The team's main tool now: four stations, four overhead cameras, one laptop, and one trained
-model per station. The person's workflow (setup, run day, sharing footage, training, adding a
+The team's main tool now: stations on a floor plan (the built-in Class test layout has four, in
+the L of our tables; a layout can have any number), one overhead camera each, one laptop, and one
+trained model per station role ([docs/canvas-plan.md](docs/canvas-plan.md)). The person's workflow (setup, run day, sharing footage, training, adding a
 model, testing) is [docs/team-guide.md](docs/team-guide.md); walk them through the matching
 section when they ask how to do any of it. The technical reference (config rules, event fields,
 CSV columns, model export contract) is [docs/wire-line-process.md](docs/wire-line-process.md).
 
 | Path | What it is |
 |---|---|
-| `app/line.html`, `app/line-engine.js` | The 4-station page and its config-driven engine |
-| `data/meta/wire-line.json` | The process: stations, zones, substeps, fail reasons, and `models` (one entry per station) |
+| `app/line.html`, `app/line-engine.js` | The floor page (stations as cards you pan, zoom and arrange) and its config-driven engine. The screen is lean on purpose ([docs/lean-plan.md](docs/lean-plan.md)): run controls only, everything else in Setup or Edit layout |
+| `data/meta/wire-line.json` | The process: the station roles (zones, substeps, QA), fail reasons, and `models` (one entry per role) |
+| `data/meta/wire-line-layouts.json` | Saved floor layouts and the active one (station id, name, role, position). Git-ignored |
 | `app/models/` | Model files (`.onnx`) the page loads |
 | `data/sessions/<id>/` | Recorded sessions (video per station, `events.jsonl`). Git-ignored, about 1 GB per hour |
+| `app/phone.html` | Phone and tablet camera page (iPhone, iPad, Android, a laptop browser), served over HTTPS on port 4174 (`PHONE_PORT`) by `server.mjs`; streams to `/line` over WebRTC |
+| `scripts/phone-cert.mjs` | Local name-constrained CA and HTTPS certificate for the phone page (`node scripts/phone-cert.mjs` checks them) |
+| `data/phone-cert/` | This laptop's CA key, certificate and phone pairing secret. Git-ignored |
 
 Rules for the wire line:
 
-- A station trainer adds or changes only their own station's entry under `models` (keyed `s1`
-  to `s4`) and their own file in `app/models/`. Never edit another station's entry.
+- A station trainer adds or changes only their own station's entry under `models` (keyed by role,
+  `s1` to `s4`; every floor station running that role uses it) and their own file in
+  `app/models/`. Never edit another station's entry.
 - `classes` lists the model's classes in training order. The page refuses a list whose length
   does not match the model's output.
 - Change the process in `data/meta/wire-line.json`, not in code.
-- Never commit `data/sessions/` or `data/meta/wire-line-setup.json` (this laptop's zones).
+- Never commit `data/sessions/`, `data/meta/wire-line-setup.json` (this laptop's zones),
+  `data/meta/wire-line-layouts.json` (this laptop's floor layouts) or `data/phone-cert/` (the CA
+  key and the phone pairing secret).
+- The floor layout is not the process: Class test is built from the config's stations
+  (`LineEngine.classTestLayout`), saved layouts only place stations and pick their role. A session
+  records its layout in `session.json`; apply it with `LineEngine.applyLayout` to read its stations.
+- The phone port serves only the phone page, `/ca.crt` and `/phone/*`. Keep everything else
+  (data, sessions, models, `/api/*`) on the localhost server.
 - Run `npm run test:line` before committing; it must pass. Share changes on a branch with a pull
   request.
 
@@ -60,8 +80,11 @@ Rules for the wire line:
   timestamps, and never invent one.
 - Never change another run's file while analyzing a run. Never change `data/meta/settings.json`
   unless the person asks for a new baseline.
-- Describe hands and parts only. Never identify, describe or evaluate the person. No names,
-  faces or operator scores anywhere in the data. This is station-level process data.
+- Describe hands and parts only. Never identify, describe or evaluate the person. No names
+  or faces anywhere in the data. On the wire line, an anonymous operator code (Op-07) and a
+  training level (new, in training, certified) may tag cycles for coaching: no rankings, no
+  scores per person, and red is for process and quality problems only (2026-10-22, see
+  `docs/dashboard-plan.md`).
 - To share results, the person commits and pushes `data/`. Commit only when they ask; run
   `git pull` before adding a run so run numbers don't collide.
 
@@ -216,4 +239,4 @@ a run marked running.
 ### 8. Report
 
 One line per run: run id, reference, cycle time, status, and the main difference. Mention
-that the web app (`npm start`, http://localhost:4173) now shows it. Do not commit unless asked.
+that the run log (`npm start`, http://localhost:4173/runs) now shows it. Do not commit unless asked.

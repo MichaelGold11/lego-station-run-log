@@ -1,14 +1,13 @@
-# LEGO Station Run Log
+# Wire line platform
 
-A time study of one manual assembly station, built from ordinary video. We film one LEGO
-assembly cycle from above, a coding agent (Claude Code, Codex or similar) reads the video
-frame by frame, and the app shows the cycle time, each work step, anything unusual, and how
-the run compares with the baseline. Nobody types data in while working.
+Stations on a floor plan, one overhead camera each (USB cameras, phones or tablets), one laptop. The
+page counts every cycle and step by itself, reads each unit's QA result from the bulb and the bin,
+flags mistakes as they happen, and records every camera's video so the team can train one model per
+station. Nobody presses anything during a normal run. The stations sit where they stand on the floor
+(the Class test layout is the L of our tables); add, move or remove them, as many as you need.
 
-Innovation Studio 2, "The Invisible Assembly Line." The LEGO build stands in for a manual
-station in the M-24 cell: white 4×6 plate, pink 1×6 brick, light-blue 2×2 slope.
-
-![Runs overview](docs/runs-overview.png)
+Innovation Studio 2, "The Invisible Assembly Line." The repo started as a LEGO time study of one
+station; that tool is archived at `/runs` ([docs/lego-run-log.md](docs/lego-run-log.md)).
 
 ## Quick start
 
@@ -30,102 +29,61 @@ npm install
 npm start
 ```
 
-Open http://localhost:4173. `npm install` fetches two browser libraries for the live page (onnxruntime-web and MediaPipe). The main app needs nothing; the live page at http://localhost:4173/live falls back to the same pinned libraries on the jsdelivr CDN if `node_modules` is missing.
+Open http://localhost:4173 in **Chrome**. It opens the wire line (`/line`):
 
-The wire line dashboard (four stations, four cameras, one laptop, one model per station) is at
-http://localhost:4173/line. It records cycle and substep times, QA results and every camera's video for training.
-**Team step-by-step** (run day, training your station's model, adding it, testing it):
-[docs/team-guide.md](docs/team-guide.md). Technical reference: [docs/wire-line-process.md](docs/wire-line-process.md).
+1. Each station shows **Connect a camera**. Pick **Phone or tablet** and scan the QR code with that
+   station's phone, or pick a **USB camera** or a **Recorded clip**. The laptop remembers it.
+2. Once per laptop, press **Setup**: draw each station's boxes, press **Calibrate**, then **Done**.
+3. Press **Start session**, then **Enter**. Press **Stop session** at the end: the banner links the
+   CSVs.
+
+The floor pans (drag it, or scroll with two fingers) and zooms (pinch, or the buttons at the bottom
+right; **Fit** shows every station). **+ Station** adds a station; **Edit layout** moves, renames,
+reorders or removes them and switches between saved layouts. Each station's **Op** chip takes the
+operator's code and training level.
+
+`npm start` also runs an HTTPS page for the phones on port 4174 (needs `openssl`, which macOS and
+Git for Windows include). `npm install` fetches the two browser libraries for the models
+(onnxruntime-web and MediaPipe); without `node_modules` the pages fall back to the same pinned
+libraries on the jsdelivr CDN.
+
+**Team step-by-step** (run day, the floor, phones, training your station's model, adding it,
+testing it): [docs/team-guide.md](docs/team-guide.md). Technical reference (config, layouts,
+events, CSV columns, model export): [docs/wire-line-process.md](docs/wire-line-process.md). Why
+the screen looks the way it does: [docs/lean-plan.md](docs/lean-plan.md) and
+[docs/canvas-plan.md](docs/canvas-plan.md).
 
 **Or let your agent do it.** Paste this into Claude Code or Codex:
 
 > Clone https://github.com/MichaelGold11/lego-station-run-log, install anything its README
 > says I'm missing, start the app with `npm start`, and give me the link.
 
-## Log a run
+## Pages
 
-1. **Film one cycle.** Phone straight above the table, the whole plate and all three parts in
-   frame, about the same framing as Run 1. Start with the parts laid out and your hands out
-   of frame; stop after the finished build is set down. Hands only, no faces.
-2. **Add it.** Either way works:
-   - In the app: **New run** → drop the video → name it and say what changed → **Queue for
-     my agent**.
-   - Or tell your agent: *"Add and analyze ~/Downloads/IMG_1234.MOV, label it 'parts
-     pre-sorted'."*
-3. **Analyze it.** In a terminal in this folder, ask your agent:
-   - Claude Code: `/analyze-runs`
-   - Codex or any other agent: *"Analyze queued runs (follow AGENTS.md)."*
-
-   It takes a few minutes. The app updates by itself when the run is done.
-4. **Share it** with the team:
-
-   ```bash
-   git pull
-   git add data
-   git commit -m "Run 6: parts pre-sorted"
-   git push
-   ```
-
-   Run `git pull` before you add a run, so two people don't both make "Run 6".
-
-iPhone videos in High Efficiency (HEVC) format are fine: every stored video is converted to
-H.264 so it plays in any browser and stays small.
-
-## Analyze on the shared link with your own Claude
-
-Teammates can analyze a new run on their own time, no setup:
-
-1. Sign in to claude.ai and open the shared link.
-2. Press **New run** and drop the video.
-3. Press **Analyze with your Claude**. It runs on your own claude.ai plan and asks permission
-   the first time.
-4. Check the event log it fills in, then save it to the shared log.
-
-Saving the video and step frames needs Editor access on the artifact. Without it only the
-timings save (the page says so). If the button is missing, the page tells you how to turn
-Claude on for it.
-
-## Compare runs
-
-- Each run page has a **Compare with** menu. Pick any run to see both timelines, step-by-step
-  time differences and the two finished builds side by side.
-- The verdict (Normal / Possible deviation / Insufficient info) was written against one
-  reference. To get a verdict against a different run, pick it and press **Re-check**, then
-  ask your agent to analyze queued runs again. Only the comparison is redone; the timings
-  stay.
-- The **Baseline** menu on the Runs page sets the default reference for everyone once you push.
-
-## How the analysis works
-
-The full method is in [AGENTS.md](AGENTS.md), written so any agent follows it the same way:
-contact sheets of frames every 0.1 s, cycle start and end, one row per work element with
-what was visibly observed, flags for anything unclear or different, a frame per step, and a
-comparison with the reference. `scripts/runlog.mjs` does the file and ffmpeg work and checks
-every result before it is saved, so agents can't write a malformed run or a made-up timestamp.
-
-What it will not do: identify or score the person. Runs describe the station's work, never
-the operator, and contain no names or faces (the case's "no individual surveillance" rule).
-Times are approximate to about ±0.1 s.
+| Page | What it is |
+|---|---|
+| http://localhost:4173/line | The wire line: the run-day page (`/` opens it) |
+| `https://<laptop>.local:4174/phone` | A station's phone or tablet camera page; its QR code on `/line` opens it |
+| http://localhost:4173/runs | Archived: the LEGO run log ([docs/lego-run-log.md](docs/lego-run-log.md)) |
+| http://localhost:4173/live | Archived: the LEGO single-station live prototype |
 
 ## What's in the repo
 
 | Path | |
 |---|---|
-| `app/` | The web app. `lego-station-run-log.html` is the same page that runs as a claude.ai artifact. |
+| `app/line.html`, `app/line-engine.js` | The wire line (`/line`, the floor) and its config-driven engine. The process is `data/meta/wire-line.json`: its stations are the roles a floor station can run, and it lists one ONNX model per role under `models`. Saved floor layouts are in `data/meta/wire-line-layouts.json` (not committed). |
 | `server.mjs` | Local server (`npm start`). |
-| `app/live-detect.js`, `app/models/` | Live page: YOLO pre and post processing, signal mapping, build check, and the models (see `app/models/README.md`). |
-| `app/line.html`, `app/line-engine.js` | Wire line dashboard (`/line`) and its config-driven engine. The process is `data/meta/wire-line.json`, which also lists one ONNX model per station under `models`. |
+| `app/live-detect.js`, `app/models/` | YOLO pre and post processing (shared by `/line` and `/live`) and the models (see `app/models/README.md`). |
+| `app/phone.html`, `scripts/phone-cert.mjs` | Phone and tablet camera page (HTTPS, port 4174) and its local certificate. The certificate and pairing secret live in `data/phone-cert/` (not committed). |
 | `data/sessions/` | Wire line sessions: events, CSVs and one video per station. Not committed (about 1 GB per hour). |
-| `scripts/runlog.mjs` | Command-line helper: `npm run runlog -- help`. |
-| `data/runs/` | One JSON file per run. |
-| `data/assets/` | Videos and step frames. |
+| `app/lego-station-run-log.html`, `app/live-mock.html` | Archived LEGO pages (`/runs`, `/live`). The run log is the same page that runs as a claude.ai artifact. |
+| `scripts/runlog.mjs`, `data/runs/`, `data/assets/` | The LEGO run log's helper (`npm run runlog -- help`), its runs and its videos (also the demo clips on `/line`). |
 | `AGENTS.md`, `CLAUDE.md` | Instructions for coding agents. |
 
 ## Troubleshooting
 
 - **Port 4173 is busy:** `PORT=5000 npm start` (PowerShell: `$env:PORT=5000; npm start`).
+- **Port 4174 (phone cameras) is busy:** `PHONE_PORT=4175 npm start`, or `PHONE_PORT=off npm start` without phones.
 - **"ffmpeg is not installed or not on PATH":** install it (table above), then open a new
   terminal.
 - **The page says the local server isn't answering:** `npm start` stopped; start it again.
-- **Two runs with the same number after a pull:** harmless (they have different ids). Rename
-  one in its `data/runs/*.json` file if it bothers you.

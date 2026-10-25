@@ -17,7 +17,7 @@
   const MOTION = { noise: 6, scale: 32 };      // per-pixel gray diff noise floor, and the mean diff that counts as motion 1.0
   const BRIGHT_SPAN = 60;                        // without a "Bulb on" calibration, a rise of 60 gray levels counts as bright 1.0
   const MISMATCH_NOTE = 'quality mismatch, review the video';
-  const EVENT_TYPES = ['substep', 'cycle_end', 'qa_result', 'flag', 'manual', 'session_start', 'session_end', 'source_change', 'verdict'];
+  const EVENT_TYPES = ['substep', 'cycle_end', 'qa_result', 'flag', 'manual', 'session_start', 'session_end', 'source_change', 'verdict', 'operator'];
   const CYCLE_ACTIONS = { cycle_done: 'unknown', pass: 'pass', fail: 'fail' };   // manual actions that close a manual cycle
 
   const clamp01 = v => Math.max(0, Math.min(1, v));
@@ -150,6 +150,83 @@
   function e2eBadClass(data, n, k, minConf) {
     for (let i = 0; i < n; i++) if (data[i * 6 + 4] >= minConf) { const c = Math.round(data[i * 6 + 5]); if (c < 0 || c >= k) return true; }
     return false;
+  }
+
+  // ---------- operators (docs/dashboard-plan.md, decision 1): an anonymous code and a training level, never a name ----------
+  const LEVELS = [{ id: 'new', label: 'New' }, { id: 'training', label: 'In training' }, { id: 'certified', label: 'Certified' }];
+  const OPERATOR_CODE = /^Op-\d{2,3}$/;
+  // "7", "07", "op-7" or "Op-07" -> "Op-07". Anything else (a name) -> null.
+  function operatorCode(v) {
+    const m = /^\s*(?:op\s*-?\s*)?(\d{1,3})\s*$/i.exec(String(v == null ? '' : v));
+    return m ? 'Op-' + String(Number(m[1])).padStart(2, '0') : null;
+  }
+
+  // ---------- floor layouts (docs/canvas-plan.md) ----------
+  // A layout places stations on the floor: [{ id, name, role, x, y }] in flow order. A role is a station of the config
+  // (its substeps, zones, QA block and model); a station id is a camera spot on this laptop. Floor units are CSS pixels
+  // at 100% zoom. The built-in Class test is the config's stations in Michael's L: S1, S2 below it, then to the right.
+  const FLOOR = { grid: 40, cardW: 640, dx: 760, dy: 560 };
+  const CLASS_TEST = 'class-test';
+  const defaultName = (id, roleLabel) => String(id).toUpperCase() + ' ' + (roleLabel || '');
+  // The name without a leading station id ("S5 QA test" -> "QA test"), for a card whose badge already shows the id.
+  function shortName(id, name, roleLabel) {
+    const s = String(name || '').trim(), p = String(id || '').toUpperCase();
+    const rest = p && s.toUpperCase().startsWith(p) && !/[A-Za-z0-9]/.test(s.charAt(p.length)) ? s.slice(p.length).replace(/^[\s:.,-]+/, '') : s;
+    return rest || roleLabel || p;
+  }
+  function classTestLayout(cfg) {
+    const stations = ((cfg && cfg.stations) || []).map((s, i) => ({ id: s.id, name: defaultName(s.id, s.label), role: s.id, x: i === 0 ? 0 : (i - 1) * FLOOR.dx, y: i === 0 ? 0 : FLOOR.dy }));
+    return { id: CLASS_TEST, name: 'Class test', builtIn: true, stations };
+  }
+  // Zones and calibration are kept per station and role: "s2" for station s2 running its own role, "s5:s4" otherwise.
+  const setupKey = (id, role) => (!role || role === id ? id : id + ':' + role);
+  // The lowest free s<n> in a layout.
+  // The spot nearest (x, y) where a new card (width FLOOR.cardW, height h, default 520: room for its Setup panel) does not cover
+  // any of rects ({x, y, w, h}), with a margin of one grid step. Searches rings of 200 by 160 around (x, y); snaps to the grid.
+  function freeSpot(rects, x, y, h) {
+    const w = FLOOR.cardW, m = FLOOR.grid, hh = h || 520, snap = v => Math.round(v / FLOOR.grid) * FLOOR.grid;
+    const free = (px, py) => rects.every(r => px + w + m <= r.x || r.x + r.w + m <= px || py + hh + m <= r.y || r.y + r.h + m <= py);
+    for (let ring = 0; ring <= 12; ring++) {
+      const cand = [];
+      for (let i = -ring; i <= ring; i++) for (let j = -ring; j <= ring; j++) if (Math.max(Math.abs(i), Math.abs(j)) === ring) cand.push([x + i * 200, y + j * 160]);
+      cand.sort((a, c) => Math.hypot(a[0] - x, a[1] - y) - Math.hypot(c[0] - x, c[1] - y));
+      for (const [px, py] of cand) if (free(px, py)) return [snap(px), snap(py)];
+    }
+    return [x, y];
+  }
+  // Delayed layout saves, one pending save per layout id: scheduling a save for one layout does not cancel another's.
+  // timers is { set, clear } (setTimeout and clearTimeout in the page).
+  function saveScheduler(timers) {
+    const pending = {};
+    return {
+      later(id, fn, ms) { timers.clear(pending[id]); pending[id] = timers.set(() => { delete pending[id]; fn(); }, ms); },
+      cancel(id) { timers.clear(pending[id]); delete pending[id]; },
+      pending: () => Object.keys(pending),
+    };
+  }
+  function nextStationId(stations) {
+    const used = {};
+    for (const s of stations || []) used[s.id] = true;
+    let n = 1;
+    while (used['s' + n]) n++;
+    return 's' + n;
+  }
+  // The config the page, the summary and the exports run on: one station per layout entry, a copy of its role with the
+  // layout's id, name, position and order. Models are keyed by station id (a station runs its role's model), and a fail
+  // reason's cause station is the first station in flow order that runs that role. Entries with an unknown role are left out.
+  function applyLayout(cfg, layout) {
+    if (!cfg || !layout || !Array.isArray(layout.stations)) return cfg;
+    const roles = {};
+    for (const s of cfg.stations || []) roles[s.id] = s;
+    const stations = layout.stations.filter(ls => ls && roles[ls.role]).map((ls, i) => Object.assign(JSON.parse(JSON.stringify(roles[ls.role])),
+      { id: ls.id, role: ls.role, name: ls.name || defaultName(ls.id, roles[ls.role].label), x: isNum(ls.x) ? ls.x : 0, y: isNum(ls.y) ? ls.y : 0, order: i + 1 }));
+    const first = role => { const s = stations.find(x => x.role === role); return s ? s.id : null; };
+    const byStation = obj => { const out = {}; if (obj && typeof obj === 'object' && !Array.isArray(obj)) for (const s of stations) if (obj[s.role]) out[s.id] = obj[s.role]; return out; };
+    return Object.assign({}, cfg, {
+      stations, models: byStation(cfg.models), suggestedClasses: byStation(cfg.suggestedClasses),
+      failReasons: (cfg.failReasons || []).map(r => Object.assign({}, r, { cause: r.cause == null ? null : first(r.cause) })),
+      layout: { id: layout.id || null, name: layout.name || '' }
+    });
   }
 
   // ---------- QA decision (station 4) ----------
@@ -758,13 +835,13 @@
         perUnit: per, units: Math.floor(use.cycles / per), unitSec: use.avgSec == null ? null : r1(use.avgSec * per), _d: d, _m: m };
     }
 
-    // QA at the station that has a qa block
-    const qaSt = config.stations.find(s => s.qa);
+    // QA: every station with a qa block (two testers side by side both count)
+    const qaSts = config.stations.filter(s => s.qa);
     const q = { passed: 0, failed: 0, defectFails: 0, nonDefectFails: 0, unknown: 0, awaiting: 0, failsByCause: {}, failsByReason: {} };
     for (const id of ids) q.failsByCause[id] = 0;
     q.failsByCause.unknown = 0;
-    if (qaSt) {
-      const s = stations[qaSt.id];
+    for (const qs of qaSts) {
+      const s = stations[qs.id];
       // A detected cycle without a qa_result yet is still inside its grace time: counted as awaiting, not as unknown.
       const recs = s.basis === 'manual' ? s._m.map(x => ({ result: x.result, reason: x.reason })) : s._d.cycles.map(c => (c.qa ? { result: c.qa.result, reason: c.qa.reason } : { result: 'awaiting' }));
       for (const r of recs) {
@@ -778,14 +855,27 @@
         } else q.unknown++;
       }
     }
-    const units = qaSt ? stations[qaSt.id].cycles : 0;
+    const units = qaSts.reduce((a, s) => a + stations[s.id].cycles, 0);
     const elapsedSec = Math.max(0, (tEnd - t0) / 1000);
+    // Stages: stations next to each other in flow order with the same role work side by side. WIP is counted between
+    // stages (null between two stations of one stage), and a station's pace is its average over the stations in its stage.
+    const stages = [], stageOf = {};
+    for (const st of config.stations) {
+      const role = st.role || st.id, last = stages[stages.length - 1];
+      if (last && last.role === role) last.ids.push(st.id); else stages.push({ role, ids: [st.id] });
+      stageOf[st.id] = stages.length - 1;
+    }
+    const stageUnits = k => stages[k].ids.reduce((a, id) => a + stations[id].units, 0);
+    const pace = id => (stations[id].unitSec == null ? null : stations[id].unitSec / stages[stageOf[id]].ids.length);
     const wip = [];
-    // Work in progress counts units (a station with perUnit 3 hands over one unit every 3 cycles).
-    for (let i = 0; i + 1 < ids.length; i++) wip.push({ from: ids[i], to: ids[i + 1], n: stations[ids[i]].units - stations[ids[i + 1]].units });
-    // The bottleneck is the station with the longest time per unit, not per cycle.
+    // Work in progress counts units (a station with perUnit 3 hands over one unit every 3 cycles), between stages.
+    for (let i = 0; i + 1 < ids.length; i++) {
+      const a = stageOf[ids[i]], b = stageOf[ids[i + 1]];
+      wip.push({ from: ids[i], to: ids[i + 1], n: a === b ? null : stageUnits(a) - stageUnits(b) });
+    }
+    // The bottleneck is the station with the longest time per unit (averaged over its stage), not per cycle.
     let bottleneck = null;
-    for (const id of ids) { const a = stations[id].unitSec; if (a != null && (bottleneck == null || a > stations[bottleneck].unitSec)) bottleneck = id; }
+    for (const id of ids) { const a = pace(id); if (a != null && (bottleneck == null || a > pace(bottleneck))) bottleneck = id; }
     const cycleEnds = {};
     for (const id of ids) { cycleEnds[id] = { detected: stations[id].detected.cycles, manual: stations[id].manual.cycles }; delete stations[id]._d; delete stations[id]._m; }
     const takt = isNum(config.taktSec) ? config.taktSec : null;
@@ -797,7 +887,7 @@
         fpy: q.passed + q.defectFails > 0 ? round(q.passed / (q.passed + q.defectFails), 4) : null,
         failsByCause: q.failsByCause, failsByReason: q.failsByReason, wip, bottleneck, cycleEnds,
         mismatches: sorted.filter(e => e.type === 'flag' && e.note === MISMATCH_NOTE).length,
-        taktSec: takt, overTakt: takt == null ? [] : ids.filter(id => stations[id].avgSec != null && stations[id].avgSec > takt)
+        taktSec: takt, overTakt: takt == null ? [] : ids.filter(id => pace(id) != null && pace(id) > takt)
       }
     };
   }
@@ -950,8 +1040,9 @@
   }
 
   return {
-    DEFAULTS, MOTION, MISMATCH_NOTE, EVENT_TYPES, CYCLE_ACTIONS, SUBSTEP_COLS, CYCLE_COLS, VERDICT_COLS, CHECK,
+    DEFAULTS, MOTION, MISMATCH_NOTE, EVENT_TYPES, CYCLE_ACTIONS, SUBSTEP_COLS, CYCLE_COLS, VERDICT_COLS, CHECK, LEVELS, OPERATOR_CODE, FLOOR, CLASS_TEST,
     members, activeRule, evalRule, missingOf, ruleText, checkConfig, modelFor, checkModelOutput, e2eBadClass, qaDecide, createStation,
+    operatorCode, defaultName, shortName, classTestLayout, setupKey, nextStationId, freeSpot, saveScheduler, applyLayout,
     zoneSignals, calibrationFrom, classSignals, handPresence, steadyClasses, mergeSignals, createChecker,
     sortEvents, detectedCycles, manualCycles, summarize, substepsCsv, cyclesCsv, verdictsCsv, linkUnits, unitCols, unitsCsv, csvCell
   };

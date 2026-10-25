@@ -14,6 +14,7 @@
   --accent: #a3522a; --accent-2: #8a4321; --on-accent: #ffffff; --accent-wash: rgba(163, 82, 42, .09);
   --good: #0ca30c; --good-ink: #006300; --warn: #fab219; --warn-ink: #7a5200; --crit: #d03b3b; --crit-ink: #b02e2e;
   --shadow: 0 1px 2px rgba(21, 24, 27, .06);
+  --floor: #e6e9e6; --grid: rgba(21, 24, 27, .07);
   --f-ui: "Saira", system-ui, -apple-system, "Segoe UI", sans-serif;
   --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 }
@@ -24,13 +25,15 @@
     --accent: #dc8b55; --accent-2: #e9a273; --on-accent: #15181b; --accent-wash: rgba(220, 139, 85, .14);
     --good-ink: #3fbf3f; --warn-ink: #fab219; --crit-ink: #e66767;
     --shadow: 0 1px 2px rgba(0, 0, 0, .35);
+    --floor: #0c0e10; --grid: rgba(239, 241, 239, .06);
     color-scheme: dark;
   }
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html { color-scheme: light; }
-body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-ui); font-size: 14px; line-height: 1.4; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-ui); font-size: 14px; line-height: 1.4; display: flex; flex-direction: column; overflow: hidden; }
 h1, h2, h3 { margin: 0; font-weight: 600; }
 p { margin: 0; }
 button, input, select, textarea { font: inherit; color: inherit; }
@@ -61,7 +64,8 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
 .seg button + button { border-left: 1px solid var(--line-2); }
 .seg button.on { background: var(--accent); color: var(--on-accent); }
 
-.wrap { max-width: 1840px; margin: 0 auto; padding: 12px 16px 40px; display: grid; gap: 10px; }
+/* The top: header, banners, forms, the Setup and Edit layout bars and the summary. The floor fills the rest of the window. */
+.wrap { flex: none; max-height: 62vh; overflow: auto; padding: 10px 16px 8px; display: grid; gap: 8px; }
 .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 .top h1 { font-size: 22px; line-height: 1.1; }
 .top .note { color: var(--ink-2); font-size: 13px; }
@@ -75,18 +79,25 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
 .banner.good { border-color: color-mix(in srgb, var(--good) 50%, transparent); background: color-mix(in srgb, var(--good) 8%, var(--surface)); color: var(--ink); }
 .banner a { color: inherit; font-weight: 600; }
 
-.form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 2fr); gap: 10px; align-items: end; }
+/* Start session: the title is filled in, so Enter starts; crew, shift and notes fold under More details */
+.form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 10px; align-items: end; }
 .form label { display: grid; gap: 3px; font-size: 12px; color: var(--ink-2); font-weight: 600; }
 .form input, .form textarea { padding: 6px 8px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--surface); font-size: 14px; font-weight: 400; }
 .form textarea { resize: vertical; min-height: 34px; height: 34px; }
-.form .acts { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; }
-@media (max-width: 900px) { .form { grid-template-columns: 1fr; } }
+.form .acts { display: flex; gap: 8px; align-items: center; }
+.form details, .form .rline { grid-column: 1 / -1; }
+.form summary { cursor: pointer; font-size: 13px; color: var(--ink-2); width: max-content; }
+.more-f { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr); gap: 10px; margin-top: 6px; }
+.rline { font-size: 13px; color: var(--ink-2); }
+.rline.warn { color: var(--warn-ink); }
+@media (max-width: 900px) { .form, .more-f { grid-template-columns: 1fr; } }
 
-.summary { display: grid; grid-template-columns: repeat(4, minmax(110px, auto)) minmax(0, 1fr); gap: 0; align-items: stretch; }
-.sum-tile { padding: 8px 14px; border-right: 1px solid var(--line); }
+.summary { display: flex; flex-wrap: wrap; align-items: stretch; }
+.sum-row { display: flex; flex-wrap: wrap; align-items: stretch; }
+.sum-tile { padding: 8px 14px; border-right: 1px solid var(--line); min-width: 150px; }
 .sum-tile .v { font-family: var(--f-mono); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.15; }
 .sum-tile .s { font-size: 11.5px; color: var(--muted); }
-.flow { grid-column: 1 / -1; display: flex; align-items: center; gap: 4px; padding: 6px 14px; flex-wrap: wrap; border-top: 1px solid var(--line); }
+.flow { flex: 1 1 480px; display: flex; align-items: center; gap: 4px; padding: 6px 14px; flex-wrap: wrap; border-top: 1px solid var(--line); margin-top: -1px; }
 .fl-st { display: flex; gap: 8px; align-items: baseline; border: 1px solid var(--line-2); border-radius: 6px; padding: 2px 10px; background: var(--surface-2); }
 .fl-st b { font-size: 12.5px; }
 .fl-st span { font-family: var(--f-mono); font-size: 12px; color: var(--ink-2); }
@@ -96,28 +107,89 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
 .fl-ar { display: flex; align-items: center; gap: 3px; font-family: var(--f-mono); font-size: 12px; color: var(--ink-2); padding: 0 6px; }
 .fl-ar i { font-style: normal; color: var(--muted); font-size: 14px; line-height: 1; }
 .fl-ar.neg { color: var(--crit-ink); }
-.fails { padding: 8px 14px; display: grid; gap: 3px; align-content: center; font-size: 12.5px; }
-@media (max-width: 900px) { .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .sum-tile { border-right: 0; border-bottom: 1px solid var(--line); } .fails { grid-column: 1 / -1; } }
+.sum-tile .s .chip { margin-left: 4px; }
 
-.toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); }
-.toolbar .sep { width: 1px; height: 20px; background: var(--line-2); }
-.toolbar .keys { margin-left: auto; display: flex; gap: 10px; flex-wrap: wrap; }
+/* Setup mode: one bar for the line-wide switches, and every card opens its setup panel */
+.setupbar { display: grid; gap: 8px; padding: 10px 14px; border-color: var(--accent); }
+.sb-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.sb-head .eyebrow { color: var(--accent-2); margin-right: 6px; }
+.sb-row { display: flex; gap: 8px 16px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); }
+.sb-item { display: inline-flex; gap: 6px; align-items: center; }
+.sb-warn { color: var(--warn-ink); font-size: 13px; }
 
-.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-@media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
-.st { display: grid; grid-template-rows: auto 1fr auto; min-width: 0; }
+/* The floor (docs/canvas-plan.md): a plan of the stations, bigger than the window. Drag or scroll to pan, pinch or
+   ctrl+wheel to zoom. The world moves under a fixed viewport; the grid is the viewport's background, moved with it. */
+.floor { position: relative; flex: 1; min-height: 240px; overflow: hidden; border-top: 1px solid var(--line); background-color: var(--floor);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+.floor.panning { cursor: grabbing; }
+.world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.arrows { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+.arrows .fa { fill: none; stroke: var(--accent); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; opacity: .8; }
+.arrows marker path { fill: var(--accent); }
+.fl-tools { position: absolute; top: 10px; left: 12px; display: flex; gap: 6px; align-items: center; z-index: 4; }
+.fl-tools .btn, .zoombox .btn { box-shadow: var(--shadow); }
+.fl-tools .btn[aria-disabled="true"] { opacity: .55; }
+.btn.plus { font-weight: 600; }
+.fl-name { font-size: 12.5px; font-weight: 600; color: var(--ink-2); background: color-mix(in srgb, var(--surface) 82%, transparent); padding: 2px 8px; border-radius: 5px; }
+.zoombox { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 4px; z-index: 4; }
+.zoombox .zp { min-width: 58px; font-family: var(--f-mono); font-size: 12.5px; }
+.floor-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 15px; pointer-events: none; }
+.addp { position: absolute; top: 48px; left: 12px; z-index: 5; display: grid; gap: 8px; padding: 12px 14px; width: min(330px, calc(100% - 24px)); cursor: default; user-select: text; }
+.addp label { display: grid; gap: 3px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.addp input, .addp select, .edit-panel input, .edit-panel select { padding: 4px 7px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--surface); font-size: 13.5px; font-weight: 400; min-width: 0; }
+.addp .acts { display: flex; gap: 8px; }
+.st { position: absolute; width: 640px; display: grid; grid-template-rows: auto auto 1fr auto; transition: box-shadow .15s; cursor: default; }
+.st:hover, .st:focus-within { z-index: 2; }
+/* Edit layout: cards move (drag), and each shows its strip (name, role, flow order, remove) */
+.floor.editing .st { outline: 2px dashed color-mix(in srgb, var(--accent) 70%, transparent); outline-offset: 3px; cursor: move; }
+.floor.editing .st.dragging { z-index: 3; box-shadow: 0 8px 28px rgba(21, 24, 27, .25); }
+.edit-panel { display: flex; gap: 6px 10px; flex-wrap: wrap; align-items: center; padding: 7px 10px; border-bottom: 1px solid var(--line); background: var(--accent-wash); font-size: 12.5px; }
+.edit-panel .ed-ord { min-width: 52px; text-align: center; font-size: 12px; }
+.edit-panel .ed-name { width: 140px; }
+.edit-panel .ed-role { max-width: 150px; }
+.edit-panel .ed-del { margin-left: auto; }
+/* Operator: an anonymous code and a training level (docs/dashboard-plan.md). Neutral on purpose: never red on a person. */
+.opc { font-family: var(--f-mono); font-weight: 600; }
+.opc.set { color: var(--ink); border-color: var(--ink-2); }
+.oppop { position: absolute; top: 40px; right: 10px; z-index: 6; display: grid; gap: 8px; padding: 10px 12px; width: 300px; cursor: default; user-select: text; font-size: 13px; }
+.oppop .opcode { display: inline-flex; align-items: center; gap: 2px; font-family: var(--f-mono); font-weight: 600; }
+.oppop .op-num { width: 64px; padding: 4px 7px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--surface); font-family: var(--f-mono); }
+.oppop .acts { display: flex; gap: 6px; flex-wrap: wrap; }
+.oppop .op-msg { color: var(--warn-ink); font-size: 12px; }
+.oppop .op-msg:empty { display: none; }
 .st-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .st-badge { font-family: var(--f-mono); font-weight: 600; font-size: 12px; background: var(--ink); color: var(--surface); border-radius: 4px; padding: 1px 6px; }
-.st-head h2 { font-size: 16px; margin-right: auto; }
-.st-head select { max-width: 230px; min-width: 0; padding: 3px 6px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--surface); font-size: 12.5px; }
+.st-head h2 { font-size: 16px; }
+.st-head .role { margin-right: auto; }
+.st-head .srcst { font-size: 12.5px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+.st-head .recst { font: 600 11.5px var(--f-mono); color: var(--crit-ink); white-space: nowrap; }
+.st-head .recst.off { color: var(--muted); font-weight: 500; }
+button.chip { cursor: pointer; font-family: inherit; background: var(--surface); }
+button.chip:hover { border-color: var(--warn-ink); }
+.opslot:empty { display: none; }    /* reserved: the dashboard's operator chip */
+.setup-panel select { max-width: 260px; min-width: 0; padding: 3px 6px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--surface); font-size: 12.5px; }
 .recl { display: inline-flex; gap: 4px; align-items: center; font-size: 12.5px; color: var(--ink-2); }
+.srow { display: flex; gap: 6px 14px; flex-wrap: wrap; align-items: center; }
+.diag { font-size: 11.5px; color: var(--ink-2); border-top: 1px dashed var(--line-2); padding-top: 5px; }
 .st-body { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 10px; padding: 8px 10px; min-height: 0; }
-@media (max-width: 640px) { .st-body { grid-template-columns: 1fr; } }
+.st-head .role { font-size: 12.5px; color: var(--ink-2); margin-left: -2px; }
 .stage { position: relative; aspect-ratio: 4 / 3; background: #0b0c0d; border-radius: 6px; overflow: hidden; align-self: start; }
 .stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .stage.setup canvas { cursor: crosshair; touch-action: none; }
 .nosrc { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 16px; color: #aab0b6; font-size: 13px; }
+/* Connect a camera: on the dark stage of a station with no camera */
+.con { display: grid; gap: 8px; justify-items: center; max-width: 100%; }
+.con .con-t { color: #eff1ef; font-size: 14px; }
+.con-opts { display: grid; gap: 6px; width: min(260px, 100%); }
+.con-hint { font-size: 11.5px; color: #8a8f96; text-align: center; }
+.nosrc .btn { background: #1f2225; color: #eff1ef; border-color: #4a4f56; }
+.nosrc .btn:hover { border-color: #aab0b6; }
+.nosrc .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.nosrc select { width: min(260px, 100%); font-size: 12.5px; padding: 4px 6px; border-radius: 6px; background: #1f2225; color: #eff1ef; border: 1px solid #3a3f45; }
+.con-msg { font-size: 12px; color: #fab219; max-width: 280px; }
+.con-msg:empty { display: none; }
 .info { display: grid; gap: 6px; align-content: start; min-width: 0; }
 .nowbox { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; border-left: 4px solid var(--line-2); padding: 2px 0 2px 8px; }
 .nowbox.incycle { border-left-color: var(--accent); }
@@ -145,15 +217,20 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
 .check .num { text-align: right; font-size: 12px; color: var(--ink-2); }
 .check .tag { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--accent-2); }
 .check .rep { font-family: var(--f-mono); font-size: 11px; color: var(--ink-2); }
-.st-foot { display: flex; gap: 8px; align-items: center; padding: 7px 10px; border-top: 1px solid var(--line); flex-wrap: wrap; }
-.st-foot .meta { margin-left: auto; font-size: 12px; color: var(--ink-2); }
-.st-foot .meta .recd { color: var(--crit-ink); font-weight: 600; }
-.reasons { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 8px 10px; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--crit) 6%, var(--surface)); font-size: 13px; }
+/* The answer key (Score the cameras on): one bar at the bottom of the screen; the fail reasons open just above it */
+.akbar { flex: none; z-index: 5; background: var(--surface); border-top: 1px solid var(--line-2); box-shadow: 0 -2px 12px rgba(21, 24, 27, .12); }
+.ak-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 12px; }
+.ak-row .eyebrow { margin-right: 4px; }
+.ak-row .btn { font-size: 14px; padding: 6px 12px; }
+.akn { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.reasons { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--crit) 6%, var(--surface)); font-size: 13px; }
 .reasons .btn { font-size: 12.5px; }
+.st.keyed { box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 45%, transparent); }
 .setup-panel { display: grid; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--line); background: var(--surface-2); font-size: 12.5px; }
 .zbtns, .calrow { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .zsw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
 .stmsg { font-size: 12px; color: var(--crit-ink); }
+.stmsg:empty { display: none; }
 /* mistake alerts: the card on the video (MISTAKE flashes at 4 Hz like live_check.py), and the checklist row it is about */
 .vcard { position: absolute; left: 6px; right: 6px; bottom: 6px; padding: 5px 9px 6px; border-radius: 6px; border-left: 6px solid var(--line-2); background: var(--surface); color: var(--ink); box-shadow: 0 2px 8px rgba(0, 0, 0, .35); pointer-events: none; }
 .vc-top { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
@@ -174,12 +251,32 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
 .check li.review { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); }
 .check li.review .ic { border-color: var(--warn); background: var(--warn); }
 .check li.review small { color: var(--warn-ink); font-weight: 600; }
+/* Phone cameras (any phone or tablet): the pairing panel over the stage (QR code, link, status) and the live chip */
+.phonep { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 44%) minmax(0, 1fr); gap: 10px; align-items: center; padding: 10px; background: #0b0c0d; color: #d6dade; font-size: 12px; line-height: 1.3; overflow: auto; }
+.phonep .qr { background: #fff; border-radius: 6px; aspect-ratio: 1; display: grid; place-items: center; color: #4a4f56; font-size: 12px; }
+.phonep .qr svg { width: 100%; height: 100%; display: block; }
+.phonep .ptxt { display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; align-content: center; min-width: 0; }
+.phonep .ptxt > b { font-size: 14px; color: #fff; }
+.phonep .pst { font-weight: 600; color: #fab219; }
+.phonep .pst.bad { color: #f08a8a; }
+.phonep .phost { display: grid; gap: 2px; font-size: 11px; color: #8a8f96; }
+.phonep select { font-size: 12px; padding: 2px 4px; border-radius: 5px; background: #1f2225; color: #eff1ef; border: 1px solid #3a3f45; width: 100%; min-width: 0; }
+.phonep .btn { background: #1f2225; color: #eff1ef; border-color: #4a4f56; }
+.phonep .btn:hover { border-color: #aab0b6; }
+.phonep .plink { font-family: var(--f-mono); font-size: 10.5px; color: #aab0b6; word-break: break-all; user-select: all; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.phonep .pbtns { display: flex; gap: 6px; flex-wrap: wrap; }
+.phonep .pnote { color: #8a8f96; font-size: 11px; }
+.pchip { position: absolute; top: 6px; right: 6px; font: 600 11px var(--f-mono); color: #fff; background: rgba(15, 17, 19, .78); border-radius: 4px; padding: 2px 7px; pointer-events: none; }
 
 .sessions table { border-collapse: collapse; width: 100%; font-size: 13px; }
 .sessions th { text-align: left; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 4px 8px; border-bottom: 1px solid var(--line); }
 .sessions td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .sessions td a { color: var(--accent-2); margin-right: 8px; white-space: nowrap; }
 .sessions .tbl { max-height: 320px; overflow: auto; }
+details.raw { display: inline; font-size: 12px; }
+details.raw summary { display: inline; cursor: pointer; color: var(--muted); }
+details.raw[open] summary { margin-right: 6px; }
+.banner details.raw summary { color: inherit; }
 </style>
 </head>
 <body>
@@ -187,64 +284,112 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
   <header class="top">
     <div>
       <h1>Wire line</h1>
-      <p class="note" id="hdrNote">Four stations, one overhead camera each. Records cycle and substep times, QA results and every camera's video.</p>
+      <p class="note" id="hdrNote">One overhead camera per station. Records cycle and substep times, QA results and every camera's video.</p>
     </div>
     <div class="sess" id="sessBox">
       <span class="live" id="sessLive" hidden><span class="dot rec"></span><span id="sessTitle"></span><span class="mono" id="sessClock">0:00</span></span>
       <span class="muted mono" id="sessInfo"></span>
+      <button class="btn" id="btnSound" type="button" title="Mistake alert sounds for every station">Sound: on</button>
       <button class="btn primary" id="btnStart" type="button">Start session</button>
       <button class="btn" id="btnStop" type="button" hidden>Stop session</button>
-      <button class="btn" id="btnSessions" type="button">Sessions and exports</button>
+      <button class="btn" id="btnSessions" type="button">Sessions</button>
+      <button class="btn" id="btnSetup" type="button" title="Cameras, boxes, calibration and the line's switches">Setup</button>
     </div>
   </header>
 
   <div id="banners"></div>
 
   <form class="panel pad form" id="startForm" hidden autocomplete="off">
-    <label>Title<input id="fTitle" maxlength="120" placeholder="Dry run 1"></label>
-    <label>Crew / training group<input id="fCrew" maxlength="80" placeholder="Group B"></label>
-    <label>Shift<input id="fShift" maxlength="40" placeholder="Morning"></label>
-    <label>Notes<textarea id="fNotes" maxlength="2000" placeholder="What is different about this run"></textarea></label>
-    <div class="banner" id="recWarn" hidden>No station is recording video. Turn Rec on to keep footage for training.</div>
-    <div class="acts"><button class="btn primary" type="submit">Start recording</button><button class="btn" id="btnCancelStart" type="button">Cancel</button>
-      <span class="muted" id="startNote">Counts start from zero. Stations with Rec on record their video.</span></div>
+    <label>Title<input id="fTitle" maxlength="120"></label>
+    <div class="acts"><button class="btn primary" type="submit">Start recording <kbd>Enter</kbd></button><button class="btn" id="btnCancelStart" type="button">Cancel</button></div>
+    <details id="fMore"><summary>More details: crew, shift, notes</summary>
+      <div class="more-f"><label>Crew / training group<input id="fCrew" maxlength="80" placeholder="Group B"></label>
+        <label>Shift<input id="fShift" maxlength="40"></label>
+        <label>Notes<textarea id="fNotes" maxlength="2000" placeholder="What is different about this run"></textarea></label></div>
+    </details>
+    <div class="rline" id="readyLine"></div>
   </form>
 
   <section class="panel pad sessions" id="sessionsPanel" hidden aria-label="Sessions">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span class="eyebrow">Sessions</span><button class="btn sm" id="btnRefresh" type="button">Refresh</button></div>
+    <div style="margin-bottom:6px"><span class="eyebrow">Sessions</span> <span class="muted">(updates by itself)</span></div>
     <div class="tbl" id="sessTbl"><div class="muted">Loading...</div></div>
   </section>
 
-  <section class="panel summary" id="summary" aria-label="Line summary">
-    <div class="sum-tile"><div class="eyebrow">Units done</div><div class="v" id="sUnits">0</div><div class="s" id="sUnitsS">tested at QA</div></div>
-    <div class="sum-tile"><div class="eyebrow">Units per hour</div><div class="v" id="sUph">--</div><div class="s" id="sUphS">since start</div></div>
-    <div class="sum-tile"><div class="eyebrow">First-pass yield</div><div class="v" id="sFpy">--</div><div class="s" id="sFpyS">pass / tested</div></div>
-    <div class="sum-tile"><div class="eyebrow">Takt</div><div class="v" id="sTakt">--</div><div class="s" id="sTaktS">not set</div></div>
-    <div class="fails" id="sFails"></div>
-    <div class="flow" id="sFlow"></div>
+  <section class="panel setupbar" id="setupBar" hidden aria-label="Setup">
+    <div class="sb-head"><div><span class="eyebrow">Setup</span>Each station: pick its camera, draw its boxes, calibrate. This laptop remembers it all.</div><button class="btn primary" id="btnDone" type="button">Done</button></div>
+    <div class="sb-warn" id="sbWarn" hidden>A session is recording: boxes and calibration change the counts from now on.</div>
+    <div class="sb-row">
+      <label class="sb-item" title="Shows the answer key: one person keys every unit (1, 2, 3 as units leave, P or F at QA with the reason), so the cameras can be scored against it. This laptop remembers it."><input type="checkbox" id="chkScore"> <b>Score the cameras</b><span class="muted">(answer key)</span></label>
+      <span class="sb-item"><button class="btn sm" id="btnModel" type="button">Models: off</button><span class="muted" id="mdlNote"></span></span>
+      <span class="sb-item"><button class="btn sm" id="btnHands" type="button" title="Hand tracking: a hand resting in a zone counts as activity, and model checks wait for a clear view. Slows each station's model results to every 4 to 5 seconds.">Hand tracking: off</button></span>
+      <span class="sb-item" id="countItem" hidden>Count by<span class="seg" id="basisSeg"><button type="button" data-b="auto">Auto</button><button type="button" data-b="detected">Detected</button><button type="button" data-b="manual">Manual</button></span></span>
+      <button class="btn sm" id="btnReset" type="button">Reset counts</button>
+      <button class="btn sm" id="btnPair" type="button" title="Make a new pairing code for the phone cameras. Every phone link and QR code so far stops working, and connected phones are cut off.">New pairing code</button>
+      <span class="muted mono" id="detNote"></span>
+    </div>
   </section>
 
-  <div class="toolbar">
-    <button class="btn sm" id="btnModel" type="button">Model: off</button>
-    <button class="btn sm" id="btnHands" type="button">Hands: off</button>
-    <button class="btn sm" id="btnSound" type="button" title="Mistake alert sounds for every station (each station also has its own Mute)">Sound: on</button>
-    <span class="muted" id="detNote"></span>
-    <span class="sep"></span>
-    <button class="btn sm" id="btnCams" type="button">Find cameras</button>
-    <span class="sep"></span>
-    <span>Count</span><span class="seg" id="basisSeg"><button type="button" data-b="auto">Auto</button><button type="button" data-b="detected">Detected</button><button type="button" data-b="manual">Manual</button></span>
-    <button class="btn sm" id="btnReset" type="button">Reset counts</button>
-    <span class="keys"><span><kbd>1</kbd>-<kbd id="kLast">4</kbd> cycle done</span><span><kbd>P</kbd> pass</span><span><kbd>F</kbd> fail</span><span><kbd>Esc</kbd> close</span></span>
-  </div>
+  <section class="panel setupbar" id="layoutBar" hidden aria-label="Edit layout">
+    <div class="sb-head"><div><span class="eyebrow">Edit layout</span>Drag a station to move it. Each station's strip renames it, changes its role or moves it in the flow.</div><button class="btn primary" id="btnLayoutDone" type="button">Done</button></div>
+    <div class="sb-row">
+      <label class="sb-item">Layout <select id="laySel" aria-label="Layout"></select></label>
+      <label class="sb-item">Name <input id="layName" maxlength="60" style="padding:3px 7px;border:1px solid var(--line-2);border-radius:6px;background:var(--surface);width:220px"></label>
+      <button class="btn sm" id="layNew" type="button">New blank</button>
+      <button class="btn sm" id="layDup" type="button">Duplicate</button>
+      <button class="btn sm" id="layDel" type="button">Delete</button>
+      <span class="muted" id="layNote"></span>
+    </div>
+  </section>
 
-  <div class="grid" id="grid"></div>
+  <section class="panel summary" id="summary" aria-label="Line summary">
+    <div class="sum-row">
+      <div class="sum-tile"><div class="eyebrow">Units done</div><div class="v" id="sUnits">0</div><div class="s" id="sUnitsS">tested at QA</div></div>
+      <div class="sum-tile"><div class="eyebrow">Units per hour</div><div class="v" id="sUph">--</div><div class="s" id="sUphS">since start</div></div>
+      <div class="sum-tile"><div class="eyebrow">First-pass yield</div><div class="v" id="sFpy">--</div><div class="s" id="sFpyS">pass / tested</div><div class="s" id="sFails"></div></div>
+      <div class="sum-tile" id="sTaktTile" hidden><div class="eyebrow">Takt</div><div class="v" id="sTakt">--</div><div class="s" id="sTaktS"></div></div>
+    </div>
+    <div class="flow" id="sFlow"></div>
+  </section>
 </div>
 
+<main class="floor" id="floor" aria-label="Floor: the stations where they stand">
+  <div class="world" id="world">
+    <svg class="arrows" aria-hidden="true"><defs><marker id="ah" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="3.2" markerHeight="3.2" orient="auto"><path d="M0 0L10 5L0 10z"/></marker></defs><g id="arrowG"></g></svg>
+  </div>
+  <div class="fl-tools">
+    <button class="btn" id="btnEdit" type="button" title="Move, rename, re-role, reorder or remove stations, and pick a layout">Edit layout</button>
+    <button class="btn plus" id="btnAdd" type="button" title="Add a station" aria-label="Add a station">+ Station</button>
+    <span class="fl-name" id="flName"></span>
+  </div>
+  <form class="panel addp" id="addPanel" hidden autocomplete="off" aria-label="Add a station">
+    <b>Add a station</b>
+    <label>Role (which trained station it is)<select id="addRole"></select></label>
+    <label>Name<input id="addName" maxlength="40"></label>
+    <span class="muted" style="font-size:12px">It goes in the middle of the screen. Then connect its camera.</span>
+    <div class="acts"><button class="btn primary" type="submit">Add station</button><button class="btn" id="btnAddX" type="button">Cancel</button></div>
+  </form>
+  <div class="floor-empty" id="floorEmpty" hidden>No stations on this layout yet. Press + to add one.</div>
+  <div class="zoombox">
+    <button class="btn" id="zOut" type="button" title="Zoom out" aria-label="Zoom out">&minus;</button>
+    <button class="btn zp" id="zPct" type="button" title="Back to 100%">100%</button>
+    <button class="btn" id="zIn" type="button" title="Zoom in" aria-label="Zoom in">+</button>
+    <button class="btn" id="zFit" type="button" title="Fit every station in view">Fit</button>
+  </div>
+</main>
+
+<div class="akbar" id="akBar" hidden aria-label="Answer key">
+  <div class="reasons" id="akReasons" hidden></div>
+  <div class="ak-row" id="akRow"></div>
+</div>
+
+<script src="/vendor/qrcode.js"></script>
 <script src="/line-engine.js"></script>
 <script src="/live-detect.js"></script>
 <script>
 (() => {
   'use strict';
+  // The LEGO run log used to live at /, with its routes after a #: an old link like /#runs goes on to /runs.
+  if (location.hash.length > 1) { location.replace('/runs' + location.hash); return; }
   const LE = window.LineEngine, LD = window.LiveDetect;
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -259,17 +404,24 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
   };
   const ZONE_COLORS = ['#2a78d6', '#1baf7a', '#eb6834', '#b05bd6', '#eda100', '#e0457b'];
   const PROC_PIXELS = 160 * 120;     // zone signals run on a frame of about 160x120
-  const SIGNAL_MS = 125;             // about 8 Hz per station
+  const SIGNAL_MS = 125;             // at most 8 Hz per station (6.7 in practice, on the 30 ms tick)
+  const TICK_BUDGET = 8;             // ms of zone signals per 30 ms tick, shared by the stations that are due
   const GPU = /[?&]gpu\b/.test(location.search);
   const MIN_BOX = 0.25;
 
+  // config: the effective config (G.base, the file, with the floor layout applied: one station per layout entry).
   const G = {
-    config: null, setup: {}, events: [], queue: [], session: null, lastSession: null, basis: store.get('wire-line:basis') || 'auto',
+    config: null, base: null, layout: null, layouts: [], roles: [], editMode: false, qaIds: [], setup: {}, events: [], queue: [], session: null, lastSession: null, basis: store.get('wire-line:basis') || 'auto',
     modelOn: false, handsOn: false, cameras: [], clips: [], camAllowed: false, failPick: null, sending: false, summary: null, sumAt: 0, evSeen: -1,
-    qaId: null, saveTimer: null, starting: false, stopping: false, soundOn: store.get('wire-line:sound') !== false
+    qaId: null, saveTimer: null, starting: false, stopping: false, soundOn: store.get('wire-line:sound') !== false, setupMode: false,
+    score: store.get('wire-line:score') === true    // Score the cameras: the answer key shows (off by default)
   };
+  const FLOOR = { grid: 40, cardW: 640, minZ: 0.25, maxZ: 2 };    // the same grid and card width as LineEngine.FLOOR
+  const V = { x: 40, y: 60, z: 1, saveT: 0, sizeT: 0 };            // the floor view: screen = world * z + (x, y)
   // Y.files: one entry per distinct model file ({ status, session, size, canvas, ctx, ... }); each station points at its file through st.mdl.
   const Y = { status: 'off', backend: '', ort: null, files: {}, error: '', loading: null, errs: 0 };
+  // Phone cameras: info from /api/phone/info (pairing code, addresses), and this page's id for the signaling.
+  const PHN = { info: null, client: Array.from(crypto.getRandomValues(new Uint8Array(12)), b => (b % 36).toString(36)).join(''), pairArm: 0 };
   const H = { status: 'off', worker: null, wait: null, seq: 0, ms: 0, error: '', loading: null };
   const ST = {};
   let LIST = [];
@@ -309,13 +461,15 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     if (x && x.ref && x.ref.classes && ids.includes(x.ref.anchor)) out.ref = x.ref;    // the saved correct state (positionCheck)
     return out;
   }
+  // Kept per station and role (LineEngine.setupKey: "s2", or "s5:s4"); the whole file goes back, so stations on other
+  // layouts keep their boxes.
   function saveSetup(st) {
     st.setup.updatedAt = new Date().toISOString();
-    G.setup[st.id] = st.setup;
+    G.setup[st.skey] = st.setup;
     clearTimeout(G.saveTimer);
     G.saveTimer = setTimeout(async () => {
       const body = {};
-      for (const s of LIST) body[s.id] = s.setup;
+      for (const k of Object.keys(G.setup)) { const m = /^([a-z][a-z0-9_]*)(?::([a-z][a-z0-9_]*))?$/.exec(k); if (m && G.base.stations.some(x => x.id === (m[2] || m[1]))) body[k] = G.setup[k]; }
       try {
         const r = await fetch('/api/line/setup', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         if (!r.ok) banner('setup', 'Setup was not saved: ' + ((await r.json()).message || r.status), 'crit');
@@ -323,7 +477,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       } catch (e) { banner('setup', 'Setup was not saved: the local server is not answering.', 'crit'); }
     }, 400);
   }
-  // The zone(s) the bulb test reads, so the QA tile can offer Bulb off / Bulb on.
+  // The zone(s) the bulb test reads, so the QA card can offer Bulb off / Bulb on.
   function bulbZones(cfg) {
     if (!cfg.qa || !cfg.qa.lightSubstep) return [];
     const sub = cfg.substeps.find(s => s.id === cfg.qa.lightSubstep);
@@ -339,94 +493,162 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     $('banners').style.gap = '6px';
   }
 
-  // ---------- stations ----------
+  // ---------- stations: one card per layout entry, placed on the floor ----------
+  const roleLabel = id => (G.roles.find(r => r.id === id) || {}).label || id;
+  const opOk = o => !!(o && LE.OPERATOR_CODE.test(String(o.code)) && LE.LEVELS.some(l => l.id === o.level));
   function makeStation(cfg, idx) {
-    const isQa = !!cfg.qa, bulbs = bulbZones(cfg);
+    const isQa = !!cfg.qa, bulbs = bulbZones(cfg), skey = LE.setupKey(cfg.id, cfg.role), saved = store.get('wire-line:operator:' + cfg.id);
     const st = {
-      cfg, id: cfg.id, idx, isQa, bulbs,
+      cfg, id: cfg.id, idx, isQa, bulbs, skey, op: opOk(saved) ? { code: saved.code, level: saved.level } : null,
       eng: LE.createStation(cfg, { holdFrames: G.config.holdFrames, defaults: G.config.defaults, qaGraceSec: G.config.qaGraceSec }),
       source: { type: 'none', key: 'none', label: 'None (manual only)' }, stream: null, recOn: false, rec: null, recBytes: 0,
-      setup: normSetup(cfg, G.setup[cfg.id]), prevGray: null, sig: null, lastProc: 0, lastCT: 0, fps: 0, fpsN: 0, fpsT: now(), fresh: false,
+      setup: normSetup(cfg, G.setup[skey]), prevGray: null, sig: null, lastProc: 0, lastCT: 0, fps: 0, fpsN: 0, fpsT: now(), fresh: false,
       mdl: null, dets: null, detsPrev: null, detT: 0, hands: null, handsT: 0, modelN: 0, modelFps: 0, modelT: now(),
       manualN: 0, setupOn: false, drawZone: null, drag: null, calib: null, err: '', clearArm: 0, lastCheck: '', token: 0,
-      chk: LE.createChecker(cfg), mute: store.get('wire-line:mute:' + cfg.id) === true, detSeq: 0, detCapT: 0, driven: false, lastCard: '', refMsg: '', px: 1
+      chk: LE.createChecker(cfg), mute: store.get('wire-line:mute:' + cfg.id) === true, detSeq: 0, detCapT: 0, driven: false, lastCard: '', refMsg: '', px: 1,
+      phone: null, phoneKey: '', lastChip: ''
     };
     st.chk.setRef(st.setup.ref || null);
     const el = document.createElement('section');
     el.className = 'panel st'; el.dataset.st = cfg.id;
     el.innerHTML = `
       <div class="st-head">
-        <span class="st-badge">${esc(cfg.id.toUpperCase())}</span><h2>${esc(cfg.label)}</h2>
-        <select class="src" aria-label="Video source for ${esc(cfg.label)}"></select>
-        <label class="recl" title="Record this station's video while a session runs"><input type="checkbox" class="rec"> Rec</label>
-        <label class="recl" title="Mute this station's mistake alert sounds"><input type="checkbox" class="mute"> Mute</label>
-        <button class="btn sm setupb" type="button">Setup</button>
+        <span class="st-badge">${esc(cfg.id.toUpperCase())}</span><h2 class="stname"></h2><span class="role"></span>
+        <span class="opslot"><button type="button" class="chip opc" title="Operator at this station: an anonymous code and a training level">Op --</button></span><span class="srcst"></span><span class="chip rdy" hidden></span><button type="button" class="chip warn needb" hidden title="Open Setup">Setup needed</button><span class="recst"></span>
+      </div>
+      <div class="edit-panel" hidden>
+        <label class="recl">Name <input class="ed-name" maxlength="40"></label>
+        <label class="recl" title="Which trained station it is: its steps, boxes and model">Role <select class="ed-role"></select></label>
+        <span class="recl">Flow <button type="button" class="btn sm ed-up" title="Earlier in the flow">&#9664;</button><b class="ed-ord mono"></b><button type="button" class="btn sm ed-down" title="Later in the flow">&#9654;</button></span>
+        <button type="button" class="btn sm ed-del">Remove</button>
+      </div>
+      <div class="oppop panel" hidden role="dialog" aria-label="Operator">
+        <b class="op-t"></b>
+        <label class="recl">Code <span class="opcode">Op-<input class="op-num" inputmode="numeric" maxlength="3" placeholder="07" aria-label="Operator number"></span></label>
+        <div class="seg op-lv">${LE.LEVELS.map(l => `<button type="button" data-l="${l.id}">${esc(l.label)}</button>`).join('')}</div>
+        <span class="muted" style="font-size:12px">An anonymous number, never a name. Changing it mid-shift is fine.</span>
+        <div class="acts"><button type="button" class="btn sm primary op-save">Save</button><button type="button" class="btn sm op-none">No operator</button><button type="button" class="btn sm op-x">Cancel</button></div>
+        <span class="op-msg"></span>
       </div>
       <div class="st-body">
-        <div class="stage"><video muted playsinline></video><canvas></canvas><div class="nosrc">No video. Pick a camera or a clip above, or use the buttons below.</div>
-          <div class="vcard" hidden role="status" aria-live="assertive"><div class="vc-top"><b class="vc-title"></b><span class="vc-st">${esc(cfg.id.toUpperCase())} ${esc(cfg.label)}</span></div><div class="vc-msg"></div></div></div>
+        <div class="stage"><video muted playsinline></video><canvas></canvas>
+          <div class="nosrc"><div class="con"><b class="con-t">No camera</b><button type="button" class="btn primary conb">Connect a camera</button>
+            <div class="con-opts" hidden><button type="button" class="btn con-phone">Phone or tablet (scan a QR code)</button><button type="button" class="btn con-usb">USB camera</button><button type="button" class="btn con-clip">Recorded clip</button>
+              <span class="con-hint">USB camera: any camera Chrome lists (webcams, capture cards, Continuity Camera, OBS Virtual Camera).</span></div>
+            <select class="con-list" hidden aria-label="Camera or clip for ${esc(cfg.id.toUpperCase())}"></select><span class="con-msg"></span><button type="button" class="btn sm con-x" hidden>Back</button></div></div>
+          <div class="phonep" hidden></div><div class="pchip" hidden></div>
+          <div class="vcard" hidden role="status" aria-live="assertive"><div class="vc-top"><b class="vc-title"></b><span class="vc-st"></span></div><div class="vc-msg"></div></div></div>
         <div class="info">
           <div class="nowbox"><div><div class="eyebrow nowlab">Now</div><div class="cur">Waiting for the first step</div></div><div class="big mono"></div></div>
           <div class="kv mono"></div>
           <div class="qa"${isQa ? '' : ' hidden'}></div>
+          <span class="stmsg"></span>
           <ol class="check"></ol>
         </div>
       </div>
-      <div class="st-foot">
-        <button class="btn primary cyc" type="button">Cycle done <kbd>${idx + 1}</kbd></button>
-        ${isQa ? '<button class="btn pass passb" type="button">Pass <kbd>P</kbd></button><button class="btn fail failb" type="button">Fail <kbd>F</kbd></button>' : ''}
-        <span class="stmsg"></span>
-        <span class="meta mono"></span>
-      </div>
-      ${isQa ? '<div class="reasons" hidden></div>' : ''}
       <div class="setup-panel" hidden>
+        <div class="srow"><label class="recl">Camera <select class="src" aria-label="Video source for ${esc(cfg.id.toUpperCase())}"></select></label>
+          <label class="recl" title="Record this station's video while a session runs (on by default for cameras and phones)"><input type="checkbox" class="rec"> Record video</label>
+          <label class="recl" title="Mute this station's mistake alert sounds"><input type="checkbox" class="mute"> Mute sounds</label>
+          <button type="button" class="btn sm pqr" hidden title="Show this station's phone QR code and link, to swap in another phone or tablet">Show QR</button></div>
         <div class="zbtns"></div>
-        <div class="calrow"><button class="btn sm calb" type="button">Calibrate empty</button>${bulbs.length ? '<button class="btn sm boff" type="button">Bulb off</button><button class="btn sm bon" type="button">Bulb on</button>' : ''}<button class="btn sm clr" type="button">Clear zones</button><span class="calst muted"></span></div>
-        <div class="muted">Pick a zone, then drag a box on the video. Calibrate with the work area empty${bulbs.length ? ' and the bulb off; then light the bulb and press Bulb on' : ''}.</div>
+        <div class="calrow"><button class="btn sm calb" type="button">Calibrate empty</button>${bulbs.length ? '<button class="btn sm bon" type="button">Bulb on</button>' : ''}<button class="btn sm clr" type="button">Clear zones</button><span class="calst muted"></span></div>
+        <div class="muted">Pick a zone, then drag a box on the video. Calibrate with the work area empty${bulbs.length ? ' and the bulb dark, then light the bulb and press Bulb on' : ''}.</div>
         ${cfg.positionCheck ? `<div class="calrow"><button class="btn sm refb" type="button">Save correct state</button><span class="refst muted"></span></div>
-        <div class="muted">Position check: build it correctly, turn the model on, take your hands away, then press Save correct state. It saves where the model sees ${esc(cfg.positionCheck.classes.join(', '))} inside the ${esc((cfg.zones.find(z => z.id === cfg.positionCheck.anchor) || {}).label || cfg.positionCheck.anchor)} zone.</div>` : ''}
+        <div class="muted">Position check: build it correctly with the model running, take your hands away, then press Save correct state. It saves where the model sees ${esc(cfg.positionCheck.classes.join(', '))} inside the ${esc((cfg.zones.find(z => z.id === cfg.positionCheck.anchor) || {}).label || cfg.positionCheck.anchor)} zone.</div>` : ''}
+        <div class="diag mono"></div>
       </div>`;
     const q = s => el.querySelector(s);
     Object.assign(st, {
-      el, video: q('video'), canvas: q('canvas'), stage: q('.stage'), nosrc: q('.nosrc'), sel: q('.src'), recBox: q('.rec'), setupBtn: q('.setupb'),
+      el, video: q('video'), canvas: q('canvas'), stage: q('.stage'), nosrc: q('.nosrc'), sel: q('.src'), recBox: q('.rec'),
+      elSrc: q('.srcst'), elRdy: q('.rdy'), needBtn: q('.needb'), elRec: q('.recst'),
       elNow: q('.nowbox'), elNowLab: q('.nowlab'), elCur: q('.cur'), elBig: q('.big'), elKv: q('.kv'), elQa: q('.qa'), elCheck: q('.check'),
-      elMeta: q('.meta'), elMsg: q('.stmsg'), setupPanel: q('.setup-panel'), zbtns: q('.zbtns'), calst: q('.calst'), reasons: q('.reasons'),
-      vcard: q('.vcard'), vcTitle: q('.vc-title'), vcMsg: q('.vc-msg'), refst: q('.refst')
+      elMeta: q('.diag'), elMsg: q('.stmsg'), setupPanel: q('.setup-panel'), zbtns: q('.zbtns'), calst: q('.calst'),
+      vcard: q('.vcard'), vcTitle: q('.vc-title'), vcMsg: q('.vc-msg'), refst: q('.refst'), phoneEl: q('.phonep'), pchip: q('.pchip'), qrBtn: q('.pqr'),
+      con: { btn: q('.conb'), opts: q('.con-opts'), list: q('.con-list'), msg: q('.con-msg'), back: q('.con-x'), step: null },
+      elName: q('.stname'), elRole: q('.role'), vcSt: q('.vc-st'), editPanel: q('.edit-panel'), opBtn: q('.opc'), opPop: q('.oppop')
     });
+    bindEdit(st); bindOperator(st);
+    st.qrBtn.onclick = () => { if (st.phone) { st.phone.showQr = !st.phone.showQr; renderPhone(st, true); } };
+    st.needBtn.onclick = () => openSetup(st);
+    bindConnect(st);
     st.ctx = st.canvas.getContext('2d');
     st.proc = document.createElement('canvas');
     st.pctx = st.proc.getContext('2d', { willReadFrequently: true });
     st.video.loop = true;
     // Blur after picking, so the number and letter hotkeys reach the page instead of the list.
-    st.sel.onchange = () => { st.sel.blur(); setSource(st, st.sel.value); };
+    st.sel.onchange = () => { st.sel.blur(); if (st.sel.value === 'askcam') askCameras(st); else setSource(st, st.sel.value); };
     st.recBox.onchange = () => setRec(st, st.recBox.checked);
     const muteBox = q('.mute');
     muteBox.checked = st.mute;
     muteBox.onchange = () => { st.mute = muteBox.checked; store.set('wire-line:mute:' + st.id, st.mute); };
     if (cfg.positionCheck) q('.refb').onclick = () => saveRef(st);
-    st.setupBtn.onclick = () => toggleSetup(st);
-    q('.cyc').onclick = () => manualCycle(st);
-    if (isQa) { q('.passb').onclick = () => manualPass(); q('.failb').onclick = () => openFail(); }
     q('.calb').onclick = () => calibrate(st, 'empty');
-    if (bulbs.length) { q('.boff').onclick = () => calibrate(st, 'off'); q('.bon').onclick = () => calibrate(st, 'on'); }
+    if (bulbs.length) q('.bon').onclick = () => calibrate(st, 'on');
     q('.clr').onclick = () => clearZones(st);
     bindDrawing(st);
-    if (window.ResizeObserver) new ResizeObserver(() => { sizeCanvas(st); drawOverlay(st); }).observe(st.stage);
+    if (window.ResizeObserver) {
+      new ResizeObserver(() => { sizeCanvas(st); drawOverlay(st); }).observe(st.stage);
+      new ResizeObserver(scheduleArrows).observe(el);    // Setup or Edit layout makes the card taller: the arrows follow
+    }
     st.video.addEventListener('loadedmetadata', () => { sizeCanvas(st); drawOverlay(st); });
     return st;
   }
 
   // ---------- sources ----------
-  function sourceOptions(st) {
+  const OWN_CLIPS = 10;    // a station lists its own newest recordings only
+  // Which station a session recording belongs to: its file is <station>.mp4, or <station>-<part>.mp4.
+  function clipStation(c) { const m = /^(.+?)(-\d+)?\.\w+$/.exec(String(c.key).split(':')[2] || ''); return m ? m[1] : null; }
+  // USB cameras (freeOnly: leave out the ones other stations use).
+  function cameraOptions(st, freeOnly) {
     const used = {};
     for (const s of LIST) if (s !== st && s.source.type === 'camera') used[s.source.key] = s.id.toUpperCase();
-    let html = '<option value="none">None (manual only)</option>';
-    if (G.cameras.length) html += '<optgroup label="Cameras">' + G.cameras.map(c => `<option value="${esc(c.key)}"${used[c.key] ? ' disabled' : ''}>${esc(c.label)}${used[c.key] ? ' (on ' + used[c.key] + ')' : ''}</option>`).join('') + '</optgroup>';
-    else html += '<optgroup label="Cameras"><option disabled>Press Find cameras</option></optgroup>';
-    const a = G.clips.filter(c => c.group === 'assets'), s = G.clips.filter(c => c.group === 'sessions');
-    if (a.length) html += '<optgroup label="Recorded clips">' + a.map(c => `<option value="clip:${esc(c.key)}">${esc(c.label)}</option>`).join('') + '</optgroup>';
-    if (s.length) html += '<optgroup label="Session recordings">' + s.map(c => `<option value="clip:${esc(c.key)}">${esc(c.label)}</option>`).join('') + '</optgroup>';
+    return G.cameras.filter(c => !freeOnly || !used[c.key]).map(c => `<option value="${esc(c.key)}"${used[c.key] ? ' disabled' : ''}>${esc(c.label)}${used[c.key] ? ' (on ' + used[c.key] + ')' : ''}</option>`).join('');
+  }
+  // The LEGO run videos are demo clips for every station; past session recordings only for their own station, newest first.
+  function clipOptions(st) {
+    const a = G.clips.filter(c => c.group === 'assets'), s = G.clips.filter(c => c.group === 'sessions' && clipStation(c) === st.id).slice(0, OWN_CLIPS);
+    const cur = st.source.type === 'clip' && G.clips.find(c => 'clip:' + c.key === st.source.key && c.group === 'sessions');
+    if (cur && !s.includes(cur)) s.push(cur);
+    let html = '';
+    if (a.length) html += '<optgroup label="Demo clips">' + a.map(c => `<option value="clip:${esc(c.key)}">${esc(c.label)}</option>`).join('') + '</optgroup>';
+    if (s.length) html += `<optgroup label="${esc(st.id.toUpperCase())}'s recordings">` + s.map(c => `<option value="clip:${esc(c.key)}">${esc(c.label)}</option>`).join('') + '</optgroup>';
     return html;
+  }
+  // The full camera list in Setup.
+  function sourceOptions(st) {
+    const cams = cameraOptions(st);
+    return '<option value="none">No camera</option>' +
+      '<optgroup label="USB cameras">' + (cams || (G.camAllowed ? '<option disabled>No USB camera plugged in</option>' : '<option value="askcam">USB camera: allow access</option>')) + '</optgroup>' +
+      '<optgroup label="Phones and tablets"><option value="phone">Phone or tablet (scan a QR code)</option></optgroup>' + clipOptions(st);
+  }
+  // ---------- Connect a camera: a station with no camera offers a phone or tablet, a USB camera or a recorded clip ----------
+  function bindConnect(st) {
+    const c = st.con, q = sel => st.el.querySelector(sel);
+    c.btn.onclick = () => showConnect(st, 'choose');
+    c.back.onclick = () => showConnect(st, null);
+    q('.con-phone').onclick = () => setSource(st, 'phone');
+    q('.con-usb').onclick = () => connectUsb(st);
+    q('.con-clip').onclick = () => showConnect(st, 'clip');
+    c.list.onchange = () => { const v = c.list.value; c.list.blur(); if (v) setSource(st, v); };
+  }
+  // step: null (only the button), 'choose' (the three ways), 'usb' or 'clip' (a list to pick from).
+  function showConnect(st, step, msg) {
+    const c = st.con, list = step === 'usb' ? cameraOptions(st, true) : step === 'clip' ? clipOptions(st) : '';
+    if (step === 'clip' && !list) { step = 'choose'; msg = 'No clips yet. Recordings show up here after a session.'; }
+    c.step = step;
+    c.btn.hidden = !!step; c.opts.hidden = step !== 'choose'; c.back.hidden = !step;
+    c.msg.textContent = msg || '';
+    c.list.hidden = !list;
+    if (list) { c.list.innerHTML = `<option value="">${step === 'usb' ? 'Pick the camera' : 'Pick a clip'}</option>` + list; c.list.value = ''; }
+  }
+  // One free camera: take it. Several: pick from a list. The first time this asks the browser for camera access.
+  async function connectUsb(st) {
+    if (!G.camAllowed) await findCameras(true);
+    const free = G.cameras.filter(c => !LIST.some(s => s !== st && s.source.key === c.key));
+    if (!free.length) return showConnect(st, 'choose', G.camAllowed ? 'No free USB camera. Plug one in and press USB camera again.' : 'Camera access was not given. Allow it next to the address bar, then try again.');
+    if (free.length === 1) return setSource(st, free[0].key);
+    showConnect(st, 'usb');
   }
   function rebuildPickers() {
     for (const st of LIST) {
@@ -440,22 +662,35 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     try { G.clips = (await (await fetch('/api/line/clips', { cache: 'no-store' })).json()).clips || []; } catch (e) { G.clips = []; }
     rebuildPickers();
   }
+  // USB cameras are found by themselves: at load when access was given before, whenever one is plugged in or out, and
+  // the first time someone picks "USB camera: allow access" (ask). Without access the browser hides their names and ids.
   async function findCameras(ask) {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) { banner('cam', 'This browser gives no camera access here. Clips and the buttons still work.'); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) { banner('cam', 'This browser gives no camera access here. Phones and clips still work.'); return; }
     if (ask) {
-      try { const tmp = await navigator.mediaDevices.getUserMedia({ video: true }); tmp.getTracks().forEach(t => t.stop()); G.camAllowed = true; banner('cam', ''); }
-      catch (e) { banner('cam', 'Camera permission was not given (' + esc(e && e.name || 'error') + '). Clips and the buttons still work.'); }
+      try { const tmp = await navigator.mediaDevices.getUserMedia({ video: true }); tmp.getTracks().forEach(t => t.stop()); banner('cam', ''); }
+      catch (e) { banner('cam', 'Camera access was not given (' + esc(e && e.name || 'error') + '). Phones and clips still work.'); }
     }
     const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
-    G.cameras = devs.map((d, i) => ({ key: 'cam:' + (d.label || d.deviceId || String(i)), deviceId: d.deviceId, label: d.label || 'Camera ' + (i + 1) }));
-    if (devs.some(d => d.label)) G.camAllowed = true;
-    $('btnCams').textContent = G.cameras.length ? 'Cameras: ' + G.cameras.length + ' (refresh)' : 'Find cameras';
+    G.camAllowed = devs.some(d => d.label);
+    G.cameras = G.camAllowed ? devs.map((d, i) => ({ key: 'cam:' + (d.label || d.deviceId || String(i)), deviceId: d.deviceId, label: d.label || 'Camera ' + (i + 1) })) : [];
     rebuildPickers();
+  }
+  // "USB camera: allow access": ask once, put back any saved cameras, and give this station the first free one.
+  async function askCameras(st) {
+    st.sel.value = st.source.key;
+    await findCameras(true);
+    await restoreSources(true);
+    const free = G.cameras.find(c => !LIST.some(s => s.source.key === c.key));
+    if (free && st.source.type === 'none') await setSource(st, free.key);
+  }
+  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+    navigator.mediaDevices.addEventListener('devicechange', async () => { if (!LIST.length) return; await findCameras(false); await restoreSources(true); });
   }
 
   async function stopSource(st) {
     st.token++;
     if (st.rec) await stopRecording(st);
+    if (st.phone) { closePhonePc(st, true); st.phone = null; }
     if (st.stream) { st.stream.getTracks().forEach(t => t.stop()); st.stream = null; }
     const v = st.video;
     v.pause(); v.removeAttribute('src'); v.srcObject = null; try { v.load(); } catch (e) { /* ignore */ }
@@ -468,13 +703,15 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     let src = { type: 'none', key: 'none', label: 'None (manual only)' };
     if (key.startsWith('cam:')) { const c = G.cameras.find(x => x.key === key); if (c) src = { type: 'camera', key, label: c.label, deviceId: c.deviceId }; }
     else if (key.startsWith('clip:')) { const c = G.clips.find(x => 'clip:' + x.key === key); if (c) src = { type: 'clip', key, label: c.label, url: c.url }; }
+    else if (key === 'phone') src = { type: 'phone', key: 'phone', label: 'Phone' };
+    st.phone = src.type === 'phone' ? { state: 'waiting', pc: null, id: null, stream: null, camera: '', stats: null, server: null, error: '', lostAt: 0, showQr: false } : null;
     st.source = src; st.err = '';
     st.prevGray = null; st.sig = null; st.dets = st.detsPrev = null; st.hands = null; st.lastCT = 0;
     st.eng.abandon(t).forEach(emit);
     st.chk.restart();
-    emit({ type: 'source_change', station: st.id, t, input: src.type, note: src.label });
+    emit({ type: 'source_change', station: st.id, t, input: inputOf(st), note: noteOf(st) });
     if (!quiet) store.set('wire-line:source:' + st.id, src.key);
-    st.recOn = src.type === 'camera' ? (store.get('wire-line:rec:' + st.id) !== false) : src.type === 'clip' ? store.get('wire-line:recclip:' + st.id) === true : false;
+    st.recOn = src.type === 'camera' || src.type === 'phone' ? (store.get('wire-line:rec:' + st.id) !== false) : src.type === 'clip' ? store.get('wire-line:recclip:' + st.id) === true : false;
     st.recBox.checked = st.recOn; st.recBox.disabled = src.type === 'none';
     const v = st.video;
     try {
@@ -493,6 +730,9 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       emit({ type: 'source_change', station: st.id, t: now(), input: 'none', note: 'failed: ' + src.label });
     }
     st.nosrc.hidden = st.source.type !== 'none';
+    showConnect(st, null);
+    if (st.source.type === 'phone') { if (!PHN.info) await loadPhoneInfo(); phonePoll(); }
+    renderPhone(st, true);
     rebuildPickers();
     if (G.session && st.recOn && st.source.type !== 'none') startRecording(st);
     sizeCanvas(st); drawOverlay(st);
@@ -513,11 +753,12 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
   }
   function startRecording(st) {
     if (!G.session || st.rec || st.source.type === 'none') return;
+    if (st.source.type === 'phone' && !phoneLive(st)) return;    // it starts when the phone connects
     const mime = pickMime();
     if (!mime) { st.err = 'This browser cannot record video.'; return; }
     let tracks = [];
     try {
-      if (st.source.type === 'camera' && st.stream) tracks = st.stream.getVideoTracks();
+      if ((st.source.type === 'camera' || st.source.type === 'phone') && st.stream) tracks = st.stream.getVideoTracks();
       else if (st.source.type === 'clip' && st.video.captureStream) tracks = st.video.captureStream().getVideoTracks();
     } catch (e) { tracks = []; }
     if (!tracks.length) { st.err = 'No video track to record yet.'; return; }
@@ -563,7 +804,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     while ((rec.queue.length || rec.busy) && now() < until) { pumpChunks(rec); await sleep(150); }
   }
 
-  // ---------- frame loop: zone signals at about 8 Hz per station, one station per tick ----------
+  // ---------- frame loop: zone signals for every station at its own rate, within a time budget per tick ----------
   function procSize(vw, vh) { const s = Math.sqrt(PROC_PIXELS / (vw * vh)); return { w: Math.max(16, Math.round(vw * s)), h: Math.max(12, Math.round(vh * s)) }; }
   function zonesOf(st) { return st.setup.zones; }
   function processStation(st) {
@@ -596,11 +837,21 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     st.fresh = true;
   }
   setInterval(() => {
-    // Pick the station that waited longest; one per tick keeps each tick short.
+    // Every station that is due, the one that waited longest first, until this tick has used its budget. One station per
+    // tick capped the whole line at about 33 frames a second (5.6 per station with six, 2.8 with twelve); this way every
+    // station keeps its own rate (6.7 a second: 125 ms rounded up to the 30 ms tick) however many there are, and they only
+    // share when the laptop runs out of time.
+    const t0 = now();
+    for (;;) {
+      const t = now();
+      let pick = null;
+      for (const st of LIST) if (st.source.type !== 'none' && t - st.lastProc >= SIGNAL_MS && (!pick || st.lastProc < pick.lastProc)) pick = st;
+      if (!pick) break;
+      try { processStation(pick); } catch (e) { console.error(e); }    // sets pick.lastProc, so it is not picked again this tick
+      if (pick.fresh) { drawOverlay(pick); pick.fresh = false; }
+      if (now() - t0 >= TICK_BUDGET) break;
+    }
     const t = now();
-    let pick = null;
-    for (const st of LIST) if (st.source.type !== 'none' && t - st.lastProc >= SIGNAL_MS && (!pick || st.lastProc < pick.lastProc)) pick = st;
-    if (pick) { try { processStation(pick); } catch (e) { console.error(e); } if (pick.fresh) { drawOverlay(pick); pick.fresh = false; } }
     for (const st of LIST) if (st.source.type === 'none' || st.video.paused) st.eng.tick(t).forEach(emit);
   }, 30);
 
@@ -645,6 +896,193 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     renderSetup(st);
   }
   function dropRef(st, why) { if (!st.setup.ref) return; delete st.setup.ref; st.chk.setRef(null); st.refMsg = why; }
+
+  // ---------- phone cameras (any phone or tablet): pairing (QR code), WebRTC from the phone, the live chip ----------
+  // The phone page (app/phone.html, served over HTTPS on the phone port) sends a WebRTC offer; this page answers it
+  // through the localhost server and the video comes straight from the phone over the local network. Once connected,
+  // the phone's stream is the station's source like a USB camera: zones, Calibrate, the model, the checker and Rec run
+  // on it unchanged. st.phone: { state: waiting | connecting | live | lost, pc, id (the offer), stream, camera, stats, ... }.
+  const PHONE_CONNECT_MS = 20000;    // answered but not connected by then: the network likely blocks it; the phone tries again
+  const PHONE_DISC_MS = 6000;        // a live phone disconnected this long is lost (its page sends a new offer by itself)
+  const PHONE_BLOCKED = 'The phone answered, but its video did not get through. The network may block devices from reaching each other (common on campus Wi-Fi). It keeps trying.';
+  const HOST_KIND = { name: 'name, keeps working when the address changes', ipv4: 'IPv4', ipv6: 'IPv6', ula: 'IPv6, local' };
+  const phoneLive = st => st.source.type === 'phone' && !!st.phone && st.phone.state === 'live';
+  // What source_change events say: a phone only counts as video while it is connected.
+  const inputOf = st => (st.source.type === 'phone' ? (phoneLive(st) ? 'phone' : 'none') : st.source.type);
+  const noteOf = st => (st.source.type === 'phone' ? (phoneLive(st) ? 'Phone: ' + st.phone.camera : 'Phone (waiting for the phone)') : st.source.label);
+  const postJson = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  function phoneHost() {
+    const hs = ((PHN.info && PHN.info.hosts) || []).map(h => h.host), pick = store.get('wire-line:phonehost');
+    return hs.includes(pick) ? pick : hs[0] || '';
+  }
+  function phoneLink(st, host) {
+    const i = PHN.info, k = i && i.keys && i.keys[st.id];
+    return i && i.on && host && k ? 'https://' + host + ':' + i.port + '/phone?s=' + st.id + '&k=' + k : '';
+  }
+  async function loadPhoneInfo() {
+    try { PHN.info = await (await fetch('/api/phone/info', { cache: 'no-store' })).json(); }
+    catch (e) { PHN.info = { on: false, hosts: [], keys: {}, error: 'the local server is not answering.' }; }
+    PHN.infoAt = now();
+    for (const st of LIST) if (st.phone) renderPhone(st, true);
+  }
+  function phoneStatus(st) {
+    const ph = st.phone, i = PHN.info, sv = ph.server || {};
+    if (!i) return ['Loading...', ''];
+    if (!i.on) return ['The phone page is off: ' + (i.error || 'see the npm start window.'), 'bad'];
+    if (sv.busy) return ['Another /line tab or window has this phone. Close it, or reload it.', 'bad'];
+    if (ph.error) return [ph.error, 'bad'];
+    if (ph.state === 'connecting' || (sv.state === 'waiting' && sv.seen < 10000)) return ['Phone found: connecting...', ''];
+    if (ph.state === 'lost') return ['Phone lost at ' + new Date(ph.lostAt).toLocaleTimeString() + '. Its page reconnects by itself: keep the page open in front on the phone.', 'bad'];
+    return ['Waiting: scan the code with the phone\'s camera.', ''];
+  }
+  // The panel shows while the station waits for its phone (or when Show QR is pressed in Setup).
+  function renderPhone(st, force) {
+    const ph = st.phone, on = st.source.type === 'phone' && !!ph, live = on && ph.state === 'live';
+    st.pchip.hidden = !live; st.qrBtn.hidden = !live;
+    if (live) {
+      const s = ph.stats || {}, txt = 'Phone' + (s.w ? ' ' + s.w + 'x' + s.h : '') + (s.fps != null ? ' ' + Math.round(s.fps) + ' fps' : '');
+      if (txt !== st.lastChip) { st.pchip.textContent = txt; st.lastChip = txt; }
+      st.qrBtn.textContent = ph.showQr ? 'Hide QR' : 'Show QR';
+    }
+    const show = on && (!live || ph.showQr);
+    st.phoneEl.hidden = !show;
+    if (!show) { st.phoneKey = ''; return; }
+    const i = PHN.info || {}, host = phoneHost(), link = phoneLink(st, host), [msg, bad] = phoneStatus(st), trusted = (i.trusted || []).includes(host);
+    const key = [link, (i.hosts || []).map(h => h.host).join(), msg, bad, live, trusted].join('|');
+    if (!force && key === st.phoneKey) return;
+    st.phoneKey = key;
+    let qr = '';
+    if (link && window.qrcode) {
+      try { const q = window.qrcode(0, 'M'); q.addData(link); q.make(); qr = q.createSvgTag({ cellSize: 4, margin: 3, scalable: true, alt: 'QR code with the phone link for ' + st.id.toUpperCase() }); } catch (e) { qr = ''; }
+    }
+    const opts = (i.hosts || []).map(h => `<option value="${esc(h.host)}"${h.host === host ? ' selected' : ''}>${esc(h.host)} (${esc(HOST_KIND[h.kind] || h.kind)}${(i.trusted || []).includes(h.host) ? '' : ', always warns'})</option>`).join('');
+    st.phoneEl.innerHTML = `<div class="qr">${qr || 'No QR code'}</div><div class="ptxt"><b>${esc(st.id.toUpperCase())}'s phone or tablet</b>` +
+      `<span class="pst${bad ? ' bad' : ''}">${esc(msg)}</span>` +
+      (opts ? `<label class="phost">Address<select>${opts}</select></label>` : '') +
+      (link ? `<span class="plink">${esc(link)}</span>` : '') +
+      `<span class="pbtns">${link ? '<button type="button" class="btn sm pcopy">Copy link</button>' : ''}${live ? '<button type="button" class="btn sm phide">Hide</button>' : ''}</span>` +
+      (link ? `<span class="pnote">${trusted ? 'Certificate warning the first time' : 'This address always warns'}: tap Show Details, then visit this website.</span>` : '') + '</div>';
+    const sel = st.phoneEl.querySelector('select');
+    if (sel) sel.onchange = () => { store.set('wire-line:phonehost', sel.value); sel.blur(); for (const s of LIST) renderPhone(s, true); };
+    const cp = st.phoneEl.querySelector('.pcopy');
+    if (cp) cp.onclick = async () => { try { await navigator.clipboard.writeText(link); cp.textContent = 'Copied'; } catch (e) { cp.textContent = 'Copy failed'; } setTimeout(() => { cp.textContent = 'Copy link'; }, 1500); };
+    const hd = st.phoneEl.querySelector('.phide');
+    if (hd) hd.onclick = () => { ph.showQr = false; renderPhone(st, true); };
+  }
+  // Every second while a station wants a phone: say which ones, get the phones' offers, answer the new ones.
+  async function phonePoll() {
+    const want = LIST.filter(st => st.source.type === 'phone').map(st => st.id);
+    if (PHN.polling || (!want.length && !PHN.wanted)) return;
+    PHN.polling = true;
+    try {
+      const r = await postJson('/api/phone/poll', { client: PHN.client, want }), j = await r.json();
+      if (!r.ok) throw new Error(j.message || r.status);
+      PHN.wanted = want.length > 0;
+      for (const st of LIST) if (st.phone) st.phone.server = (j.phones && j.phones[st.id]) || { state: 'none' };
+      for (const o of j.offers || []) { const st = ST[o.station]; if (st && st.phone && st.phone.id !== o.id) answerPhone(st, o); }
+    } catch (e) { /* the server is restarting: try again next second */ } finally { PHN.polling = false; }
+    const t = now();
+    for (const st of LIST) {
+      const ph = st.phone;
+      if (!ph) continue;
+      if (ph.state === 'connecting' && t - ph.since > PHONE_CONNECT_MS) phoneDrop(st, PHONE_BLOCKED);
+      else if (ph.state === 'live' && ph.discAt && t - ph.discAt > PHONE_DISC_MS) phoneLost(st);
+    }
+    if (want.length && t - (PHN.infoAt || 0) > 10000) loadPhoneInfo();    // new addresses after a network change
+  }
+  setInterval(phonePoll, 1000);
+  // Leave out the orientation extension: then the phone turns its picture itself, so the video, the zones and the recording agree.
+  const noCvo = sdp => sdp.split('\r\n').filter(l => !/^a=extmap:\d+(\/\w+)? urn:3gpp:video-orientation/.test(l)).join('\r\n');
+  // No trickle: wait for this laptop's candidates (no STUN: its own addresses only), then send the whole answer.
+  function iceDone(pc, ms) {
+    return new Promise(resolve => {
+      if (pc.iceGatheringState === 'complete') return resolve();
+      pc.addEventListener('icegatheringstatechange', () => { if (pc.iceGatheringState === 'complete') resolve(); });
+      setTimeout(resolve, ms);
+    });
+  }
+  async function answerPhone(st, o) {
+    const ph = st.phone;
+    if (ph.state === 'live') phoneLost(st, 'Phone reconnecting');    // the phone sent a new offer: it lost this page, or another phone took over
+    closePhonePc(st, false);
+    const pc = new RTCPeerConnection({ iceServers: [] });
+    Object.assign(ph, { pc, id: o.id, state: 'connecting', since: now(), camera: o.camera || 'Phone', stream: null, stats: null, discAt: 0 });
+    pc.ontrack = e => { if (ph.pc === pc) ph.stream = (e.streams && e.streams[0]) || new MediaStream([e.track]); };
+    pc.onconnectionstatechange = () => phoneConn(st, pc);
+    try {
+      await pc.setRemoteDescription({ type: 'offer', sdp: o.sdp });
+      const ans = await pc.createAnswer();
+      try { await pc.setLocalDescription({ type: 'answer', sdp: noCvo(ans.sdp) }); } catch (e) { await pc.setLocalDescription(ans); }
+      await iceDone(pc, 2500);
+      if (ph.pc !== pc) return;
+      const r = await postJson('/api/phone/answer', { client: PHN.client, station: st.id, id: o.id, sdp: pc.localDescription.sdp });
+      if (!r.ok && ph.pc === pc) { closePhonePc(st, false); ph.state = ph.lostAt ? 'lost' : 'waiting'; }    // replaced meanwhile, or another /line has it
+    } catch (e) {
+      console.error('Phone answer failed', e);
+      if (ph.pc === pc) phoneDrop(st, 'Could not answer the phone (' + (e && e.name || 'error') + '). It keeps trying.');
+    }
+    renderPhone(st, true);
+  }
+  function phoneConn(st, pc) {
+    const ph = st.phone;
+    if (!ph || ph.pc !== pc) return;
+    const cs = pc.connectionState;
+    if (cs === 'connected') { ph.discAt = 0; if (ph.state !== 'live') phoneUp(st); }
+    else if (cs === 'disconnected') { if (!ph.discAt) ph.discAt = now(); }
+    else if (cs === 'failed' || cs === 'closed') { if (ph.state === 'live') phoneLost(st); else phoneDrop(st, PHONE_BLOCKED); }
+  }
+  function phoneUp(st) {
+    const ph = st.phone, v = st.video;
+    if (!ph.stream) ph.stream = new MediaStream(ph.pc.getReceivers().map(r => r.track).filter(Boolean));
+    Object.assign(ph, { state: 'live', error: '', showQr: false, liveAt: now() });
+    st.stream = ph.stream; v.srcObject = ph.stream; v.play().catch(() => {});
+    st.prevGray = null; st.sig = null; st.dets = st.detsPrev = null; st.hands = null; st.lastCT = 0; st.err = '';
+    emit({ type: 'source_change', station: st.id, t: now(), input: 'phone', note: noteOf(st) });
+    if (G.session && st.recOn) startRecording(st);
+    renderPhone(st, true); sizeCanvas(st); drawOverlay(st);
+  }
+  // A live phone's connection ended: no video until the phone is back (its page sends a new offer by itself).
+  // The open cycle is dropped like on any source change, and Rec starts a new part when it reconnects.
+  function phoneLost(st, note) {
+    const ph = st.phone, t = now();
+    if (!ph || ph.state !== 'live') return;
+    ph.state = 'lost'; ph.lostAt = t; ph.stats = null;
+    if (st.rec) stopRecording(st);
+    st.eng.abandon(t).forEach(emit); st.chk.restart();
+    emit({ type: 'source_change', station: st.id, t, input: 'none', note: note || 'Phone lost' });
+    st.stream = null; st.video.pause(); st.video.srcObject = null;
+    st.prevGray = null; st.sig = null; st.dets = st.detsPrev = null; st.hands = null;
+    closePhonePc(st, true);
+    renderPhone(st, true); drawOverlay(st);
+  }
+  function phoneDrop(st, err) {
+    const ph = st.phone;
+    if (!ph) return;
+    closePhonePc(st, true);
+    ph.state = ph.lostAt ? 'lost' : 'waiting'; ph.error = err || '';
+    renderPhone(st, true);
+  }
+  // tell: let the server know, so the phone's next poll says "dropped" and it sends a new offer.
+  function closePhonePc(st, tell) {
+    const ph = st.phone;
+    if (!ph) return;
+    const pc = ph.pc, id = ph.id;
+    ph.pc = null; ph.id = null; ph.discAt = 0;
+    if (pc) { pc.ontrack = pc.onconnectionstatechange = null; try { pc.close(); } catch (e) { /* closed */ } }
+    if (tell && id) postJson('/api/phone/drop', { client: PHN.client, station: st.id, id }).catch(() => {});
+  }
+  // What the phone actually sends (size and frame rate), for the chip and the station's footer.
+  setInterval(async () => {
+    for (const st of LIST) {
+      if (!phoneLive(st) || !st.phone.pc) continue;
+      const ph = st.phone;
+      try { (await ph.pc.getStats()).forEach(r => { if (r.type === 'inbound-rtp' && r.kind === 'video') ph.stats = { w: r.frameWidth, h: r.frameHeight, fps: r.framesPerSecond }; }); }
+      catch (e) { /* closed meanwhile */ }
+    }
+  }, 1000);
+  window.addEventListener('pagehide', () => {
+    if (navigator.sendBeacon && PHN.wanted) navigator.sendBeacon('/api/phone/bye', new Blob([JSON.stringify({ client: PHN.client })], { type: 'application/json' }));
+  });
 
   // ---------- model and hands: one session per model file (stations may share one), one inference at a time, round-robin over stations ----------
   const baseName = f => String(f).split('/').pop();
@@ -801,7 +1239,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     if (on && !LIST.some(modelOf)) return;
     G.modelOn = !!on;
     if (G.modelOn) {
-      renderToolbar();
+      renderSetupBar();
       await loadModel();
       if (Y.status !== 'ready') { G.modelOn = false; banner('model', 'The model could not load: ' + esc(Y.error), 'crit'); }
       else { const probs = assignModels(); banner('model', probs.join('<br>'), probs.length ? 'crit' : ''); }
@@ -810,40 +1248,51 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       st.eng.setModel(G.modelOn && st.mdl ? st.mdl.classes : null);
       if (!G.modelOn) { st.dets = st.detsPrev = null; st.mdl = null; banner('model-' + st.id, ''); }
     }
-    renderToolbar();
+    renderSetupBar();
     if (G.modelOn || G.handsOn) detectLoop();
   }
   async function setHands(on) {
     G.handsOn = !!on;
     if (G.handsOn) {
-      renderToolbar();
+      renderSetupBar();
       await loadHands();
       if (H.status !== 'ready') { G.handsOn = false; banner('hands', 'The hand model could not load: ' + esc(H.error), 'crit'); } else banner('hands', '');
     }
     if (!G.handsOn) for (const st of LIST) st.hands = null;
-    renderToolbar();
+    renderSetupBar();
     if (G.modelOn || G.handsOn) detectLoop();
   }
 
-  // ---------- setup mode: draw zones, calibrate ----------
-  function toggleSetup(st) {
-    st.setupOn = !st.setupOn;
-    st.setupPanel.hidden = !st.setupOn;
-    st.refMsg = '';
-    st.setupBtn.classList.toggle('on', st.setupOn);
-    st.stage.classList.toggle('setup', st.setupOn);
-    if (st.setupOn && !st.drawZone) st.drawZone = (st.cfg.zones.find(z => !st.setup.zones[z.id]) || st.cfg.zones[0]).id;
-    renderSetup(st); drawOverlay(st);
+  // ---------- setup mode: every station at once (camera, boxes, calibration), plus the line-wide switches ----------
+  function setSetupMode(on) {
+    G.setupMode = !!on;
+    document.body.classList.toggle('setup-mode', G.setupMode);
+    $('setupBar').hidden = !G.setupMode;
+    $('btnSetup').classList.toggle('on', G.setupMode);
+    for (const st of LIST) {
+      st.setupOn = G.setupMode; st.setupPanel.hidden = !G.setupMode; st.refMsg = ''; st.drag = null;
+      st.stage.classList.toggle('setup', G.setupMode);
+      if (G.setupMode && !st.drawZone) st.drawZone = (st.cfg.zones.find(z => !st.setup.zones[z.id]) || st.cfg.zones[0]).id;
+      if (!G.setupMode && st.phone && st.phone.showQr) { st.phone.showQr = false; renderPhone(st, true); }
+      renderSetup(st); drawOverlay(st);
+    }
+    if (G.setupMode && G.editMode) setEditMode(false);    // one mode at a time
+    renderSetupBar(); scheduleArrows();
   }
+  // "Setup needed" on a card: Setup mode, with that card brought into view.
+  function openSetup(st) { if (!G.setupMode) setSetupMode(true); requestAnimationFrame(() => focusCard(st)); }
   function renderSetup(st) {
     st.zbtns.innerHTML = '<span class="muted">Draw:</span>' + st.cfg.zones.map((z, i) => `<button type="button" class="btn sm${st.drawZone === z.id ? ' on' : ''}" data-z="${esc(z.id)}"><span class="zsw" style="background:${ZONE_COLORS[i % ZONE_COLORS.length]}"></span>${esc(z.label)}${st.setup.zones[z.id] ? ' ✓' : ''}</button>`).join('');
     st.zbtns.querySelectorAll('button').forEach(b => { b.onclick = () => { st.drawZone = b.dataset.z; renderSetup(st); }; });
     const c = st.setup.calib, nm = Object.keys(c.motion || {}).length;
     const bulb = st.bulbs.map(z => c.bright[z] || {}).find(Boolean) || {};
     let txt = nm ? 'Calibrated' + (st.setup.updatedAt ? ' ' + new Date(st.setup.updatedAt).toLocaleTimeString() : '') : 'Not calibrated';
-    if (st.bulbs.length) txt += ' | bulb off ' + (bulb.off != null ? Math.round(bulb.off) : '--') + ', on ' + (bulb.on != null ? Math.round(bulb.on) : '--');
+    if (st.bulbs.length) txt += ' | bulb dark ' + (bulb.off != null ? Math.round(bulb.off) : '--') + ', lit ' + (bulb.on != null ? Math.round(bulb.on) : '--');
     if (st.calib) txt = 'Calibrating... keep still';
     st.calst.textContent = txt;
+    // The next step lights up: Calibrate once every box is drawn, then Bulb on.
+    st.el.querySelector('.calb').classList.toggle('primary', st.cfg.zones.every(z => st.setup.zones[z.id]) && !nm);
+    if (st.bulbs.length) st.el.querySelector('.bon').classList.toggle('primary', nm > 0 && bulb.on == null);
     if (st.refst) st.refst.textContent = st.refMsg || (st.setup.ref ? 'Correct state saved ' + new Date(st.setup.ref.saved).toLocaleString() + '.' : 'No correct state saved yet.');
   }
   function contentRect(st) {
@@ -904,7 +1353,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     const c = LE.calibrationFrom(st.calib.samples);
     st.calib = null;
     const cal = st.setup.calib;
-    if (kind === 'empty') {
+    if (kind === 'empty') {    // also the dark bulb: every zone's brightness is its "off" level
       cal.motion = c.motion;
       for (const z of Object.keys(c.brightness)) cal.bright[z] = Object.assign({}, cal.bright[z], { off: c.brightness[z] });
     } else {
@@ -975,75 +1424,151 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     if (st.calib) {
       ctx.fillStyle = 'rgba(15,17,19,.7)'; ctx.fillRect(cr.x, cr.y, cr.w, 22 * k);
       ctx.fillStyle = '#fff'; ctx.font = `600 ${Math.max(11, 12 * k)}px Saira, sans-serif`;
-      ctx.fillText(st.calib.kind === 'on' ? 'Recording the lit bulb...' : st.calib.kind === 'off' ? 'Recording the dark bulb...' : 'Calibrating: keep the area empty', cr.x + 8 * k, cr.y + 4 * k);
+      ctx.fillText(st.calib.kind === 'on' ? 'Recording the lit bulb...' : 'Calibrating: keep the area empty and the bulb dark', cr.x + 8 * k, cr.y + 4 * k);
     }
   }
 
-  // ---------- manual buttons (the answer key) ----------
+  // ---------- the answer key (Score the cameras): one bar, keys 1 to 3, P and F ----------
+  // A normal run needs no key at all: the cameras count. With Score the cameras on, one person keys every unit so the
+  // detection can be scored against it; the presses are stored apart (manual events, basis "manual" in cycles.csv).
+  function hint(text) { banner('hint', esc(text)); clearTimeout(G.hintT); G.hintT = setTimeout(() => banner('hint', ''), 3000); }
   function flash(btn) { if (!btn) return; btn.classList.add('flash'); setTimeout(() => btn.classList.remove('flash'), 300); }
-  function manualCycle(st) {
-    emit({ type: 'manual', station: st.id, action: 'cycle_done', source: 'manual', t: now(), cycle: ++st.manualN });
-    flash(st.el.querySelector('.cyc'));
+  // The pressed key flashes on the bar, and its station's card flashes with it.
+  function flashKey(k, st) {
+    flash($('akRow').querySelector(`[data-k="${k}"]`));
+    if (st) { st.el.classList.add('keyed'); setTimeout(() => st.el.classList.remove('keyed'), 300); }
+  }
+  // Keys 1 to 9 are the stations in flow order (a station past the ninth has its button but no key). P and F score the
+  // first QA station in flow order; another QA station gets its own Pass and Fail buttons, without keys.
+  function buildAnswerKey() {
+    const first = G.qaIds[0], many = G.qaIds.length > 1;
+    let html = '<span class="eyebrow">Answer key</span>';
+    LIST.forEach((st, i) => {
+      const n = i < 9 ? `<kbd>${i + 1}</kbd> ` : '', tag = esc(st.id.toUpperCase());
+      if (!st.isQa) html += `<button type="button" class="btn ak" data-k="${esc(st.id)}">${n}${tag} unit out<span class="akn"></span></button>`;
+      else {
+        const k = st.id === first, sfx = many ? ' ' + tag : '';
+        html += `<button type="button" class="btn pass ak" data-k="pass:${esc(st.id)}">${k ? '<kbd>P</kbd> ' : ''}Pass${sfx}<span class="akn"></span></button>` +
+          `<button type="button" class="btn fail ak" data-k="fail:${esc(st.id)}">${k ? '<kbd>F</kbd> ' : ''}Fail${sfx}<span class="akn"></span></button>`;
+      }
+    });
+    $('akRow').innerHTML = html;
+    $('akRow').querySelectorAll('.ak').forEach(b => { b.onclick = () => { const [k, id] = b.dataset.k.split(':'); if (k === 'pass') manualPass(ST[id]); else if (k === 'fail') openFail(ST[id]); else if (ST[k]) manualCycle(ST[k]); }; });
+  }
+  // How many presses each key has had (live counts): on the bar next to each key.
+  function renderKeyCounts() {
+    const n = {};
+    for (const e of G.events) if (e.type === 'manual') { const k = e.action === 'cycle_done' ? e.station : e.action + ':' + e.station; n[k] = (n[k] || 0) + 1; }
+    $('akRow').querySelectorAll('.ak').forEach(b => { const t = n[b.dataset.k] ? String(n[b.dataset.k]) : ''; const el = b.querySelector('.akn'); if (el.textContent !== t) el.textContent = t; });
+  }
+  function setScore(on) {
+    G.score = !!on;
+    store.set('wire-line:score', G.score);
+    if (!G.score && G.failPick) closeFail(true);
+    $('akBar').hidden = !G.score; $('countItem').hidden = !G.score; $('chkScore').checked = G.score;
     G.evSeen = -1;
   }
-  function qaSt() { return G.qaId ? ST[G.qaId] : null; }
-  function manualPass() {
-    const st = qaSt();
+  function manualCycle(st) {
+    emit({ type: 'manual', station: st.id, action: 'cycle_done', source: 'manual', t: now(), cycle: ++st.manualN });
+    flashKey(st.id, st);
+    G.evSeen = -1;
+  }
+  function qaSt() { return G.qaIds.length ? ST[G.qaIds[0]] : null; }
+  function manualPass(which) {
+    const st = which || qaSt();
     if (!st) return;
     closeFail(false);
     const t = now();
     emit({ type: 'manual', station: st.id, action: 'pass', source: 'manual', t, cycle: ++st.manualN });
     st.eng.manualQa({ result: 'pass', reason: null, t }).forEach(emit);
-    flash(st.el.querySelector('.passb'));
+    flashKey('pass:' + st.id, st);
     G.evSeen = -1;
   }
-  function openFail() {
-    const st = qaSt();
+  function openFail(which) {
+    const st = which || qaSt();
     if (!st) return;
     if (G.failPick) { closeFail(true); return; }
     const t = now();
-    G.failPick = { t, timer: setTimeout(() => pickReason(null), 20000) };
+    G.failPick = { st, t, timer: setTimeout(() => pickReason(null), 20000) };
     st.eng.setQaHold(true);
-    st.reasons.innerHTML = '<b>Fail: why?</b>' + (G.config.failReasons || []).map(r => `<button type="button" class="btn sm" data-r="${esc(r.id)}" title="Cause: ${esc(r.cause || 'none')}${r.defect === false ? ', not a defect (retest)' : ''}">${esc(r.label)}</button>`).join('') +
+    const rs = $('akReasons');
+    rs.innerHTML = '<b>Fail' + (G.qaIds.length > 1 ? ' at ' + esc(st.id.toUpperCase()) : '') + ': why?</b>' + (G.config.failReasons || []).map(r => `<button type="button" class="btn sm" data-r="${esc(r.id)}" title="Cause: ${esc(r.cause || 'none')}${r.defect === false ? ', not a defect (retest)' : ''}">${esc(r.label)}</button>`).join('') +
       '<button type="button" class="btn sm" data-r="">No reason</button><button type="button" class="btn sm" data-cancel="1">Cancel <kbd>Esc</kbd></button>';
-    st.reasons.querySelectorAll('button').forEach(b => { b.onclick = () => (b.dataset.cancel ? closeFail(true) : pickReason(b.dataset.r || null)); });
-    st.reasons.hidden = false;
-    flash(st.el.querySelector('.failb'));
+    rs.querySelectorAll('button').forEach(b => { b.onclick = () => (b.dataset.cancel ? closeFail(true) : pickReason(b.dataset.r || null)); });
+    rs.hidden = false;
+    flashKey('fail:' + st.id, st);
   }
   function pickReason(id) {
-    const st = qaSt(), f = G.failPick;
-    if (!st || !f) return;
-    clearTimeout(f.timer); G.failPick = null; st.reasons.hidden = true;
+    const f = G.failPick, st = f && f.st;
+    if (!st) return;
+    clearTimeout(f.timer); G.failPick = null; $('akReasons').hidden = true;
     emit({ type: 'manual', station: st.id, action: 'fail', reason: id || null, source: 'manual', t: f.t, cycle: ++st.manualN });
     st.eng.manualQa({ result: 'fail', reason: id || null, t: f.t }).forEach(emit);
     G.evSeen = -1;
   }
   function closeFail(cancel) {
-    const st = qaSt(), f = G.failPick;
-    if (!st || !f) return;
-    clearTimeout(f.timer); G.failPick = null; st.reasons.hidden = true;
+    const f = G.failPick, st = f && f.st;
+    if (!st) return;
+    clearTimeout(f.timer); G.failPick = null; $('akReasons').hidden = true;
     if (cancel) st.eng.setQaHold(false);
   }
   window.addEventListener('keydown', e => {
     if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) && e.target.type !== 'checkbox') return;
     if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
-    const n = Number(e.key);
-    if (n >= 1 && n <= LIST.length) { e.preventDefault(); manualCycle(LIST[n - 1]); }
+    const n = Number(e.key), key = e.key.toLowerCase(), nmax = Math.min(9, LIST.length);
+    if (!G.score && ((n >= 1 && n <= nmax) || key === 'p' || key === 'f')) { e.preventDefault(); hint('The answer key is off. To key units, turn on Score the cameras in Setup.'); return; }
+    if (n >= 1 && n <= nmax) {
+      e.preventDefault();
+      const st = LIST[n - 1];
+      // P or F closes the QA station's cycle, so its number key only says so.
+      if (st.isQa) hint(st.id.toUpperCase() + ' closes its cycle with P or F.'); else manualCycle(st);
+    }
     else if (e.key === 'p' || e.key === 'P') { e.preventDefault(); manualPass(); }
     else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); openFail(); }
     else if (e.key === 'Escape') closeFail(true);
   });
 
   // ---------- sessions ----------
-  function updateRecWarn() { $('recWarn').hidden = $('startForm').hidden || LIST.some(st => st.recOn && st.source.type !== 'none'); }
-  function showStartForm(on) { $('startForm').hidden = !on; updateRecWarn(); if (on) $('fTitle').focus(); }
+  // The title is filled in (date, time and shift), so Enter starts. It follows the shift field until someone edits it.
+  function shiftAt(d) { const h = d.getHours(); return h >= 22 || h < 5 ? 'Night' : h >= 17 ? 'Evening' : h >= 12 ? 'Afternoon' : 'Morning'; }
+  function autoTitle(d, shift) {
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ', ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + (shift ? ', ' + (/shift$/i.test(shift) ? shift : shift + ' shift') : '');
+  }
+  function showStartForm(on) {
+    $('startForm').hidden = !on;
+    if (!on) return;
+    const d = new Date(), sh = shiftAt(d);
+    if (!$('fShift').value.trim() || $('fShift').value === G.autoShift) $('fShift').value = sh;
+    G.autoShift = sh; G.formAt = d;
+    $('fTitle').value = G.autoTitle = autoTitle(d, $('fShift').value.trim());
+    renderReadyLine();
+    $('fTitle').focus(); $('fTitle').select();
+  }
+  // One check before a start, in place of the old Rec warning: what has no camera, what Setup still needs, what records.
+  function renderReadyLine() {
+    const out = [];
+    for (const st of LIST) {
+      const id = st.id.toUpperCase(), rd = readiness(st, st.eng.rules());
+      if (st.source.type === 'none') out.push(id + ' has no camera.');
+      else if (rd && rd.need) out.push(id + ': ' + rd.need[0].toLowerCase() + rd.need.slice(1) + '.');
+      else if (rd && rd.wait) out.push(id + ' ' + rd.wait + '.');
+      else if (rd && !rd.ok) out.push(id + ': ' + rd.text[0].toLowerCase() + rd.text.slice(1) + '.');
+    }
+    const recs = LIST.filter(st => st.recOn && st.source.type !== 'none').length;
+    if (!recs) out.push('No station records video: nothing to train on.');
+    const txt = out.length ? out.join(' ') : 'All ' + LIST.length + ' stations are ready' + (recs === LIST.length ? ' and recording.' : ', ' + recs + ' recording.') + ' Counts start from zero.';
+    if (txt !== G.lastReady) { G.lastReady = txt; $('readyLine').textContent = txt; $('readyLine').className = 'rline' + (out.length ? ' warn' : ''); }
+  }
   async function startSession(info) {
     if (G.session || G.starting) return;
+    if (!LIST.length) { banner('session', 'There is no station on the floor yet: press + to add one.', 'crit'); return; }
     G.starting = true;
     try {
       const stations = {};
       for (const st of LIST) stations[st.id] = { input: st.source.type, label: st.source.label, record: st.recOn && st.source.type !== 'none' };
-      const body = Object.assign({}, info, { stations, client: { gpu: GPU, model: G.modelOn, hands: G.handsOn, agent: navigator.userAgent.slice(0, 160) } });
+      // The floor at the start: each station's id, name, role, position, input and operator go into session.json.
+      const layout = { id: G.layout.id, name: G.layout.name, builtIn: !!G.layout.builtIn, stations: LIST.map(st => ({ id: st.id, name: st.cfg.name, role: st.cfg.role, x: st.cfg.x, y: st.cfg.y, input: st.source.type, operator: st.op })) };
+      const body = Object.assign({}, info, { stations, layout, client: { gpu: GPU, model: G.modelOn, hands: G.handsOn, score: G.score, agent: navigator.userAgent.slice(0, 160) } });
       const r = await fetch('/api/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.message || r.status);
@@ -1053,7 +1578,10 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       for (const st of LIST) { st.eng.restart(); st.chk.restart(); st.manualN = 0; }
       if (G.failPick) closeFail(true);
       emit({ type: 'session_start', t: j.startedAtMs, source: 'page', note: info.title || '' });
-      for (const st of LIST) emit({ type: 'source_change', station: st.id, t: j.startedAtMs, input: st.source.type, note: st.source.label });
+      for (const st of LIST) emit({ type: 'source_change', station: st.id, t: j.startedAtMs, input: inputOf(st), note: noteOf(st) });
+      for (const st of LIST) if (st.op) emit({ type: 'operator', station: st.id, code: st.op.code, level: st.op.level, t: j.startedAtMs });    // who is where, from the start
+      if (G.editMode) setEditMode(false);
+      closeAdd();
       for (const st of LIST) if (st.recOn && st.source.type !== 'none') startRecording(st);
       showStartForm(false);
       banner('session', '');
@@ -1078,7 +1606,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       const L = doc.summary && doc.summary.line;
       const base = '/api/sessions/' + sess.id;
       banner('session', `Session saved: <b>${esc(sess.title || sess.id)}</b>${L ? ` | ${L.units} units, FPY ${L.fpy == null ? '--' : Math.round(L.fpy * 100) + '%'}` : ''} | ` +
-        `<a href="${base}/substeps.csv" download>substeps.csv</a> <a href="${base}/cycles.csv" download>cycles.csv</a> <a href="${base}/verdicts.csv" download>verdicts.csv</a> <a href="${base}/units.csv" download>units.csv</a> <a href="${base}/events.jsonl" download>events.jsonl</a> <a href="${base}" target="_blank" rel="noopener">session.json</a>` +
+        `<a href="${base}/substeps.csv" download>substeps.csv</a> <a href="${base}/cycles.csv" download>cycles.csv</a> <a href="${base}/verdicts.csv" download>verdicts.csv</a> <a href="${base}/units.csv" download>units.csv</a> ${rawLinks(base)}` +
         (G.queue.length ? ` | <b>${G.queue.length} events were not sent</b>` : ''), G.queue.length ? 'crit' : 'good');
     } catch (e) {
       banner('session', 'Stopping had a problem: ' + esc(e && e.message || e) + '. The data sent so far is on disk.', 'crit');
@@ -1088,10 +1616,12 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       G.events = []; G.evSeen = -1;
       for (const st of LIST) { st.eng.restart(); st.chk.restart(); st.manualN = 0; }
       const t = now();
-      for (const st of LIST) emit({ type: 'source_change', station: st.id, t, input: st.source.type, note: st.source.label });
+      for (const st of LIST) emit({ type: 'source_change', station: st.id, t, input: inputOf(st), note: noteOf(st) });
       renderSession(); loadClips(); if (!$('sessionsPanel').hidden) loadSessions();
     }
   }
+  // The model team's files (every event, the session record) fold under "raw"; the three CSVs stay in view.
+  const rawLinks = base => `<details class="raw"><summary>raw</summary><a href="${base}/events.jsonl" download>events.jsonl</a><a href="${base}" target="_blank" rel="noopener">session.json</a></details>`;
   async function loadSessions() {
     try {
       const j = await (await fetch('/api/sessions', { cache: 'no-store' })).json();
@@ -1099,41 +1629,73 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
         const base = '/api/sessions/' + s.id, bytes = s.videos.reduce((a, v) => a + (v.bytes || 0), 0);
         return `<tr><td class="mono">${esc(s.id)}</td><td>${esc(s.title || '')}</td><td>${esc(s.crew || '')}</td><td>${esc(s.shift || '')}</td>` +
           `<td>${s.startedAt ? esc(new Date(s.startedAt).toLocaleString()) : ''}</td><td>${s.endedAt ? esc(new Date(s.endedAt).toLocaleTimeString()) : '<span class="chip warn">not ended</span>'}</td>` +
-          `<td class="mono">${s.videos.length} (${fmtMB(bytes)})</td><td><a href="${base}/substeps.csv" download>substeps.csv</a><a href="${base}/cycles.csv" download>cycles.csv</a><a href="${base}/verdicts.csv" download>verdicts.csv</a><a href="${base}/units.csv" download>units.csv</a><a href="${base}/events.jsonl" download>events</a><a href="${base}" target="_blank" rel="noopener">json</a></td></tr>`;
+          `<td class="mono">${s.videos.length} (${fmtMB(bytes)})</td><td><a href="${base}/substeps.csv" download>substeps.csv</a><a href="${base}/cycles.csv" download>cycles.csv</a><a href="${base}/verdicts.csv" download>verdicts.csv</a><a href="${base}/units.csv" download>units.csv</a>${rawLinks(base)}</td></tr>`;
       }).join('');
       $('sessTbl').innerHTML = rows ? `<table><thead><tr><th>Id</th><th>Title</th><th>Crew / group</th><th>Shift</th><th>Started</th><th>Ended</th><th>Videos</th><th>Exports</th></tr></thead><tbody>${rows}</tbody></table>` : '<div class="muted">No sessions yet.</div>';
     } catch (e) { $('sessTbl').innerHTML = '<div class="muted">The local server is not answering.</div>'; }
   }
 
   // ---------- rendering (4 times a second) ----------
-  function missingText(st, r) {
-    if (st.source.type === 'none') return 'no video';
+  // What a substep still waits for. bare: without the "(Setup)" pointer.
+  function missingText(st, r, bare) {
+    if (st.source.type === 'none' || (st.source.type === 'phone' && !phoneLive(st))) return 'no video';
     const m = r.missing[0];
     if (!m) return '';
-    const z = st.cfg.zones.find(x => x.id === m.zone), zl = z ? z.label : m.zone;
-    if (!m.signal) return 'draw the ' + zl + ' zone (Setup)';
-    if (m.signal === 'bright') return 'calibrate the bulb (Setup)';
+    const z = st.cfg.zones.find(x => x.id === m.zone), zl = z ? z.label : m.zone, tail = bare ? '' : ' (Setup)';
+    if (!m.signal) return 'draw the ' + zl + ' zone' + tail;
+    if (m.signal === 'bright') return 'calibrate the bulb' + tail;
     if (m.signal.startsWith('class:')) return 'model is off';
     return 'waiting for video';
   }
+  // The card's status: Ready (ok), a passing state (text), what Setup still has to do (need), or a phone that is not
+  // live yet (wait: the head's "Phone, waiting" already says it). None for a station without a camera.
+  function readiness(st, rules) {
+    if (st.source.type === 'none') return null;
+    if (st.source.type === 'phone' && !phoneLive(st)) return { wait: st.phone && st.phone.state === 'lost' ? 'lost its phone' : 'waits for its phone' };
+    if (!Object.keys(st.setup.zones).length) return { need: 'Draw its boxes' };
+    const r = rules.find(x => x.kind && !x.ready), m = r ? missingText(st, r, true) : '';
+    if (m === 'waiting for video') return { text: 'Starting the video' };
+    if (m) return { need: m[0].toUpperCase() + m.slice(1) };
+    if (!Object.keys(st.setup.calib.motion || {}).length) return { need: 'Calibrate it with the work area empty' };
+    return { ok: true, text: 'Ready' };
+  }
+  function sourceText(st) {
+    const t = st.source.type, ph = st.phone;
+    if (t === 'phone') return 'Phone, ' + (!ph || ph.state === 'waiting' ? 'waiting' : ph.state);
+    if (t === 'camera') return 'USB camera';
+    if (t === 'clip') return 'Clip: ' + st.source.label;
+    return '';
+  }
   function renderStation(st, sum, t) {
     const s = st.eng.state(), cfg = st.cfg, label = id => (cfg.substeps.find(x => x.id === id) || {}).label || id;
-    const ss = sum && sum.stations[st.id], takt = G.config.taktSec;
+    const ss = sum && sum.stations[st.id], takt = G.config.taktSec, rules = st.eng.rules(), rd = readiness(st, rules);
+    // head: what films the station, Ready or what is missing, and the REC readout
+    const recTxt = st.rec ? 'REC ' + fmtMB(st.rec.bytes) + (st.rec.dropped ? ' (' + st.rec.dropped + ' chunks lost)' : '') : G.session && st.source.type !== 'none' && !st.recOn ? 'not recording' : '';
+    const head = [sourceText(st), rd && rd.text, rd && rd.need, rd && rd.ok, recTxt].join('|');
+    if (head !== st.lastHead) {
+      st.lastHead = head;
+      st.elSrc.textContent = sourceText(st); st.elSrc.title = st.source.type === 'none' ? '' : st.source.label;
+      st.elRdy.hidden = !rd || !rd.text; st.elRdy.textContent = rd && rd.text || ''; st.elRdy.className = 'chip rdy' + (rd && rd.ok ? ' good' : ' warn');
+      st.needBtn.hidden = !rd || !rd.need; st.needBtn.title = rd && rd.need ? 'Open Setup: ' + rd.need : '';
+      st.elRec.textContent = recTxt; st.elRec.className = 'recst' + (st.rec ? '' : ' off');
+    }
     let lab, cur, big = '', cls = 'nowbox';
     if (s.inCycle) { lab = 'Now (cycle ' + s.cycle + ')'; cur = label(s.current); big = fmtS((t - s.since) / 1000); cls += ' incycle'; if (takt && (t - s.cycleStart) / 1000 > takt) cls += ' over'; }
-    else if (st.source.type === 'none') { lab = 'Manual only'; cur = 'No video: press Cycle done when a unit leaves'; }
+    else if (st.source.type === 'phone' && !phoneLive(st)) { lab = 'Phone'; cur = st.phone && st.phone.state === 'lost' ? 'Phone lost: it reconnects by itself' : 'Waiting for the phone: scan its QR code'; }
+    else if (st.source.type === 'none') { lab = 'No camera'; cur = !G.score ? 'Connect a camera to count this station' : st.isQa ? 'Connect a camera, or key ' + (st.id === G.qaIds[0] ? 'P or F' : 'Pass or Fail on the bar') + ' for each unit' : 'Connect a camera, or ' + (st.idx < 9 ? 'key ' + (st.idx + 1) : 'press its button on the bar') + ' when a unit leaves'; }
+    else if (rd && rd.need) { lab = 'Setup needed'; cur = rd.need; }
     else { lab = 'Between cycles'; cur = s.cycle ? 'Waiting for the next unit' : 'Waiting for the first step'; big = s.since ? fmtS((t - s.since) / 1000) : ''; }
     st.elNow.className = cls; st.elNowLab.textContent = lab; st.elCur.textContent = cur; st.elBig.textContent = big;
     const d = ss ? ss.detected : null, m = ss ? ss.manual : null, over = v => (takt && v != null && v > takt ? ' class="over"' : '');
     st.elKv.innerHTML = `<div><span>Cycle</span><b>${s.inCycle ? fmtS((t - s.cycleStart) / 1000) : '--'}</b></div>` +
       `<div><span>Last</span><b${over(d && d.lastSec)}>${fmtS(d && d.lastSec)}</b></div>` +
       `<div><span>Avg</span><b${over(d && d.avgSec)}>${fmtS(d && d.avgSec)}<small title="spread (standard deviation)">${d && d.stdSec != null ? '±' + d.stdSec.toFixed(1) + ' s' : '&nbsp;'}</small></b></div>` +
-      `<div><span>Done</span><b>${d ? d.cycles : 0}<small>${m ? m.cycles : 0} manual</small></b></div>`;
+      `<div><span>Done</span><b>${d ? d.cycles : 0}${G.score ? `<small>${m ? m.cycles : 0} keyed</small>` : ''}</b></div>`;
     if (st.isQa) {
       const lastQa = [...G.events].reverse().find(e => e.type === 'qa_result' && e.station === st.id);
       const mm = [...G.events].reverse().find(e => e.type === 'flag' && e.station === st.id && e.note === LE.MISMATCH_NOTE);
       let html = '<span class="eyebrow">Last unit</span>';
-      if (s.waitingQa) html += '<span class="chip warn">sorted, waiting for Pass / Fail</span>';
+      if (s.waitingQa) html += `<span class="chip warn">${G.score ? 'sorted, waiting for Pass / Fail' : 'sorted, result in ' + G.config.qaGraceSec + ' s'}</span>`;
       if (lastQa) {
         html += `<span class="chip ${lastQa.result === 'pass' ? 'good' : lastQa.result === 'fail' ? 'crit' : ''}">${esc(lastQa.result.toUpperCase())}${lastQa.reason ? ': ' + esc(lastQa.reason) : ''}</span>` +
           `<span class="muted">light ${lastQa.light == null ? '?' : lastQa.light ? 'on' : 'off'}, bin ${lastQa.bin || '?'}, from ${esc(lastQa.source)}</span>`;
@@ -1148,7 +1710,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     else if (cl && t < cl.until) { ck = 'cleared'; title = 'CLEARED'; msg = cl.message; }
     if (ck + '|' + msg !== st.lastCard) { st.lastCard = ck + '|' + msg; st.vcard.hidden = !ck; st.vcard.className = 'vcard ' + ck; st.vcTitle.textContent = title; st.vcMsg.textContent = msg; }
     // checklist
-    const rules = st.eng.rules(), counts = {};
+    const counts = {};
     s.occ.forEach(o => { counts[o.id] = (counts[o.id] || 0) + 1; });
     const html = rules.map(r => {
       let c = '', why = '';
@@ -1161,59 +1723,74 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
       return `<li class="${c}" title="${esc(tip)}"><span class="ic"></span><span class="nm">${esc(r.label)}${counts[r.id] > 1 ? ` <span class="rep">x${counts[r.id]}</span>` : ''}${r.kind === 'model' ? ' <span class="tag">model</span>' : ''}${r.closes ? ' <span class="muted" style="font-size:11px">(ends the cycle)</span>' : ''}${why ? `<small>${esc(why)}</small>` : ''}</span><span class="num mono">${avg != null && !r.closes && d.cycles && (r.kind || avg > 0) ? fmtS(avg) : ''}</span></li>`;
     }).join('');
     if (html !== st.lastCheck) { st.elCheck.innerHTML = html; st.lastCheck = html; }
-    const recNow = st.rec ? `<span class="recd">REC ${fmtMB(st.rec.bytes)}</span>` + (st.rec.dropped ? ` (${st.rec.dropped} chunks lost)` : '') : '';
+    if (st.err !== st.lastErr) { st.elMsg.textContent = st.err; st.lastErr = st.err; }
+    if (st.phone || !st.phoneEl.hidden || !st.pchip.hidden) renderPhone(st);
+    if (G.setupMode) renderDiag(st, s);
+  }
+  // Setup's diagnostics row: what the phone sends, frame rate, model and its rate, the last confidence.
+  function renderDiag(st, s) {
     const parts = [];
-    if (st.source.type !== 'none') parts.push(st.fps.toFixed(1) + ' fps');
+    if (phoneLive(st)) { const ps = st.phone.stats || {}; parts.push('Phone sends' + (ps.w ? ' ' + ps.w + 'x' + ps.h : '') + (ps.fps != null ? ' at ' + Math.round(ps.fps) + ' fps' : '')); }
+    if (st.source.type !== 'none' && (st.source.type !== 'phone' || phoneLive(st))) parts.push(st.fps.toFixed(1) + ' fps');
     const mc = modelOf(st);
     if (G.modelOn && st.mdl) parts.push(esc(baseName(st.mdl.file)) + ' ' + (st.source.type !== 'none' ? st.modelFps.toFixed(1) + '/s' : 'idle'));
     else parts.push(mc ? 'zones (' + (G.modelOn ? 'model not used' : 'model ' + esc(baseName(mc.file)) + ' off') + ')' : 'zones');
     parts.push('conf ' + (s.lastConf != null ? s.lastConf.toFixed(2) + ' ' + (s.lastSource || '') : '--'));
-    const meta = parts.join(' | ') + (recNow ? ' | ' + recNow : '');
+    const meta = parts.join(' | ');
     if (meta !== st.lastMeta) { st.elMeta.innerHTML = meta; st.lastMeta = meta; }
-    if (st.err !== st.lastErr) { st.elMsg.textContent = st.err; st.lastErr = st.err; }
   }
   function renderSummary(sum) {
     const L = sum.line, ids = LIST.map(s => s.id);
     $('sUnits').textContent = L.units;
-    $('sUnitsS').textContent = 'tested at ' + (G.qaId || '').toUpperCase() + (L.awaitingQa ? ', ' + L.awaitingQa + ' awaiting result' : '');
+    $('sUnitsS').textContent = (G.qaIds.length ? 'tested at ' + G.qaIds.map(x => x.toUpperCase()).join(' and ') : 'no QA station on the floor') + (L.awaitingQa ? ', ' + L.awaitingQa + ' awaiting result' : '');
     $('sUph').textContent = L.uph == null || L.elapsedSec < 60 ? '--' : L.uph.toFixed(0);
     $('sUphS').textContent = L.elapsedSec < 60 ? 'after the first minute' : 'over ' + fmtClock(L.elapsedSec * 1000);
     $('sFpy').textContent = L.fpy == null ? '--' : Math.round(L.fpy * 100) + '%';
     $('sFpyS').textContent = L.passed + ' pass / ' + (L.passed + L.defectFails) + ' tested' + (L.nonDefectFails ? ', ' + L.nonDefectFails + ' retest' : '');
+    // Takt shows only when the config sets it.
     const takt = G.config.taktSec;
-    $('sTakt').textContent = takt ? fmtS(takt) : '--';
-    $('sTaktS').textContent = takt ? (L.overTakt.length ? 'over: ' + L.overTakt.map(x => x.toUpperCase()).join(', ') : 'all stations within') : 'not set in the config';
+    $('sTaktTile').hidden = !takt;
+    if (takt) { $('sTakt').textContent = fmtS(takt); $('sTaktS').textContent = L.overTakt.length ? 'over: ' + L.overTakt.map(x => x.toUpperCase()).join(', ') : 'all stations within'; }
     let flow = '';
     ids.forEach((id, i) => {
       const s = sum.stations[id];
       const c = 'fl-st' + (L.bottleneck === id ? ' bottleneck' : '') + (L.overTakt.includes(id) ? ' over' : '');
-      flow += `<div class="${c}" title="${esc(ST[id].cfg.label)}: ${s.cycles} cycles${s.perUnit > 1 ? ' (' + s.perUnit + ' per unit, ' + s.units + ' units)' : ''}, average cycle (${s.basis})"><b>${id.toUpperCase()}</b><span>${s.perUnit > 1 ? s.units + ' units' : s.cycles + ' done'} | ${fmtS(s.avgSec)}</span></div>`;
-      if (i + 1 < ids.length) { const w = L.wip[i]; flow += `<div class="fl-ar${w.n < 0 ? ' neg' : ''}" title="Units waiting between ${id.toUpperCase()} and ${ids[i + 1].toUpperCase()} (linked by order)"><i>→</i>WIP ${w.n}<i>→</i></div>`; }
+      flow += `<div class="${c}" title="${esc(ST[id].cfg.name)}: ${s.cycles} cycles${s.perUnit > 1 ? ' (' + s.perUnit + ' per unit, ' + s.units + ' units)' : ''}, average cycle (${s.basis})"><b>${id.toUpperCase()}</b><span>${s.perUnit > 1 ? s.units + ' units' : s.cycles + ' done'} | ${fmtS(s.avgSec)}</span></div>`;
+      if (i + 1 < ids.length) {
+        const w = L.wip[i], a = id.toUpperCase(), b = ids[i + 1].toUpperCase(), out = ST[id].cfg.output;
+        // Two stations next to each other with the same role work side by side: no WIP between them (docs/canvas-plan.md).
+        flow += w.n == null ? `<div class="fl-ar" title="${a} and ${b} have the same role: they work side by side"><i>+</i></div>`
+          : `<div class="fl-ar${w.n < 0 ? ' neg' : ''}" title="Units waiting between ${a} and ${b} (linked by order)${out ? ' (' + esc(a + ' makes ' + out) + ')' : ''}"><i>→</i>WIP ${w.n}<i>→</i></div>`;
+      }
     });
     $('sFlow').innerHTML = '<span class="eyebrow" style="margin-right:6px">Flow</span>' + flow;
-    const fc = L.failsByCause, parts = ids.map(id => `${id.toUpperCase()} <b>${fc[id] || 0}</b>`);
-    if (fc.unknown) parts.push(`no cause <b>${fc.unknown}</b>`);
-    $('sFails').innerHTML = `<span class="eyebrow">Fails by cause</span><span class="mono">${parts.join(' | ')}</span>` +
-      `<span class="muted">${L.nonDefectFails ? L.nonDefectFails + ' test setup (retest) | ' : ''}${L.mismatches ? `<span class="chip crit">${L.mismatches} mismatch</span>` : '0 mismatches'}</span>`;
+    // Fails by cause: the yield tile's second line. The cause comes from the fail reason, which only the answer key gives.
+    const fc = L.failsByCause, causes = ids.filter(id => fc[id]).map(id => id.toUpperCase() + ' ' + fc[id]);
+    if (fc.unknown) causes.push('no cause ' + fc.unknown);
+    const mm = L.mismatches ? `<span class="chip crit">${L.mismatches} mismatch</span>` : '';
+    $('sFails').innerHTML = (G.score ? 'Fails: ' + (causes.length ? esc(causes.join(', ')) : 'none') : 'Turn on Score the cameras to log reasons') + mm;
   }
   function renderSession() {
     const on = !!G.session;
     $('sessLive').hidden = !on; $('btnStop').hidden = !on; $('btnStart').hidden = on;
     $('btnStop').disabled = G.stopping; $('btnStop').textContent = G.stopping ? 'Stopping...' : 'Stop session';
     if (on) $('sessTitle').textContent = G.session.title || 'Session';
+    $('sbWarn').hidden = !on;
+    renderLayoutUi();
   }
-  function renderToolbar() {
+  function renderSetupBar() {
     const m = LIST.some(modelOf);
     const bm = $('btnModel');
     bm.disabled = !m;
-    bm.title = m ? 'Run each station\'s model on its camera, one at a time: ' + LIST.map(st => { const x = modelOf(st); return st.id.toUpperCase() + ' ' + (x ? baseName(x.file) : 'zones'); }).join(', ') : 'No model yet: add one under "models" in data/meta/wire-line.json when the model team delivers it';
-    bm.textContent = 'Model: ' + (!m ? 'none yet' : Y.status === 'loading' ? 'loading...' : G.modelOn ? 'on' : 'off');
+    bm.title = m ? 'Each station with a model runs it by itself. Turn them off on a slow laptop; this laptop remembers it.' : 'No model yet: add one under "models" in data/meta/wire-line.json when the model team delivers it';
+    bm.textContent = 'Models: ' + (!m ? 'none yet' : Y.status === 'loading' ? 'loading...' : G.modelOn ? 'on' : 'off');
     bm.classList.toggle('on', G.modelOn);
+    $('mdlNote').textContent = m ? LIST.map(st => { const x = modelOf(st); return st.id.toUpperCase() + ' ' + (x ? baseName(x.file) : 'zones'); }).join(', ') : 'every station on zones';
     const bh = $('btnHands');
-    bh.textContent = 'Hands: ' + (H.status === 'loading' ? 'loading...' : G.handsOn ? 'on' : 'off');
+    bh.textContent = 'Hand tracking: ' + (H.status === 'loading' ? 'loading...' : G.handsOn ? 'on' : 'off');
     bh.classList.toggle('on', G.handsOn);
     $('btnSound').textContent = 'Sound: ' + (G.soundOn ? 'on' : 'off');
-    $('btnSound').classList.toggle('on', G.soundOn);
+    $('sbWarn').hidden = !G.session;
     $('detNote').textContent = (G.modelOn ? Y.backend + (GPU ? '' : ' (add ?gpu for WebGPU)') : '') + (G.handsOn ? (G.modelOn ? ' | ' : '') + 'hands: CPU worker' : '');
     document.querySelectorAll('#basisSeg button').forEach(b => b.classList.toggle('on', b.dataset.b === G.basis));
   }
@@ -1221,12 +1798,14 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
     const t = now();
     // Metrics: recompute when events change, else once a second (idle share and units per hour move with time).
     if (G.evSeen !== G.events.length || t - G.sumAt > 1000) {
-      G.summary = LE.summarize(G.events, G.config, { now: t, basis: G.basis });
+      // Detected counts unless the cameras are being scored; then the Count by switch (Auto by default) decides.
+      G.summary = LE.summarize(G.events, G.config, { now: t, basis: G.score ? G.basis : 'detected' });
       G.evSeen = G.events.length; G.sumAt = t;
       renderSummary(G.summary);
+      if (G.score) renderKeyCounts();
     }
     for (const st of LIST) renderStation(st, G.summary, t);
-    updateRecWarn();
+    if (!$('startForm').hidden) renderReadyLine();
     if (G.session) {
       $('sessClock').textContent = fmtClock(t - G.session.startedAtMs);
       const bytes = LIST.reduce((a, s) => a + (s.rec ? s.rec.bytes : 0), 0);
@@ -1235,37 +1814,487 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
   }
   setInterval(render, 250);
 
+  // ---------- the floor: pan, zoom, Fit and the flow arrows (docs/canvas-plan.md) ----------
+  // The world (cards and arrows) sits under a fixed viewport and moves with one CSS transform. Video, zones, Calibrate,
+  // the model and the checker do not care: they read the video element, and zone drawing reads the canvas's on-screen box.
+  const clampZ = z => Math.min(FLOOR.maxZ, Math.max(FLOOR.minZ, z));
+  const snap = v => Math.round(v / FLOOR.grid) * FLOOR.grid;
+  // noSave: a view the page chose (the first Fit, a remembered view); the user's own moves are remembered per layout.
+  function applyView(noSave) {
+    const f = $('floor'), g = FLOOR.grid * V.z;
+    if (!noSave) V.auto = false;
+    $('world').style.transform = `translate(${V.x}px, ${V.y}px) scale(${V.z})`;
+    f.style.backgroundSize = g + 'px ' + g + 'px';
+    f.style.backgroundPosition = V.x + 'px ' + V.y + 'px';
+    $('zPct').textContent = Math.round(V.z * 100) + '%';
+    // The overlay canvases follow the zoom (their pixel size), a moment after it settles.
+    clearTimeout(V.sizeT);
+    V.sizeT = setTimeout(() => { for (const st of LIST) { sizeCanvas(st); drawOverlay(st); } }, 150);
+    if (!noSave && G.layout) { clearTimeout(V.saveT); const k = 'wire-line:view:' + G.layout.id, v = { x: V.x, y: V.y, z: V.z }; V.saveT = setTimeout(() => store.set(k, v), 300); }
+  }
+  function floorBox() { const r = $('floor').getBoundingClientRect(); return { left: r.left, top: r.top, w: r.width, h: r.height }; }
+  // Zoom keeping the floor point under (sx, sy) in place (the middle of the floor without one).
+  function zoomAt(z, sx, sy) {
+    const b = floorBox();
+    if (sx == null) { sx = b.w / 2; sy = b.h / 2; }
+    z = clampZ(z);
+    const wx = (sx - V.x) / V.z, wy = (sy - V.y) / V.z;
+    V.z = z; V.x = sx - wx * z; V.y = sy - wy * z;
+    applyView();
+  }
+  function cardRect(st) { return { x: st.cfg.x, y: st.cfg.y, w: st.el.offsetWidth || FLOOR.cardW, h: st.el.offsetHeight || 320 }; }
+  // Fit: every station in view, at most 100%, below Edit layout and + Station, above the zoom cluster. auto: the page's own Fit (no remembered view): it
+  // follows the floor's size (the header settling, a resized window) until the user pans or zooms.
+  function fitView(auto) {
+    const b = floorBox(), pad = 24, top = 52, bottom = 60;    // top: the Edit layout row; bottom: the zoom cluster
+    V.auto = !!auto;
+    if (!LIST.length) { V.z = 1; V.x = pad; V.y = top + pad; applyView(!!auto); return; }
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const st of LIST) { const r = cardRect(st); x0 = Math.min(x0, r.x); y0 = Math.min(y0, r.y); x1 = Math.max(x1, r.x + r.w); y1 = Math.max(y1, r.y + r.h); }
+    const z = clampZ(Math.min(1, (b.w - 2 * pad) / (x1 - x0), (b.h - 2 * pad - top - bottom) / (y1 - y0)));
+    V.z = z; V.x = (b.w - (x1 - x0) * z) / 2 - x0 * z; V.y = top + (b.h - top - bottom - (y1 - y0) * z) / 2 - y0 * z;
+    applyView(!!auto);
+  }
+  // The view this browser last had on this layout, else Fit.
+  function restoreView() {
+    const v = G.layout && store.get('wire-line:view:' + G.layout.id);
+    if (v && isFinite(v.x) && isFinite(v.y) && v.z >= FLOOR.minZ && v.z <= FLOOR.maxZ) { V.x = v.x; V.y = v.y; V.z = v.z; V.auto = false; applyView(true); } else fitView(true);
+  }
+  // Bring one card into view (Setup needed), zoomed in enough to work on it.
+  function focusCard(st) {
+    const b = floorBox(), r = cardRect(st);
+    if (V.z < 0.6) V.z = clampZ(Math.min(1, (b.w - 40) / r.w, (b.h - 40) / r.h));
+    V.x = b.w / 2 - (r.x + r.w / 2) * V.z; V.y = b.h / 2 - (r.y + r.h / 2) * V.z;
+    applyView();
+  }
+  // A card partly outside the floor (a new station at the nearest free spot): pan it to the middle, keeping the zoom.
+  function revealCard(st) {
+    const b = floorBox(), r = cardRect(st), L0 = r.x * V.z + V.x, T0 = r.y * V.z + V.y;
+    if (L0 >= 0 && T0 >= 44 && L0 + r.w * V.z <= b.w && T0 + r.h * V.z <= b.h) return;
+    if (r.w * V.z > b.w || r.h * V.z > b.h - 44) V.z = clampZ(Math.min((b.w - 40) / r.w, (b.h - 84) / r.h));
+    V.x = b.w / 2 - (r.x + r.w / 2) * V.z; V.y = 22 + b.h / 2 - (r.y + r.h / 2) * V.z;
+    applyView();
+  }
+  function placeStation(st) { st.el.style.left = st.cfg.x + 'px'; st.el.style.top = st.cfg.y + 'px'; }
+  // The card's name (without a leading id: the badge shows it), and its role when the name does not say it.
+  function renderName(st) {
+    const short = LE.shortName(st.id, st.cfg.name, st.cfg.label);
+    st.elName.textContent = short;
+    st.elRole.textContent = short.toLowerCase() === String(st.cfg.label).toLowerCase() ? '' : st.cfg.label;
+    st.vcSt.textContent = st.id.toUpperCase() + ' ' + short;
+    st.el.setAttribute('aria-label', st.id.toUpperCase() + ' ' + short);
+  }
+
+  // Drag the floor, or a card outside its controls, to pan; in Edit layout a card drags itself (snapped to the grid).
+  // Two fingers pinch. A zone being drawn in Setup (the canvas calls preventDefault) is left alone.
+  const PZ = { pts: new Map(), pan: null, pinch: null, drag: null };
+  const NO_PAN = 'button, a, input, select, textarea, label, summary, .phonep, .oppop, .addp, .zoombox, .fl-tools, .edit-panel, .con';
+  function floorDown(ev) {
+    if ((ev.pointerType === 'mouse' && ev.button !== 0) || ev.defaultPrevented || ev.target.closest(NO_PAN)) return;
+    const b = floorBox();
+    PZ.pts.set(ev.pointerId, { x: ev.clientX - b.left, y: ev.clientY - b.top });
+    try { $('floor').setPointerCapture(ev.pointerId); } catch (e) { /* synthetic event */ }
+    if (PZ.pts.size === 2) {
+      const [a, c] = [...PZ.pts.values()];
+      PZ.pinch = { d: Math.hypot(a.x - c.x, a.y - c.y) || 1, z: V.z, wx: ((a.x + c.x) / 2 - V.x) / V.z, wy: ((a.y + c.y) / 2 - V.y) / V.z };
+      PZ.pan = null; cancelDrag();
+      return;
+    }
+    const card = ev.target.closest('.st'), st = card && ST[card.dataset.st];
+    if (G.editMode && st) PZ.drag = { st, x0: ev.clientX, y0: ev.clientY, sx: st.cfg.x, sy: st.cfg.y, moved: false };
+    else PZ.pan = { x0: ev.clientX, y0: ev.clientY, vx: V.x, vy: V.y, moved: false };
+  }
+  function floorMove(ev) {
+    if (!PZ.pts.has(ev.pointerId)) return;
+    const b = floorBox();
+    PZ.pts.set(ev.pointerId, { x: ev.clientX - b.left, y: ev.clientY - b.top });
+    if (PZ.pinch && PZ.pts.size >= 2) {
+      const [a, c] = [...PZ.pts.values()], p = PZ.pinch, z = clampZ(p.z * (Math.hypot(a.x - c.x, a.y - c.y) || 1) / p.d);
+      V.z = z; V.x = (a.x + c.x) / 2 - p.wx * z; V.y = (a.y + c.y) / 2 - p.wy * z;
+      applyView();
+      return;
+    }
+    const d = PZ.drag || PZ.pan;
+    if (!d) return;
+    const dx = ev.clientX - d.x0, dy = ev.clientY - d.y0;
+    if (!d.moved && Math.hypot(dx, dy) < 4) return;    // a click stays a click
+    d.moved = true;
+    if (PZ.drag) {
+      const st = d.st;
+      st.cfg.x = snap(d.sx + dx / V.z); st.cfg.y = snap(d.sy + dy / V.z);
+      st.el.classList.add('dragging'); placeStation(st); scheduleArrows();
+    } else { V.x = d.vx + dx; V.y = d.vy + dy; $('floor').classList.add('panning'); applyView(); }
+  }
+  function floorUp(ev) {
+    if (!PZ.pts.delete(ev.pointerId)) return;
+    if (PZ.pts.size < 2) PZ.pinch = null;
+    $('floor').classList.remove('panning');
+    const d = PZ.drag;
+    PZ.pan = null; PZ.drag = null;
+    if (!d) return;
+    d.st.el.classList.remove('dragging');
+    const undo = () => { d.st.cfg.x = d.sx; d.st.cfg.y = d.sy; placeStation(d.st); scheduleArrows(); };
+    if (!d.moved) return;
+    if (ev.type === 'pointercancel') return undo();
+    const x = d.st.cfg.x, y = d.st.cfg.y, id = d.st.id;
+    if (x !== d.sx || y !== d.sy) commitLayout(l => { const s = l.stations.find(z => z.id === id); if (s) { s.x = x; s.y = y; } }, true, undo);
+  }
+  function cancelDrag() {
+    const d = PZ.drag;
+    if (!d) return;
+    PZ.drag = null; d.st.cfg.x = d.sx; d.st.cfg.y = d.sy; d.st.el.classList.remove('dragging'); placeStation(d.st); scheduleArrows();
+  }
+  // Two-finger scroll on a trackpad (or the wheel) pans; pinch on a trackpad (it arrives as ctrl+wheel) or ctrl+wheel zooms.
+  function floorWheel(ev) {
+    const zoom = ev.ctrlKey || ev.metaKey;
+    if (!zoom && ev.target.closest('.addp, .oppop, .phonep')) return;    // those scroll themselves
+    ev.preventDefault();
+    const b = floorBox(), k = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? b.h : 1;
+    if (zoom) { zoomAt(V.z * Math.exp(-ev.deltaY * k * 0.01), ev.clientX - b.left, ev.clientY - b.top); return; }
+    const side = ev.shiftKey && !ev.deltaX;    // shift+wheel on a mouse pans sideways
+    V.x -= (side ? ev.deltaY : ev.deltaX) * k; V.y -= (side ? 0 : ev.deltaY) * k;
+    applyView();
+  }
+
+  let arrowsQueued = false;
+  function scheduleArrows() { if (arrowsQueued) return; arrowsQueued = true; requestAnimationFrame(() => { arrowsQueued = false; renderArrows(); }); }
+  // One arrow per step of the flow (1 to 2, 2 to 3 ...), from a card's edge to the next card's facing edge, like the arrows
+  // in Michael's photo: straight where the two cards face each other, else with one bend.
+  function renderArrows() {
+    let html = '';
+    for (let i = 0; i + 1 < LIST.length; i++) html += `<path class="fa" marker-end="url(#ah)" d="${arrowPath(cardRect(LIST[i]), cardRect(LIST[i + 1]))}"/>`;
+    $('arrowG').innerHTML = html;
+    $('floorEmpty').hidden = LIST.length > 0;
+  }
+  function arrowPath(a, b) {
+    const gap = 14, ac = { x: a.x + a.w / 2, y: a.y + a.h / 2 }, bc = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+    // Through the middle of the span the two cards share (side by side, or one above the other), else center to center.
+    const mid = (p0, p1, q0, q1, fa, fb) => { const lo = Math.max(p0, q0), hi = Math.min(p1, q1); return hi - lo > 40 ? [(lo + hi) / 2, (lo + hi) / 2] : [fa, fb]; };
+    if (Math.abs(bc.x - ac.x) / (a.w + b.w) >= Math.abs(bc.y - ac.y) / (a.h + b.h)) {
+      const right = bc.x >= ac.x, x1 = right ? a.x + a.w + gap : a.x - gap, x2 = right ? b.x - gap : b.x + b.w + gap;
+      const [y1, y2] = mid(a.y, a.y + a.h, b.y, b.y + b.h, ac.y, bc.y), mx = (x1 + x2) / 2;
+      return y1 === y2 ? `M${x1} ${y1}H${x2}` : `M${x1} ${y1}H${mx}V${y2}H${x2}`;
+    }
+    const down = bc.y >= ac.y, y1 = down ? a.y + a.h + gap : a.y - gap, y2 = down ? b.y - gap : b.y + b.h + gap;
+    const [x1, x2] = mid(a.x, a.x + a.w, b.x, b.x + b.w, ac.x, bc.x), my = (y1 + y2) / 2;
+    return x1 === x2 ? `M${x1} ${y1}V${y2}` : `M${x1} ${y1}V${my}H${x2}V${y2}`;
+  }
+
+  // ---------- layouts: the built-in Class test and saved ones (on the server), Edit layout mode, Add station ----------
+  async function api(method, url, body) {
+    const r = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
+    let j = {};
+    try { j = await r.json(); } catch (e) { /* no body */ }
+    if (!r.ok) throw new Error(j.message || 'HTTP ' + r.status);
+    return j;
+  }
+  const layoutBody = l => ({ name: l.name, stations: l.stations.map(s => ({ id: s.id, name: s.name, role: s.role, x: s.x, y: s.y })) });
+  function uniqueName(base) { let n = base, k = 2; while (G.layouts.some(l => l.name === n)) n = base + ' ' + k++; return n; }
+  function noEdits(what) { hint('Stop the session to ' + (what || 'change the layout') + '.'); }
+  async function newLayout(name, stations) { const j = await api('POST', '/api/line/layouts', { name, stations }); G.layouts.push(j.layout); return j.layout; }
+
+  // Build the floor from a layout: the stations that stay (same id and role) keep running, the ones that left or changed
+  // role are taken down, new ones are made. Edits, layout switches and the first load all come through here.
+  async function reconcile(layout) {
+    G.layout = layout;
+    G.config = LE.applyLayout(G.base, layout);
+    const want = G.config.stations, t = now(), added = [];
+    for (const st of LIST.slice()) { const w = want.find(x => x.id === st.id); if (!w || w.role !== st.cfg.role) await dropStation(st); }
+    LIST = want.map((cfg, i) => {
+      let st = ST[cfg.id];
+      if (!st) { st = ST[cfg.id] = makeStation(cfg, i); $('world').appendChild(st.el); added.push(st); } else { st.cfg = cfg; st.idx = i; }
+      placeStation(st); renderName(st); renderOp(st);
+      return st;
+    });
+    G.qaIds = LIST.filter(st => st.isQa).map(st => st.id);
+    for (const st of added) { st.editPanel.hidden = !G.editMode; sizeCanvas(st); emit({ type: 'source_change', station: st.id, t, input: 'none', note: st.source.label }); }
+    $('hdrNote').textContent = (G.config.name || 'Line') + ', ' + LIST.length + ' station' + (LIST.length === 1 ? '' : 's') + ', one overhead camera each';
+    $('hdrNote').title = G.config.product || '';
+    buildAnswerKey(); renderLayoutUi(); renderArrows(); rebuildPickers(); renderSetupBar();
+    G.evSeen = -1;
+    if (added.length && G.setupMode) setSetupMode(true);
+    if (added.length && G.ready) { await restoreSources(false, added); if (G.modelOn) setModel(true); }
+    return added;
+  }
+  // A station off the floor: its camera stops, a phone on it is let go (it waits for its station to come back).
+  async function dropStation(st) {
+    LIST = LIST.filter(x => x !== st);
+    delete ST[st.id];
+    st.el.remove(); banner('model-' + st.id, '');
+    await stopSource(st);
+  }
+  // Show another layout. A station on both keeps its camera.
+  async function switchLayout(l, keepView) {
+    if (G.session) return noEdits();
+    try { await api('POST', '/api/line/layouts/' + encodeURIComponent(l.id) + '/use'); } catch (e) { banner('layout', 'Could not switch the layout: ' + esc(e.message), 'crit'); return; }
+    await reconcile(l);
+    if (keepView) applyView(); else restoreView();
+    loadPhoneInfo();
+  }
+  // Changes go into a saved layout. Class test is built in: the first change makes "Class test copy" and switches to it
+  // (the same stations, so nothing on the floor restarts).
+  async function editable() {
+    if (G.session) { noEdits(); return null; }
+    if (!G.layout.builtIn) return G.layout;
+    if (!G.copying) {
+      G.copying = (async () => {
+        try {
+          const from = G.layout, copy = await newLayout(uniqueName(from.name + ' copy'), JSON.parse(JSON.stringify(from.stations)));
+          store.set('wire-line:view:' + copy.id, { x: V.x, y: V.y, z: V.z });
+          await switchLayout(copy, true);
+          banner('layout', esc(from.name) + ' is built in and stays as it is, so the change went into a copy: <b>' + esc(copy.name) + '</b>.', 'good');
+          setTimeout(() => banner('layout', ''), 7000);
+          return copy;
+        } catch (e) { banner('layout', 'The layout was not saved: ' + esc(e.message), 'crit'); return null; } finally { G.copying = null; }
+      })();
+    }
+    return G.copying;
+  }
+  // mutate(layout) changes its stations or its name. Saved at once (new, removed or re-roled stations: the phone listener
+  // must know them), or a moment later (soon: moves and names). undo() runs when no change is allowed.
+  const SAVES = LE.saveScheduler({ set: (fn, ms) => setTimeout(fn, ms), clear: t => clearTimeout(t) });
+  async function commitLayout(mutate, soon, undo) {
+    const l = await editable();
+    if (!l) { if (undo) undo(); return null; }
+    mutate(l);
+    await reconcile(l);
+    const put = async () => {
+      try { await api('PUT', '/api/line/layouts/' + encodeURIComponent(l.id), layoutBody(l)); banner('layout-save', ''); }
+      catch (e) { banner('layout-save', 'The layout was not saved: ' + esc(e.message), 'crit'); }
+    };
+    if (soon) SAVES.later(l.id, put, 400);    // one pending save per layout: an edit on another layout does not cancel this one
+    else { SAVES.cancel(l.id); await put(); loadPhoneInfo(); }
+    return l;
+  }
+  function renderLayoutUi() {
+    const l = G.layout;
+    if (!l) return;
+    $('flName').textContent = l.name + (l.builtIn ? ' (built in)' : '');
+    const opts = G.layouts.map(x => `<option value="${esc(x.id)}">${esc(x.name)}${x.builtIn ? ' (built in)' : ''}</option>`).join('');
+    if ($('laySel').dataset.h !== opts) { $('laySel').innerHTML = opts; $('laySel').dataset.h = opts; }
+    $('laySel').value = l.id;
+    const nm = $('layName');
+    if (document.activeElement !== nm) nm.value = l.name;
+    nm.readOnly = !!l.builtIn;
+    $('layDel').hidden = !!l.builtIn;
+    $('layNote').textContent = l.builtIn ? l.name + ' stays as it is: any change saves a copy.' : l.stations.length + ' station' + (l.stations.length === 1 ? '' : 's') + ', saved on this laptop.';
+    for (const b of [$('btnEdit'), $('btnAdd')]) b.setAttribute('aria-disabled', G.session ? 'true' : 'false');
+    for (const st of LIST) renderEdit(st);
+  }
+  function setEditMode(on) {
+    if (on && G.session) { noEdits(); return; }
+    G.editMode = !!on;
+    if (G.editMode && G.setupMode) setSetupMode(false);    // one mode at a time
+    cancelDrag();
+    $('floor').classList.toggle('editing', G.editMode);
+    $('layoutBar').hidden = !G.editMode;
+    $('btnEdit').classList.toggle('on', G.editMode);
+    $('btnEdit').textContent = G.editMode ? 'Done editing' : 'Edit layout';
+    for (const st of LIST) st.editPanel.hidden = !G.editMode;
+    renderLayoutUi(); scheduleArrows();
+  }
+  // Each card's strip in Edit layout: name, role, flow order, remove.
+  function renderEdit(st) {
+    const p = st.editPanel, q = sel => p.querySelector(sel), i = LIST.indexOf(st), n = LIST.length;
+    const nm = q('.ed-name');
+    if (document.activeElement !== nm) nm.value = st.cfg.name;
+    const rs = q('.ed-role'), html = G.roles.map(r => `<option value="${esc(r.id)}">${esc(r.label)}</option>`).join('');
+    if (rs.dataset.h !== html) { rs.innerHTML = html; rs.dataset.h = html; }
+    rs.value = st.cfg.role;
+    q('.ed-ord').textContent = (i + 1) + ' of ' + n;
+    q('.ed-up').disabled = i <= 0; q('.ed-down').disabled = i < 0 || i >= n - 1;
+  }
+  function bindEdit(st) {
+    const p = st.editPanel, q = sel => p.querySelector(sel), del = q('.ed-del');
+    const edit = (fn, soon) => commitLayout(l => { const s = l.stations.find(x => x.id === st.id); if (s) fn(l, s); }, soon);
+    q('.ed-name').onchange = e => { const v = e.target.value.trim(); edit((l, s) => { s.name = v || LE.defaultName(s.id, roleLabel(s.role)); }, true); };
+    q('.ed-name').onkeydown = e => { if (e.key === 'Enter') e.target.blur(); };
+    // A new role is a new job: the station starts over (its camera comes back by itself) and needs that role's boxes.
+    q('.ed-role').onchange = e => {
+      const v = e.target.value;
+      e.target.blur();
+      edit((l, s) => { if (s.name === LE.defaultName(s.id, roleLabel(s.role))) s.name = LE.defaultName(s.id, roleLabel(v)); s.role = v; });
+    };
+    const move = d => edit(l => { const i = l.stations.findIndex(x => x.id === st.id), j = i + d; if (i < 0 || j < 0 || j >= l.stations.length) return; const t = l.stations[i]; l.stations[i] = l.stations[j]; l.stations[j] = t; });
+    q('.ed-up').onclick = () => move(-1);
+    q('.ed-down').onclick = () => move(1);
+    // Two clicks, no dialog: the first arms it for 3 seconds.
+    del.onclick = () => {
+      if (now() - (st.delArm || 0) > 3000) { st.delArm = now(); del.textContent = 'Click again to remove'; setTimeout(() => { del.textContent = 'Remove'; }, 3000); return; }
+      st.delArm = 0;
+      commitLayout(l => { l.stations = l.stations.filter(x => x.id !== st.id); });
+    };
+  }
+  function openAdd() {
+    if (G.session) return noEdits('add a station');
+    if (!$('addPanel').hidden) return closeAdd();
+    const sts = G.layout.stations, last = sts[sts.length - 1], role = last ? last.role : (G.roles[0] || {}).id;
+    $('addRole').innerHTML = G.roles.map(r => `<option value="${esc(r.id)}">${esc(r.label)}</option>`).join('');
+    $('addRole').value = role;
+    G.addAuto = $('addName').value = LE.defaultName(LE.nextStationId(sts), roleLabel(role));
+    $('addPanel').hidden = false; $('btnAdd').classList.add('on');
+    $('addName').focus(); $('addName').select();
+  }
+  function closeAdd() { $('addPanel').hidden = true; $('btnAdd').classList.remove('on'); }
+  // The spot nearest (x, y) where a new card does not cover another one (LineEngine.freeSpot).
+  const freeSpot = (x, y) => LE.freeSpot(LIST.map(cardRect), x, y);
+  // A new station goes in the middle of the view (or the nearest free spot), then its Connect a camera sheet opens. Its id
+  // is the lowest free s<n>: a station that was removed and comes back finds its camera again.
+  async function addStation(role, name) {
+    if (G.session) return noEdits('add a station');
+    const b = floorBox(), [x, y] = freeSpot(snap((b.w / 2 - V.x) / V.z - FLOOR.cardW / 2), snap((b.h / 2 - V.y) / V.z - 170));
+    let id = null;
+    const l = await commitLayout(lay => { id = LE.nextStationId(lay.stations); lay.stations.push({ id, name: name || LE.defaultName(id, roleLabel(role)), role, x, y }); });
+    closeAdd();
+    const st = l && ST[id];
+    if (st) { revealCard(st); if (st.source.type === 'none') showConnect(st, 'choose'); }
+    return id;
+  }
+
+  // ---------- operator at each station: an anonymous code and a training level (docs/dashboard-plan.md, decision 1) ----------
+  const levelLabel = id => (LE.LEVELS.find(l => l.id === id) || {}).label || '';
+  function renderOp(st) {
+    const o = st.op, txt = o ? o.code + ', ' + levelLabel(o.level).toLowerCase() : 'Op --';
+    if (st.opBtn.textContent !== txt) st.opBtn.textContent = txt;
+    st.opBtn.classList.toggle('set', !!o);
+  }
+  function bindOperator(st) {
+    const p = st.opPop, q = sel => p.querySelector(sel), num = q('.op-num'), msg = q('.op-msg');
+    let lv = null;
+    const pick = l => { lv = l; p.querySelectorAll('.op-lv button').forEach(b => b.classList.toggle('on', b.dataset.l === l)); };
+    const close = () => { p.hidden = true; };
+    st.opBtn.onclick = () => {
+      if (!p.hidden) return close();
+      q('.op-t').textContent = 'Operator at ' + st.id.toUpperCase();
+      num.value = st.op ? st.op.code.slice(3) : ''; pick(st.op ? st.op.level : null); msg.textContent = '';
+      p.hidden = false; num.focus(); num.select();
+    };
+    p.querySelectorAll('.op-lv button').forEach(b => { b.onclick = () => pick(b.dataset.l); });
+    const save = () => {
+      const code = LE.operatorCode(num.value);
+      if (!code) { msg.textContent = 'Type the operator\'s number, like 7. No names.'; num.focus(); return; }
+      if (!lv) { msg.textContent = 'Pick a level.'; return; }
+      setOperator(st, { code, level: lv }); close();
+    };
+    q('.op-save').onclick = save;
+    num.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); save(); } else if (e.key === 'Escape') close(); };
+    q('.op-none').onclick = () => { setOperator(st, null); close(); };
+    q('.op-x').onclick = close;
+  }
+  // Allowed during a run (operators change mid-shift). Logged as the event operator {station, code, level}; null when nobody.
+  function setOperator(st, op) {
+    const same = (!st.op && !op) || (st.op && op && st.op.code === op.code && st.op.level === op.level);
+    st.op = op ? { code: op.code, level: op.level } : null;
+    store.set('wire-line:operator:' + st.id, st.op);
+    if (!same) emit({ type: 'operator', station: st.id, code: st.op ? st.op.code : null, level: st.op ? st.op.level : null, t: now() });
+    renderOp(st);
+  }
+
   // ---------- wiring ----------
   $('btnStart').onclick = () => showStartForm($('startForm').hidden);
   $('btnCancelStart').onclick = () => showStartForm(false);
+  $('startForm').onkeydown = e => { if (e.key === 'Escape') { e.preventDefault(); showStartForm(false); } };
+  $('fShift').oninput = () => { if ($('fTitle').value === G.autoTitle) $('fTitle').value = G.autoTitle = autoTitle(G.formAt, $('fShift').value.trim()); };
+  $('chkScore').onchange = () => setScore($('chkScore').checked);
   $('startForm').onsubmit = e => { e.preventDefault(); startSession({ title: $('fTitle').value.trim(), crew: $('fCrew').value.trim(), shift: $('fShift').value.trim(), notes: $('fNotes').value.trim() }); };
   $('btnStop').onclick = () => stopSession();
+  $('btnSetup').onclick = () => setSetupMode(!G.setupMode);
+  $('btnDone').onclick = () => setSetupMode(false);
   $('btnSessions').onclick = () => { const p = $('sessionsPanel'); p.hidden = !p.hidden; $('btnSessions').classList.toggle('on', !p.hidden); if (!p.hidden) loadSessions(); };
-  $('btnRefresh').onclick = () => { loadSessions(); loadClips(); };
-  $('btnModel').onclick = () => setModel(!G.modelOn);
+  setInterval(() => { if (!$('sessionsPanel').hidden) loadSessions(); }, 10000);    // the panel keeps itself current while open
+  $('btnModel').onclick = () => { const on = !G.modelOn; store.set('wire-line:model', on); setModel(on); };
   $('btnHands').onclick = () => setHands(!G.handsOn);
-  $('btnSound').onclick = () => { G.soundOn = !G.soundOn; store.set('wire-line:sound', G.soundOn); unlockAudio(); renderToolbar(); };
-  $('btnCams').onclick = async () => { await findCameras(true); await restoreSources(true); };
-  $('basisSeg').onclick = e => { const b = e.target.closest('button'); if (!b) return; G.basis = b.dataset.b; store.set('wire-line:basis', G.basis); G.evSeen = -1; renderToolbar(); };
+  $('btnSound').onclick = () => { G.soundOn = !G.soundOn; store.set('wire-line:sound', G.soundOn); unlockAudio(); renderSetupBar(); };
+  // Two clicks, no dialog: the first arms it for 3 seconds.
+  $('btnPair').onclick = async () => {
+    const b = $('btnPair');
+    if (now() - PHN.pairArm > 3000) { PHN.pairArm = now(); b.textContent = 'Click again: phones must rescan'; setTimeout(() => { b.textContent = 'New pairing code'; }, 3000); return; }
+    PHN.pairArm = 0; b.textContent = 'New pairing code';
+    try {
+      const r = await fetch('/api/phone/rotate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client: PHN.client }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.message || r.status);
+      for (const st of LIST) {
+        if (!st.phone) continue;
+        if (st.phone.state === 'live') phoneLost(st, 'Phone cut off: new pairing code'); else closePhonePc(st, false);
+        Object.assign(st.phone, { state: 'waiting', lostAt: 0, error: '' });
+      }
+      await loadPhoneInfo();
+      banner('pair', 'New pairing code made. Scan each station\'s QR code again with its phone or tablet.', 'good');
+      setTimeout(() => banner('pair', ''), 6000);
+    } catch (e) { banner('pair', 'No new pairing code: ' + esc(e && e.message || e), 'crit'); }
+  };
+  $('btnEdit').onclick = () => setEditMode(!G.editMode);
+  $('btnLayoutDone').onclick = () => setEditMode(false);
+  $('btnAdd').onclick = openAdd;
+  $('btnAddX').onclick = closeAdd;
+  $('addRole').onchange = () => { if ($('addName').value === G.addAuto) G.addAuto = $('addName').value = LE.defaultName(LE.nextStationId(G.layout.stations), roleLabel($('addRole').value)); };
+  $('addPanel').onsubmit = e => { e.preventDefault(); addStation($('addRole').value, $('addName').value.trim()); };
+  $('addPanel').onkeydown = e => { if (e.key === 'Escape') { e.preventDefault(); closeAdd(); } };
+  $('zOut').onclick = () => zoomAt(V.z / 1.25);
+  $('zIn').onclick = () => zoomAt(V.z * 1.25);
+  $('zPct').onclick = () => zoomAt(1);
+  $('zFit').onclick = () => fitView();
+  $('floor').addEventListener('pointerdown', floorDown);
+  $('floor').addEventListener('pointermove', floorMove);
+  $('floor').addEventListener('pointerup', floorUp);
+  $('floor').addEventListener('pointercancel', floorUp);
+  $('floor').addEventListener('wheel', floorWheel, { passive: false });
+  if (window.ResizeObserver) new ResizeObserver(() => { if (V.auto && LIST.length) fitView(true); }).observe($('floor'));
+  // A click anywhere else closes the operator panels and Add a station.
+  document.addEventListener('pointerdown', e => {
+    for (const st of LIST) if (!st.opPop.hidden && !st.opPop.contains(e.target) && !st.opBtn.contains(e.target)) st.opPop.hidden = true;
+    if (!$('addPanel').hidden && !$('addPanel').contains(e.target) && !$('btnAdd').contains(e.target)) closeAdd();
+  }, true);
+  $('laySel').onchange = () => { const l = G.layouts.find(x => x.id === $('laySel').value); $('laySel').blur(); if (l && l.id !== G.layout.id) switchLayout(l); };
+  $('layName').onchange = () => { const v = $('layName').value.trim(); if (G.layout.builtIn || !v || v === G.layout.name) { renderLayoutUi(); return; } commitLayout(l => { l.name = v; }, true); };
+  $('layName').onkeydown = e => { if (e.key === 'Enter') e.target.blur(); };
+  $('layNew').onclick = async () => {
+    if (G.session) return noEdits();
+    try { await switchLayout(await newLayout(uniqueName('New layout'), [])); } catch (e) { banner('layout', 'No new layout: ' + esc(e.message), 'crit'); }
+  };
+  $('layDup').onclick = async () => {
+    if (G.session) return noEdits();
+    try {
+      const copy = await newLayout(uniqueName(G.layout.name + ' copy'), JSON.parse(JSON.stringify(G.layout.stations)));
+      store.set('wire-line:view:' + copy.id, { x: V.x, y: V.y, z: V.z });
+      await switchLayout(copy, true);
+    } catch (e) { banner('layout', 'No copy made: ' + esc(e.message), 'crit'); }
+  };
+  // Two clicks, no dialog: the first arms it for 3 seconds. Class test cannot be deleted (the button is hidden there).
+  $('layDel').onclick = async () => {
+    const b = $('layDel'), l = G.layout;
+    if (G.session || l.builtIn) return;
+    if (now() - (G.layDelArm || 0) > 3000) { G.layDelArm = now(); b.textContent = 'Click again to delete ' + l.name; setTimeout(() => { b.textContent = 'Delete'; }, 3000); return; }
+    G.layDelArm = 0; b.textContent = 'Delete';
+    try {
+      await api('DELETE', '/api/line/layouts/' + encodeURIComponent(l.id));
+      G.layouts = G.layouts.filter(x => x.id !== l.id);
+      await switchLayout(G.layouts[0]);
+    } catch (e) { banner('layout', 'Not deleted: ' + esc(e.message), 'crit'); }
+  };
+  $('basisSeg').onclick = e => { const b = e.target.closest('button'); if (!b) return; G.basis = b.dataset.b; store.set('wire-line:basis', G.basis); G.evSeen = -1; renderSetupBar(); };
   $('btnReset').onclick = () => {
     if (G.session) { banner('reset', 'Counts cannot be reset while a session records. Stop the session first.', ''); setTimeout(() => banner('reset', ''), 4000); return; }
     G.events = []; G.evSeen = -1;
     const t = now();
-    for (const st of LIST) { st.eng.restart(); st.chk.restart(); st.manualN = 0; emit({ type: 'source_change', station: st.id, t, input: st.source.type, note: st.source.label }); }
+    for (const st of LIST) { st.eng.restart(); st.chk.restart(); st.manualN = 0; emit({ type: 'source_change', station: st.id, t, input: inputOf(st), note: noteOf(st) }); }
   };
 
-  async function restoreSources(camsOnly) {
-    for (const st of LIST) {
+  async function restoreSources(camsOnly, only) {
+    for (const st of only || LIST) {
+      if (ST[st.id] !== st) continue;    // off the floor meanwhile
       const key = store.get('wire-line:source:' + st.id);
       if (!key || key === st.source.key) continue;
       if (key.startsWith('cam:') && G.cameras.some(c => c.key === key) && !LIST.some(s => s.source.key === key)) await setSource(st, key, true);
       else if (!camsOnly && key.startsWith('clip:') && G.clips.some(c => 'clip:' + c.key === key)) await setSource(st, key, true);
+      else if (!camsOnly && key === 'phone') await setSource(st, 'phone', true);
     }
   }
 
   // ---------- debug hook (tests and the console) ----------
   window.__line = {
-    G, ST, Y, H, LE, setSource, startSession, stopSession, manualCycle, manualPass, openFail, pickReason, setModel, setHands,
+    G, ST, Y, H, LE, PHN, V, reconcile, setEditMode, fitView, zoomAt, addStation, setOperator, switchLayout, get list() { return LIST; }, setSource, setSetupMode, setScore, loadPhoneInfo, phoneLive: id => phoneLive(ST[id]), startSession, stopSession, manualCycle, manualPass, openFail, pickReason, setModel, setHands,
     get summary() { return G.summary; },
     setZones(id, zones) { const st = ST[id]; Object.assign(st.setup.zones, zones); st.prevGray = null; saveSetup(st); if (st.setupOn) renderSetup(st); drawOverlay(st); },
     calibrate(id, kind) { return calibrate(ST[id], kind || 'empty'); },
@@ -1279,30 +2308,38 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
   (async function init() {
     try {
       const r = await fetch('/api/line/config', { cache: 'no-store' });
-      G.config = await r.json();
-      if (!r.ok) throw new Error(G.config.message || r.status);
+      G.base = await r.json();
+      if (!r.ok) throw new Error(G.base.message || r.status);
     } catch (e) {
       banner('config', 'The line config did not load: ' + esc(e && e.message || e) + '. Check data/meta/wire-line.json and that npm start is running.', 'crit');
       return;
     }
-    const problems = LE.checkConfig(G.config);
+    const problems = LE.checkConfig(G.base);
     if (problems.length) banner('config', '<b>data/meta/wire-line.json has problems:</b> ' + problems.map(esc).join(' '), 'crit');
     try { G.setup = await (await fetch('/api/line/setup', { cache: 'no-store' })).json() || {}; } catch (e) { G.setup = {}; }
-    G.qaId = (G.config.stations.find(s => s.qa) || {}).id || null;
-    LIST = G.config.stations.map((cfg, i) => (ST[cfg.id] = makeStation(cfg, i)));
-    const grid = $('grid');
-    LIST.forEach(st => grid.appendChild(st.el));
-    $('kLast').textContent = LIST.length;
-    $('hdrNote').textContent = (G.config.name || 'Line') + ': ' + (G.config.product || '') + ' ' + LIST.length + ' stations, one overhead camera each.';
-    renderToolbar(); renderSession(); rebuildPickers();
-    LIST.forEach(st => { sizeCanvas(st); emit({ type: 'source_change', station: st.id, t: now(), input: 'none', note: st.source.label }); });
+    // The floor layout this laptop shows (Class test unless a saved one was picked).
+    let lay = null;
+    try {
+      const j = await (await fetch('/api/line/layouts', { cache: 'no-store' })).json();
+      G.layouts = j.layouts || []; G.roles = j.roles || [];
+      lay = G.layouts.find(l => l.id === j.active) || G.layouts[0];
+    } catch (e) { /* the server is restarting: the built-in layout */ }
+    if (!G.roles.length) G.roles = G.base.stations.map(x => ({ id: x.id, label: x.label }));
+    if (!lay) { lay = LE.classTestLayout(G.base); G.layouts = [lay]; }
+    setScore(G.score);
+    await reconcile(lay);
+    renderSession();
+    restoreView();
+    await loadPhoneInfo();
     await loadClips();
-    // Camera labels need permission. Only ask when it was given before; else the Find cameras button asks.
+    // Camera labels need permission. Only ask when it was given before; else the "allow access" item in a camera list asks.
     try {
       const perm = navigator.permissions ? await navigator.permissions.query({ name: 'camera' }) : null;
       if (perm && perm.state === 'granted') await findCameras(false);
     } catch (e) { /* no permissions API */ }
     await restoreSources(false);
+    G.ready = true;
+    if (LIST.some(modelOf) && store.get('wire-line:model') !== false) setModel(true);
   })();
 })();
 </script>
