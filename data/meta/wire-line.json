@@ -8,7 +8,11 @@
   "qaGraceSec": 5,
   "defaults": { "activity": 0.1, "bright": 0.5, "class": 0.4 },
   "model": null,
-  "models": {},
+  "models": {
+    "s1": { "file": "/models/s1-cut.onnx", "classes": ["red_wire", "white_wire", "black_wire", "cutter", "ruler"], "imgsz": 640 },
+    "s2": { "file": "/models/s2-connector.onnx", "classes": ["red_wire", "white_wire", "black_wire", "connector_open", "connector_closed"], "imgsz": 640 },
+    "s3": { "file": "/models/s3-connector.onnx", "classes": ["red_wire", "black_wire", "connector_open", "connector_closed"], "imgsz": 640 }
+  },
   "suggestedClasses": {
     "s1": ["red_wire", "white_wire", "black_wire", "cutter", "ruler"],
     "s2": ["red_wire", "white_wire", "black_wire", "connector_open", "connector_closed"],

@@ -9,3 +9,9 @@ Thumbs.db
 data/sessions/
 # Zones and calibration belong to this laptop and its camera mounts.
 data/meta/wire-line-setup.json
+
+# Station training material (videos, frames, zips) stays on each laptop; share it through the team Drive.
+training/*/videos/*
+!training/*/videos/.gitkeep
+training/*/frames/
+training/*/*.zip
