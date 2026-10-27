@@ -13,3 +13,9 @@ data/meta/wire-line-setup.json
 data/phone-cert/
 # Floor layouts saved on this laptop (/line's Edit layout). Michael's own arrangements, not shared.
 data/meta/wire-line-layouts.json
+
+# Station training material (videos, frames, zips) stays on each laptop; share it through the team Drive.
+training/*/videos/*
+!training/*/videos/.gitkeep
+training/*/frames/
+training/*/*.zip

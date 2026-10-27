@@ -30,7 +30,32 @@ the matching section here.
    closing it stops the page.
 4. To get updates later: Ctrl+C, `git pull`, then `npm start` again.
 
-## 2. Roles
+## 2. The process (v2: lever connectors)
+
+Three wires (red, white, black) are cut to length, laid in color order and closed in a 3-port lever
+connector; a second lever connector joins the other end of the red wire to a separate black wire. QA
+is a pull test. The steps are in `data/meta/wire-line.json`; the table is in
+[wire-line-process.md](wire-line-process.md).
+
+| Station | Steps | Work areas (zones) |
+|---|---|---|
+| S1 Cut | 1. Cut the wire 2. Check for correct length against the ruler. One cycle is one wire, so a unit is three S1 cycles (red, white, black) | Cut area, Ruler |
+| S2 Arrange and clamp | 1. Wires arrive from S1 2. Open the lever connector 3. Arrange the wires: red top, white middle, black bottom 4. Close the levers on the wires | Lever connectors, Cut wires (where the wires from S1 land), Work area |
+| S3 Second connector | 1. Unit arrives from S2 2. Add a new lever connector to the other end of the red wire 3. Get a black wire 4. Insert the black wire into the new connector | Lever connectors, Black wires, Work area |
+| S4 QA pull test | 1. Unit arrives from S3 2. Pull test: no wire comes out of either connector, then P or F | Test area |
+
+There are no trays, bins or hand-off zones: the wires or the unit slide straight into the next
+station's view, and that arrival is the station's first step (not a skipped step). Each station's last
+step ends its cycle. Mistakes are caught at the station where they happen (wrong order, skipped step,
+wrong color order at S2); QA only does the pull test.
+
+**Units are linked by order.** Unit 1 is S1's first three wires, then S2's first cycle, S3's first
+cycle and S4's first Pass or Fail; unit 2 is the next of each, and so on. This holds as long as nobody
+reorders or sets aside wires or units. The dashboard's WIP shows the units waiting between stations,
+and **units.csv** (under **Sessions and exports**) has one row per unit: each station's time, the wait
+before it (from the previous station finishing to the arrival), its mistakes, and the QA result.
+
+## 3. Roles
 
 | Role | What they do |
 |---|---|
@@ -39,10 +64,10 @@ the matching section here.
 | Answer-key keeper | Only when the cameras are being scored (**Score the cameras** on in Setup): presses the keys as units leave each station and at QA. This is the ground truth every model is scored against |
 | Station trainer (one per station) | Labels that station's footage, trains its model, adds it to the platform, tests it |
 
-## 3. Run day (recording)
+## 4. Run day (recording)
 
-1. **Mount the cameras.** One camera straight above each station, with every tray, bin and work
-   area in view. Plug them all into the laptop, spread over different USB ports (a powered hub
+1. **Mount the cameras.** One camera straight above each station, with every parts pile, the ruler (S1)
+   and the work area in view. Plug them all into the laptop, spread over different USB ports (a powered hub
    helps). Close any other app that uses a camera.
 2. **Connect them.** Open `/line`. Each station shows **Connect a camera**: press it and pick
    **USB camera** (the first time, allow camera access). With several cameras plugged in, pick one
@@ -50,28 +75,26 @@ the matching section here.
    lens and see which card goes dark. The laptop remembers each station's camera. Any camera Chrome
    lists works (webcams, capture cards, Continuity Camera, OBS Virtual Camera).
 3. **Draw the zones.** Press **Setup** at the top (or a station's **Setup needed**). Every station
-   opens its setup panel. Drag a box on each station's video around each tray, bin or work area it
+   opens its setup panel. Drag a box on each station's video around each parts pile or work area it
    asks for; the next zone is picked for you. Keep boxes off walkways, because a hand passing
    through counts as activity. Zones are saved on the laptop and come back after a reload.
-4. **Calibrate.** With each work area empty and still, press **Calibrate empty** (2 seconds). On
-   S4, keep the bulb dark for that, then light the bulb in the fixture and press **Bulb on**.
-   Press **Done**. Each station's head now says **Ready**.
+4. **Calibrate.** With each work area empty and still, press **Calibrate empty** (2 seconds). Press
+   **Done**. Each station's head now says **Ready**.
 5. **Recording is on.** Every camera and phone records its video during a session (Setup has
    **Record video** per station, on by default). Each recording station shows **REC** and its size
    in its head. Without video there is nothing to train on.
-6. **Start.** Clear the trays (counts start from zero), press **Start session**, then **Enter**.
+6. **Start.** Clear the work areas (counts start from zero), press **Start session**, then **Enter**.
    The title is filled in with the date, time and shift. **More details** holds the crew or
    training group, the shift and notes. The line under the title says what is not ready yet.
-7. **Run.** Nothing to press. The cameras log every cycle, step, QA pass or fail (the bulb and the
-   bin) and every mistake. To **score the cameras**, turn on **Score the cameras** in Setup (the
+7. **Run.** Nothing to press. The cameras log every cycle, step, QA arrival and every mistake. To **score the cameras**, turn on **Score the cameras** in Setup (the
    laptop remembers it). The answer-key bar appears at the bottom and one person keys:
    - A station's number key when a unit leaves it: the stations in flow order, so **1** to **3** on
-     Class test (the bar shows each key).
+     Class test (the bar shows each key). On S1 that is after each wire, so three presses per unit.
    - At QA, **P** for pass or **F** for fail, then pick the fail reason. P or F also closes the QA
      station's unit, so its number key only says so. A second QA station has its own Pass and Fail
      buttons on the bar.
    Fail reasons (and fails by cause) only come from the answer key.
-8. **Stop.** Press **Stop session**. The banner links the session's three CSV files (the raw
+8. **Stop.** Press **Stop session**. The banner links the session's four CSV files (with units.csv) (the raw
    event log and session record fold under **raw**).
 
 Keep the page in the front tab the whole time; a background tab slows to about one check per
@@ -86,8 +109,8 @@ right of S3.
 - **Look around.** Drag the floor (or a card outside its buttons), or scroll with two fingers, to
   move it. Pinch or ctrl+scroll to zoom. Bottom right: zoom out, the zoom (click it for 100%), zoom
   in, and **Fit** (every station in view). The browser remembers where you were.
-- **Add a station.** Press **+ Station**, pick its role (which trained station it is: Cut and strip, Crimp
-  side A, Crimp side B or QA test) and a name, then **Add station**. It appears in the middle of the
+- **Add a station.** Press **+ Station**, pick its role (which trained station it is: Cut, Arrange and clamp,
+  Second connector or QA pull test) and a name, then **Add station**. It appears in the middle of the
   screen with **Connect a camera** open. The models do not change: the new station runs its role's.
 - **Move, rename, reorder or remove.** Press **Edit layout**. Drag a card to its spot on the floor.
   Each card's strip has its name, its role, Earlier and Later (its place in the flow, which the
@@ -135,7 +158,7 @@ link got out. A phone that drops reconnects by itself; its card says "Phone lost
 Trusting the laptop's certificate on a phone is optional (the phone page shows how); it stops the
 warning, and it only lets this laptop vouch for itself, never for other websites.
 
-## 4. Mistake alerts
+## 5. Mistake alerts
 
 Each station checks the steps as they happen (Ruza's step checker, built into the page) and says
 so with a sound and on its card.
@@ -162,6 +185,10 @@ Sound: **Sound** at the top of the page turns every station's sounds on or off (
 browsers block it before that. To keep the beeps but drop the chirp on every correct step, set
 `"sounds": { "verified": false }` in `data/meta/wire-line.json`.
 
+S2 checks the color order this way: its position check covers `red_wire`, `white_wire` and
+`black_wire` in the Work area, so build one unit correctly there and press **Save correct state**
+on S2.
+
 Without its model a station only catches skipped steps. "Looks done but I'm not sure", a missing
 part and a part in the wrong spot need that station's model (it runs by itself once it is added),
 and only a station whose config has a position check gets the **Save correct state** button:
@@ -173,10 +200,10 @@ and only a station whose config has a position check gets the **Save correct sta
    one that turned from lying wide to standing tall (or the reverse) is "turned the wrong way".
    Redrawing the anchor zone drops the saved state: press Save correct state again.
 
-Every alert goes into the session's **verdicts.csv** (under **Sessions**), and
-**cycles.csv** counts the mistakes and reviews of each unit.
+Every alert goes into the session's **verdicts.csv** (under **Sessions**),
+**cycles.csv** counts the mistakes and reviews of each cycle, and **units.csv** adds them up per unit.
 
-## 5. Share the footage
+## 6. Share the footage
 
 - Each session saves a folder `data/sessions/<id>/`: one video per station (`s1.mp4`, `s2.mp4` and so on),
   `events.jsonl` (every detected step and key press, with the time into each video) and
@@ -187,17 +214,20 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions**), and
   added station films its role's work: `session.json` (under **raw**) lists each station's role, so
   `s5.mp4` from a second QA station is QA footage.
 
-## 6. Train your station's model
+## 7. Train your station's model
 
 1. **Use your station's classes.** Label states and tools you can see in one still frame, never
-   motions: `crimp_tool` is a class, "crimping" is not. Hands are not labeled.
+   motions: `connector_closed` is a class, "closing the levers" is not. Hands are not labeled.
 
    | Station | Classes |
    |---|---|
-   | S1 Cut and strip | `wire, cutter, stripper, stripped_end` |
-   | S2 Crimp side A | `wire, splice, crimp_tool, crimped_splice` |
-   | S3 Crimp side B | `wire, splice, crimp_tool, crimped_splice` |
-   | S4 QA test | `battery, bulb_on, bulb_off` |
+   | S1 Cut | `red_wire, white_wire, black_wire, cutter, ruler` |
+   | S2 Arrange and clamp | `red_wire, white_wire, black_wire, connector_open, connector_closed` |
+   | S3 Second connector | `red_wire, black_wire, connector_open, connector_closed` |
+   | S4 QA pull test | `connector_closed, wire_out` |
+
+   `connector_open` is a lever connector with its levers up; `connector_closed` has them pressed
+   down. `wire_out` is a wire end that came out of a connector during the pull test.
 
 2. **Pull frames**, about 3 per second:
 
@@ -207,6 +237,8 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions**), and
    the frames for Colab.
 3. **Label.** Auto-label with Ruza's Colab notebook (`vision/train_colab.ipynb` on the same
    branch) after changing its class names to your station's, then check every box by hand.
+   For S2, S3 and S4, keep the arrival in every clip: the wires or the unit sliding in is a step the
+   model has to see.
 4. **Split by session, never by frame.** Whole sessions go to training or validation. Keep your
    test sessions out of training completely.
 5. **Train** on Colab (free T4 GPU), then export to ONNX:
@@ -215,15 +247,15 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions**), and
 
    Use `imgsz=416` or `320` if the laptop runs slowly.
 
-## 7. Add your model to the platform
+## 8. Add your model to the platform
 
-1. Copy the file into `app/models/`, for example `app/models/s1-cut-strip.onnx` (letters,
+1. Copy the file into `app/models/`, for example `app/models/s1-cut.onnx` (letters,
    numbers, dots, dashes and underscores only).
 2. In `data/meta/wire-line.json`, add **only your own station's** entry under `"models"`, keyed by
    your station's role (`s1` to `s4`; every station on the floor running that role uses it):
 
        "models": {
-         "s1": { "file": "/models/s1-cut-strip.onnx", "classes": ["wire", "cutter", "stripper", "stripped_end"], "imgsz": 640 }
+         "s1": { "file": "/models/s1-cut.onnx", "classes": ["red_wire", "white_wire", "black_wire", "cutter", "ruler"], "imgsz": 640 }
        }
 
    List the classes in exactly the order you trained them.
@@ -236,7 +268,7 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions**), and
    branch and open a pull request. Anyone can do this from a fork; ask Michael for direct write
    access.
 
-## 8. Test your model against the answer key
+## 9. Test your model against the answer key
 
 1. On your station, play a past session's video: **Connect a camera** > **Recorded clip** (or the
    Camera list in Setup). Each station lists its own 10 newest recordings. Pick a session that was
@@ -246,7 +278,7 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions**), and
    session's key presses (`basis` = `manual`). The go-live targets are in Stage 5 of the Playbook:
    95% or more of steps confirmed, timing within 0.3 s.
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 | Problem | Fix |
 |---|---|
@@ -255,7 +287,7 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions**), and
 | Red banner about a model | The class list does not match the model file, or the file is missing from `app/models/` |
 | The page is slow | Keep it in the front tab; export your model at 416 or 320. **Models: off** in Setup stops every model on this laptop (it remembers that) |
 | A `.webm` video will not seek | `ffmpeg -i s1.webm -c copy s1-fixed.webm` |
-| Unit counts go negative | Units were already in the trays when the session started |
+| Unit counts go negative | Units were already in the work areas when the session started |
 | No alert sounds | Click anywhere on the page once, check that **Sound** is on (top of the page) and the station's **Mute sounds** is off (Setup) |
 | A MISTAKE at the start of many units | The first step's zone missed the hand: make that zone cover where the hand goes |
 | A MISTAKE card never clears | Take your hands fully out of view, and check that nothing moves in the zones (a fan, a screen, a shadow) |
@@ -269,11 +301,12 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions**), and
 | The Mac asks about incoming connections for `node` | Allow it, or the phones cannot reach the laptop |
 | The phone picture turns sideways | Lock the phone's rotation (Orientation Lock, or Auto-rotate off), then reload its page |
 
-## 10. Still open
+## 11. Still open
 
 - Which shared Drive folder the footage goes in.
 - Who owns the run-day laptop.
-- A model class for the S4 "Unclip" step.
+- The wire length in cm: S1 only sees that the wire went to the ruler, it does not measure it yet.
+- The QA process beyond the pull test.
 - Four real USB cameras on one laptop have not been tested yet.
 - iPhones: one real iPhone reached the camera page over a hotspot; a real iPhone streaming into
   `/line`, four at once, and campus Wi-Fi are not tested yet. Android phones, iPads and a laptop as

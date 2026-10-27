@@ -7,53 +7,80 @@ Right now its job is to **collect data** with nothing pressed during a run: cycl
 QA pass or fail (with a cause when the cameras are being scored), step detections with a confidence,
 and the raw video from every camera so the model team can label and train. Start it with `npm start` and open http://localhost:4173/line in Chrome.
 
-The process lives in `data/meta/wire-line.json` (draft v1). Edit that file, not the code. The page
+The process lives in `data/meta/wire-line.json` (draft v2). Edit that file, not the code. The page
 shows a red banner if the file has a problem (for example a rule that names a zone the station does
-not have).
+not have). The engine and server tests run against a frozen copy of the v1 process
+(`scripts/fixtures/wire-line-v1.json`), so editing the real process does not break them; they also
+check that the shipped file has no problems.
 
 ## The product and the stations
 
-Two wires joined by one crimped butt splice, then tested by lighting a bulb from a battery.
+Three wires (red, white, black) cut to length against a ruler, laid in color order (red top, white
+middle, black bottom) and closed in a 3-port lever connector. A second lever connector joins the
+other end of the red wire to a separate black wire. QA is a pull test: no wire may come out of either
+connector. There are no trays, bins or hand-off zones: the wires or the unit slide straight into the next
+station's view, and that arrival is the next station's first substep. Each station's last substep ends
+its cycle.
 
-"Camera today" means the substep is seen with zones alone (motion in a drawn box, or the bulb
-zone going bright). "Needs the model" means it is greyed out until that station's trained model is
-loaded; its time is added to the substep before it.
+"Camera today" means the substep is seen with zones alone (motion in a drawn box). "With the model"
+is the rule that takes over once that station's trained model is loaded.
 
 | Station | Substep | Camera today | With the model |
 |---|---|---|---|
-| S1 Cut and strip (one cycle = a pair of wires) | Pull wire from supply | activity in Wire supply | same |
-| | Measure to the mark and cut | activity in Cut and strip area | `cutter` in Cut and strip area |
-| | Strip both ends | needs the model | `stripper` in Cut and strip area |
-| | Check strands and strip length | needs the model | `stripped_end` in Cut and strip area |
-| | Place the pair in the out tray (ends the cycle) | activity in Out tray | same |
-| S2 Crimp side A | Take a wire pair from the in tray | activity in In tray | same |
-| | Take a splice | activity in Splice bin | `splice` in Splice bin |
-| | Push wire A into the splice | activity in Crimp area | `splice` in Crimp area |
-| | Crimp side A | needs the model | `crimp_tool` in Crimp area |
-| | Tug test side A | needs the model | `crimped_splice` in Crimp area |
-| | Pass to station 3 (ends the cycle) | activity in Out tray | same |
-| S3 Crimp side B (join) | Take the half-done unit | activity in In tray | same |
-| | Push wire B into the splice | activity in Crimp area | `splice` in Crimp area |
-| | Crimp side B | needs the model | `crimp_tool` in Crimp area |
-| | Tug test both sides | needs the model | `crimped_splice` in Crimp area |
-| | Pass to QA (ends the cycle) | activity in Out tray | same |
-| S4 QA test | Take unit from the in tray | activity in In tray | same |
-| | Clip the ends to the battery and bulb | activity in Test fixture | same |
-| | Bulb test | Bulb zone goes bright | `bulb_on` in Bulb |
-| | Unclip | needs a model rule (no class picked yet) | to be defined |
-| | Sort into pass or fail bin (ends the cycle) | activity in Pass bin or Fail bin | same |
+| S1 Cut (one cycle = one wire, `perUnit` 3) | Cut the wire | activity in Cut area | `cutter` in Cut area |
+| | Check for correct length against the ruler (ends the cycle) | activity in Ruler | same |
+| S2 Arrange and clamp | Wires arrive from S1 (`arrival`) | activity in Cut wires | `red_wire`, `white_wire` or `black_wire` in Cut wires |
+| | Open the lever connector | activity in Lever connectors | `connector_open` in Work area |
+| | Arrange the wires: red top, white middle, black bottom | activity in Cut wires | same; the color order is the position check |
+| | Close the levers on the wires (ends the cycle) | activity in Work area | `connector_closed` in Work area |
+| S3 Second connector | Unit arrives from S2 (`arrival`) | activity in Work area | `red_wire` in Work area |
+| | Add a new lever connector to the other end of the red wire | activity in Lever connectors | `connector_open` in Work area |
+| | Get a black wire | activity in Black wires | same |
+| | Insert the black wire into the new connector (ends the cycle) | activity in Work area | same (zones only: the unit arrives with connector 1 closed, so `connector_closed` cannot tell this step apart) |
+| S4 QA pull test | Unit arrives from S3 (`arrival`) | activity in Test area | `connector_closed` in Test area |
+| | Pull test, then Pass or Fail (ends the cycle) | the P or F key | same |
+
+Two substeps in a row never use the same zone's activity, or the second would fire while the first is
+still going on.
+
+S2 has a `positionCheck` on `red_wire`, `white_wire` and `black_wire` in its Work area: with S2's model
+on and its correct state saved, a wire off its spot (for example red and black swapped) is a
+mistake at S2, not a QA fail. S4 has an empty `qa` block, so it gets the Pass and Fail buttons; with
+no bulb and no bins the result is the P or F press (else `unknown`), and S4's cycle count comes from
+those presses.
+
+### Units, linked by order
+
+There is no marker on the wires, so a unit is followed across the stations by order: unit k is
+cycles `(k-1)*perUnit + 1` to `k*perUnit` of every station (S1 has `"perUnit": 3`, the others 1), using
+each station's detected cycles if it has any, else its manual presses (as **Auto**). This holds as long
+as nobody reorders or sets aside wires or units.
+
+- `perUnit` on a station: cycles per unit, a whole number, default 1. WIP between two stations counts
+  units (S1's cycles divided by 3), and the bottleneck is the station with the longest time per unit
+  (average cycle times `perUnit`).
+- `arrival` on a station: the substep that marks the unit arriving (S2 `s2_arrive`, S3 `s3_arrive`,
+  S4 `s4_arrive`). Being the first substep, an arrival starts a cycle instead of raising a "skipped"
+  flag. The k-th detection of it is unit k's arrival time.
+- `units.csv` (`/api/sessions/<id>/units.csv`): one row per unit. Columns: `session_id, crew, shift, unit,
+  status` (`done` or `at sN`), then per station `sN_basis, sN_cycles, sN_start_ts, sN_end_ts, sN_work_s,
+  sN_wait_s, sN_mistakes, sN_reviews, sN_video_file, sN_video_t`, then `result, reason, cause_station,
+  defect, lead_s`. `sN_wait_s` is from the previous station finishing the unit to this station's
+  arrival (else its first cycle start); `lead_s` is from S1's start to the last station's end.
+  Mistakes and reviews are counted for stations on detected cycles.
 
 How the page counts:
 
 - A substep counts after its signal holds for 3 frames in a row (`holdFrames`, about 0.4 s).
-- Going back to an earlier substep inside a cycle is a **repeat**, not an error (S1 does pick, cut
-  and strip twice per cycle).
+- Going back to an earlier substep inside a cycle is a **repeat**, not an error.
 - Jumping forward past a substep the camera could have seen raises a **flag**: "skipped <substep>".
 - A cycle runs from its first detected substep to the moment the closing substep starts. The time
   between cycles is idle time.
-- QA (S4): **light** = the bulb zone went bright during the cycle. **Bin** = which bin got the
+- QA: the engine can also read a bulb and bins (`qa.lightSubstep`, `qa.sortSubstep`, `qa.bins`, as in
+  the v1 fixture); the v2 process uses neither. **light** = the bulb zone went bright during the cycle. **Bin** = which bin got the
   activity at the sort. **Result** = the manual Pass or Fail if someone keyed it (Score the cameras
-  on; during the cycle or up to `qaGraceSec` = 5 s after the sort), else the bin. If light and bin disagree, a flag says
+  on; during the cycle
+  or up to `qaGraceSec` = 5 s after the sort), else the bin. If light and bin disagree, a flag says
   "quality mismatch, review the video". No light and no bin seen = result `unknown`.
 - Signal thresholds are in `defaults` (activity 0.1, bright 0.5, model class 0.4). Any rule can
   set its own `min`.
@@ -163,7 +190,7 @@ Rules (the thresholds are live_check.py's):
 Config (all optional):
 
 - `mustStay` in a substep's model rule, default off:
-  `"model": { "zone": "crimp", "class": "crimped_splice", "mustStay": true }`. Once that substep
+  `"model": { "zone": "work", "class": "connector_closed", "mustStay": true }`. Once that substep
   is verified, its class must stay visible in its zone until the cycle ends. Off on every wire
   substep for now.
 - `positionCheck` on a station, default none:
@@ -174,32 +201,33 @@ Config (all optional):
   landscape or portrait) in `data/meta/wire-line-setup.json` under that station as `ref`, next to
   the zones. Live, a listed class inside the anchor zone that is off by more than `tolerance` of
   the zone in x or y is in the wrong position, and one that turned between landscape and portrait
-  is turned the wrong way. Redrawing the anchor zone or **Clear zones** drops the saved state. No
-  wire station has a `positionCheck` yet.
+  is turned the wrong way. Redrawing the anchor zone or **Clear zones** drops the saved state. S2 has
+  one (the color order); the other stations have none.
 - `sounds` at the top level: `{ "verified": false }` silences the chirp on verified steps;
   mistakes and reviews still sound. Default `true`.
 
 ## Fail reasons
 
+QA is only the pull test, so the reasons are about which connector let go. Wrong length, wrong color
+order and skipped steps are caught live at their own station, not here.
+
 | Id | Reason | Cause station | Counts as a defect |
 |---|---|---|---|
-| `strip` | Strip too short or long, or cut strands | S1 | yes |
-| `crimp_a` | Side A crimp loose or off | S2 | yes |
-| `crimp_b` | Side B crimp loose or off | S3 | yes |
-| `wire_damage` | Wire damaged | S1 | yes |
-| `test_setup` | Test setup problem (battery, bulb, clips) | S4 | no, retest |
+| `pulled_c1` | Wire pulled out of connector 1 (the 3-wire connector) | S2 | yes |
+| `pulled_c2` | Wire pulled out of connector 2 (red to black) | S3 | yes |
 | `other` | Other | none | yes |
 
 The cause station is a role. On a floor with two stations of one role, the fail is charged to the first of them in flow
 order (`cause_station` in cycles.csv is that station's id).
 
-First-pass yield = passes / (passes + defect fails). Test setup fails are left out. A reason, and so a
+First-pass yield = passes / (passes + defect fails). A reason with `"defect": false` (none in v2) is left out. A reason, and so a
 cause, only comes from the answer key (F with **Score the cameras** on). Without it a fail from the
 bin has no reason, and the yield tile says "Turn on Score the cameras to log reasons".
 
 ## Run day: cameras and zones
 
-1. Mount each camera straight above its station so every tray, bin and work area is in view. Plug
+1. Mount each camera straight above its station so every parts pile, the ruler (S1) and the work
+   area are in view. Plug
    them all into the laptop, spread over different USB ports (a powered hub helps). Close any other
    app that uses a camera. Any camera Chrome lists works: webcams, capture cards, Continuity Camera,
    OBS Virtual Camera.
@@ -211,12 +239,10 @@ bin has no reason, and the yield tile says "Turn on Score the cameras to log rea
    choice is saved per laptop; **Setup** has each station's full Camera list to change it.
 3. Press **Setup** (top right, or a station's **Setup needed**). Setup opens every station at once,
    plus a bar with the line's switches (Models, Hand tracking, Count by, Reset counts, New pairing
-   code). Pick a zone and drag a box on the video around that tray, bin or work area. The next zone
+   code). Pick a zone and drag a box on the video around that parts pile, ruler or work area. The next zone
    is picked for you. Zones save to the laptop (`data/meta/wire-line-setup.json`) and come back after
    a reload. During a session, Setup warns that changes count from then on.
-4. With the work area empty and still, press **Calibrate empty** (2 seconds). It also records every
-   zone's dark brightness, so on S4 keep the bulb dark for it; then light the bulb in the fixture
-   and press **Bulb on**.
+4. With the work area empty and still, press **Calibrate empty** (2 seconds).
 5. Press **Done**. Each station's head says **Ready**, or what is missing ("Setup needed", which opens
    Setup). Recording is on for cameras and phones (Setup's **Record video**, per station, off by
    default for replayed clips); a recording station shows **REC** and its size in its head. Press
@@ -225,15 +251,15 @@ bin has no reason, and the yield tile says "Turn on Score the cameras to log rea
    field until someone edits it. **More details** holds the crew / training group, the shift and
    notes. The line under the title lists what is not ready (no camera, Setup needed, nothing
    recording). Counts start from zero.
-6. A normal run needs nothing pressed: the cameras log cycles, substeps, QA (bulb light and bin) and
+6. A normal run needs nothing pressed: the cameras log cycles, substeps, QA arrivals and
    mistakes. To score the cameras, turn on **Score the cameras** in Setup (saved per laptop). Then a
    bar at the bottom holds the answer key and one person keys it: a station's number (its place in
-   the flow; **1** to **3** on Class test) when a unit leaves that station, **P** or **F** at QA (F
+   the flow; **1** to **3** on Class test) when a unit leaves that station (on S1 after each wire, so three per unit), **P** or **F** at QA (F
    opens the reason chips just above the bar; pick one). Pass or Fail also closes the QA station's
    manual cycle, so its number key only shows "S4 closes its cycle with P or F". Each key shows its count, and the station's card flashes. With scoring off the bar
    is gone and the keys only say how to turn it on. Manual presses are stored separately from what
    the cameras detect; they are how we score the detection.
-7. Press **Stop session**. The banner links the three CSVs; `events.jsonl` and `session.json` fold
+7. Press **Stop session**. The banner links the four CSVs (with units.csv); `events.jsonl` and `session.json` fold
    under **raw**. Copy the session folder off the laptop: video is about 1 GB per hour for four
    cameras.
 
@@ -323,7 +349,7 @@ Folder `data/sessions/<id>/` (git-ignored), id like `20261015-233956-7509`:
 | `events.jsonl` | one event per line, appended as they happen (sort by `t`) |
 | `s1.mp4`, `s2.mp4`, ... `s5.mp4` | each station's video, named by station id (`.webm` on browsers without MP4 recording). `s1-2.mp4` is a second part if the source changed or Rec was switched off and on |
 
-Exports: `/api/sessions/<id>/substeps.csv`, `/cycles.csv`, `/verdicts.csv` and `/events.jsonl`
+Exports: `/api/sessions/<id>/substeps.csv`, `/cycles.csv`, `/verdicts.csv`, `/units.csv` and `/events.jsonl`
 (also linked from **Sessions**, which updates by itself every 10 seconds while open;
 the last two under **raw**).
 
@@ -387,16 +413,19 @@ kind. A verdict from a check between cycles counts toward the next cycle.
 labeled with that station's SOP substeps (the substep table above). The four trainers work
 separately and do not need to agree on a class list.
 
-**What to label.** States and tools you can see in one still frame, never motions. "Crimping" is
-not a class; a `crimp_tool` in the crimp area is. Suggested classes per station
+**Record the arrivals.** For S2, S3 and S4 keep the wires or the unit sliding in inside each clip; the
+arrival is a substep the model has to see.
+
+**What to label.** States and tools you can see in one still frame, never motions. "Closing the
+levers" is not a class; a `connector_closed` in the work area is. Suggested classes per station
 (`suggestedClasses` in `data/meta/wire-line.json`):
 
 | Station | Classes |
 |---|---|
-| S1 Cut and strip | `wire, cutter, stripper, stripped_end` |
-| S2 Crimp side A | `wire, splice, crimp_tool, crimped_splice` |
-| S3 Crimp side B | `wire, splice, crimp_tool, crimped_splice` |
-| S4 QA test | `battery, bulb_on, bulb_off` |
+| S1 Cut | `red_wire, white_wire, black_wire, cutter, ruler` |
+| S2 Arrange and clamp | `red_wire, white_wire, black_wire, connector_open, connector_closed` |
+| S3 Second connector | `red_wire, black_wire, connector_open, connector_closed` |
+| S4 QA pull test | `connector_closed, wire_out` |
 
 **Where the data is.** Every session folder has one video per station and `events.jsonl`. Use
 `s1.mp4` for the S1 trainer, `s2.mp4` for S2, and so on. On a floor with more stations, `session.json`'s
@@ -422,7 +451,7 @@ shapes work:
 every floor station running that role uses it):
 
     "models": {
-      "s1": { "file": "/models/s1-cut-strip.onnx", "classes": ["wire", "cutter", "stripper", "stripped_end"], "imgsz": 640 }
+      "s1": { "file": "/models/s1-cut.onnx", "classes": ["red_wire", "white_wire", "black_wire", "cutter", "ruler"], "imgsz": 640 }
     }
 
 List the classes in training order. Only add your own station's entry, so four people can edit the
@@ -432,8 +461,7 @@ file; the page loads it once. Reload `/line`: every station that has a model run
 and each station's diagnostics row in Setup shows the file name it runs (or `zones`). **Models: off** in Setup stops them on a slow
 laptop, and the laptop remembers that until someone turns it back on. Each substep whose
 model rule uses only classes that station's model knows switches to the model; the rest keep their
-zones rule. "Unclip" has no rule yet: pick a class and add `"model": { "zone": "fixture", "class": "<class>" }`
-to `s4_disconnect`.
+zones rule.
 
 **Class-count check.** When the model loads, the page runs it once on a blank image and compares the
 output to your class list. For a raw head, the number of classes in the file must equal the number in
@@ -462,10 +490,10 @@ with a class number beyond your list drops that station back to zones with the s
   cycle whose first substep the zones missed starts with a wrong-order mistake, the same moment
   that raises the "skipped" flag.
 - Activity is motion. A hand resting still is not activity unless **Hand tracking** is on (Setup); a person walking
-  through a zone is. Zones should cover the tray or bin, not the walkway.
+  through a zone is. Zones should cover the parts pile or work area, not the walkway.
 - MP4 chunks arrive every 2 to 5 seconds (on keyframes). A `.webm` file has no duration header; fix
   it with `ffmpeg -i s1.webm -c copy s1-fixed.webm` if a player cannot seek.
-- WIP counts start at zero, so units already sitting in trays when the session starts are not
+- WIP counts start at zero, so units already sitting in the work areas when the session starts are not
   counted, and a missed detection shows up as a negative WIP.
 - The floor: tested in Chrome with fake cameras (Class test, adding a USB station and a phone
   station, dragging, reloading, removing, an 8 second session); not yet on the run-day laptop or a

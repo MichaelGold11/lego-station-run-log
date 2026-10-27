@@ -597,10 +597,10 @@ async function sessionsApi(req, res, p, url) {
     if (what === 'events.jsonl' && req.method === 'GET') {
       return send(res, 200, fs.readFileSync(path.join(dir, 'events.jsonl')), 'application/x-ndjson; charset=utf-8', { 'Content-Disposition': `attachment; filename="${id}-events.jsonl"` });
     }
-    if ((what === 'substeps.csv' || what === 'cycles.csv' || what === 'verdicts.csv') && req.method === 'GET') {
+    if ((what === 'substeps.csv' || what === 'cycles.csv' || what === 'verdicts.csv' || what === 'units.csv') && req.method === 'GET') {
       const meta = { id, crew: doc.crew, shift: doc.shift, startedAtMs: doc.startedAtMs };
       const cfg = sessionConfig(doc);
-      const fn = { 'substeps.csv': LineEngine.substepsCsv, 'cycles.csv': LineEngine.cyclesCsv, 'verdicts.csv': LineEngine.verdictsCsv }[what];
+      const fn = { 'substeps.csv': LineEngine.substepsCsv, 'cycles.csv': LineEngine.cyclesCsv, 'verdicts.csv': LineEngine.verdictsCsv, 'units.csv': LineEngine.unitsCsv }[what];
       const csv = fn(readEvents(id), cfg, meta);
       return send(res, 200, csv, 'text/csv; charset=utf-8', { 'Content-Disposition': `attachment; filename="${id}-${what}"` });
     }
