@@ -145,6 +145,33 @@ console.log('a hand resting in a zone cannot bounce the state');
   check('once the splice bin goes quiet and busy again, going back is a repeat', r.of('substep').slice(-1)[0].move === 'repeat' && r.of('substep').slice(-1)[0].substep === 's2_get_splice');
 }
 
+console.log('arrival substep counts once per cycle');
+{
+  // s2 with s2_pick as its arrival: the in tray flickers busy again mid-cycle.
+  const mk = arrival => {
+    const st = JSON.parse(JSON.stringify(CFG.stations.find(x => x.id === 's2')));
+    if (arrival) st.arrival = arrival;
+    const eng = LE.createStation(st, { holdFrames: CFG.holdFrames, defaults: CFG.defaults, qaGraceSec: CFG.qaGraceSec });
+    const cur = { in: { activity: 0 }, parts: { activity: 0 }, crimp: { activity: 0 }, out: { activity: 0 } };
+    const events = []; let t = 0;
+    const r = { events, of: type => events.filter(e => e.type === type),
+      step(z, ms) { for (const k of Object.keys(cur)) cur[k].activity = 0; if (z) cur[z].activity = 0.5; const end = t + ms; while (t < end) { events.push(...eng.update(JSON.parse(JSON.stringify(cur)), t)); t += FRAME; } return r; } };
+    return r;
+  };
+  const run = r => r.step(null, 500).step('in', 500).step('parts', 500).step('in', 500).step('crimp', 500);
+  const a = run(mk('s2_pick'));
+  check('arrival substep: its rule flickering back on mid-cycle is not a repeat', a.of('substep').map(e => e.substep + ':' + e.move).join() === 's2_pick:start,s2_get_splice:next,s2_insert:next', a.of('substep').map(e => e.substep + ':' + e.move).join());
+  check('arrival substep: no flag and no skipped step from the flicker', a.of('flag').length === 0, JSON.stringify(a.of('flag')));
+  const b = run(mk(null));
+  check('without an arrival, the same substep still repeats', b.of('substep').map(e => e.substep + ':' + e.move).join() === 's2_pick:start,s2_get_splice:next,s2_pick:repeat,s2_insert:jump', b.of('substep').map(e => e.substep + ':' + e.move).join());
+  const c = mk('s2_pick');
+  c.step(null, 500).step('in', 500).step('out', 500);   // s2_handoff is the cycle end: reached by jump, closes cycle 1
+  const end1 = c.of('cycle_end').length;
+  c.step(null, 500).step('in', 500);
+  const ins = c.of('substep').filter(e => e.substep === 's2_pick');
+  check('the next cycle counts its arrival again (a start, cycle 2)', end1 === 1 && ins.length === 2 && ins[1].move === 'start' && ins[1].cycle === 2, JSON.stringify(ins));
+}
+
 console.log('skipped substep');
 {
   const r = rig('s2');

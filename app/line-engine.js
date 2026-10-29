@@ -279,6 +279,7 @@
     if (endIdx < 0) endIdx = subs.length - 1;
     const qa = station.qa || null;
     const lightIdx = qa ? subs.findIndex(s => s.id === qa.lightSubstep) : -1;
+    const arrIdx = station.arrival ? subs.findIndex(s => s.id === station.arrival) : -1;
     let modelClasses = o.modelClasses || null;
     let S = fresh(0);
 
@@ -287,7 +288,7 @@
         pos: -1, cycle: cycle || 0, cycleStart: null, since: null, t: null, sig: null,
         cnt: {},          // hold counters per substep index: {t0, n, sum, msum, zones, kind}
         off: {},          // off[i]: the rule of substep i was false at least once since we last entered or left it
-        occ: [], repeats: 0, lastConf: null, lastSource: null, lastCycleSec: null,
+        occ: [], arrived: false, repeats: 0, lastConf: null, lastSource: null, lastCycleSec: null,
         light: null, lightN: 0, cycleManual: null, pending: null, qaHold: false
       };
     }
@@ -325,12 +326,13 @@
 
     // Forward moves need the rule held N frames. Going back (a repeat) and starting a cycle also need the rule
     // to have been off since we were last there, so a hand resting in a zone cannot bounce the state back and forth.
+    // The arrival substep counts once per cycle: once entered, it is never a repeat target until the next cycle.
     function choose(cands) {
       let fwd = null, back = null;
       for (const i of cands) {
         if (i === S.pos) continue;
         if (S.pos < 0) { if (i !== endIdx && S.off[i] && (fwd == null || i < fwd)) fwd = i; continue; }
-        if (i > S.pos) { if (fwd == null || i < fwd) fwd = i; } else if (S.off[i] && (back == null || i > back)) back = i;
+        if (i > S.pos) { if (fwd == null || i < fwd) fwd = i; } else if (S.off[i] && !(i === arrIdx && S.arrived) && (back == null || i > back)) back = i;
       }
       return fwd != null ? fwd : back;
     }
@@ -342,7 +344,7 @@
       const skipped = [];
       if (S.pos < 0) {
         if (S.pending && !S.qaHold) { const p = S.pending; S.pending = null; resolve(p, null, out); }
-        S.cycle++; S.cycleStart = onset; S.occ = []; S.repeats = 0; move = 'start';
+        S.cycle++; S.cycleStart = onset; S.occ = []; S.arrived = false; S.repeats = 0; move = 'start';
         for (let j = 0; j < i; j++) skipped.push(j);
       } else if (i > S.pos) {
         for (let j = S.pos + 1; j < i; j++) skipped.push(j);
@@ -355,6 +357,7 @@
       for (const j of missed) out.push(ev({ type: 'flag', substep: subs[j].id, note: 'skipped ' + subs[j].label, source, t: onset, cycle: S.cycle }));
       if (S.pos >= 0) S.off[S.pos] = false;
       S.off[i] = false;
+      if (i === arrIdx) S.arrived = true;
       S.pos = i; S.since = onset; S.lastConf = conf; S.lastSource = source; S.cnt = {};
       S.occ.push({ id: sub.id, t: onset, move });
       if (i === endIdx) {
@@ -367,7 +370,7 @@
           if (S.pending) { const old = S.pending; S.pending = null; resolve(old, null, out); }
           if (S.cycleManual) { const m = S.cycleManual; S.cycleManual = null; resolve(p, m, out); } else S.pending = p;
         }
-        S.pos = -1; S.off = {};
+        S.pos = -1; S.off = {}; S.arrived = false;
       }
     }
 

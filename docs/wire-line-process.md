@@ -73,6 +73,8 @@ How the page counts:
 
 - A substep counts after its signal holds for 3 frames in a row (`holdFrames`, about 0.4 s).
 - Going back to an earlier substep inside a cycle is a **repeat**, not an error.
+  The one exception is a station's arrival substep (the `arrival` field): it counts at most once per cycle, so its rule
+  flickering back on later in the cycle does not send the state back to it.
 - Jumping forward past a substep the camera could have seen raises a **flag**: "skipped <substep>".
 - A substep whose zones are all undrawn when the session starts can never fire. The page raises one **flag** per such
   substep at the start: "no data: <zone label> not drawn" (it carries the substep id and no cycle number, so it is in
