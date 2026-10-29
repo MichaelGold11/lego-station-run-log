@@ -300,7 +300,12 @@ function cleanStandard(body, cfg) {
       if (!r || !num01(r.x) || !num01(r.y) || !num01(r.w) || !num01(r.h) || r.w <= 0 || r.h <= 0) return { error: rid + ': zone ' + zid + ' needs x, y, w, h between 0 and 1 (w and h above 0).' };
       zones[zid] = { x: r.x, y: r.y, w: r.w, h: r.h };
     }
+    // aspect: video width / height when the zones were drawn; source: what filmed it. Both optional (older records have neither).
+    if (v.aspect != null && !numIn(v.aspect, 0.2, 5)) return { error: rid + ': aspect must be a number between 0.2 and 5 (video width divided by height).' };
+    if (v.source != null && v.source !== 'phone' && v.source !== 'camera') return { error: rid + ': source must be "phone" or "camera".' };
     roles[rid] = { zones, note: text(v.note, 300), updatedAt: text(v.updatedAt, 40) || new Date().toISOString() };
+    if (v.aspect != null) roles[rid].aspect = v.aspect;
+    if (v.source != null) roles[rid].source = v.source;
   }
   return { standard: { version: 1, roles } };
 }

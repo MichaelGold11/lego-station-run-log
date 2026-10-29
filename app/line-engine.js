@@ -204,13 +204,41 @@
       pending: () => Object.keys(pending),
     };
   }
-  function nextStationId(stations) {
+  // A new station takes its role's id when free ("s2"), then "s2_2", "s2_3" (so footage is saved as <role>.mp4). A missing or
+  // unusable role id (too long, odd characters) falls back to the lowest free s<n>. Ids already in saved layouts are never changed.
+  function nextStationId(stations, role) {
     const used = {};
     for (const s of stations || []) used[s.id] = true;
+    const ID = /^[a-z][a-z0-9_]{0,15}$/;
+    if (typeof role === 'string' && ID.test(role)) {
+      if (!used[role]) return role;
+      for (let n = 2; n < 1000; n++) {
+        const suf = '_' + n, id = role.slice(0, 16 - suf.length) + suf;
+        if (!used[id]) return id;
+      }
+    }
     let n = 1;
     while (used['s' + n]) n++;
     return 's' + n;
   }
+  // The zone ids a substep's rules point at (its zones rule and its model rule).
+  function ruleZones(sub) {
+    const out = [];
+    for (const m of members(sub.zones).concat(members(sub.model))) if (m.zone && out.indexOf(m.zone) < 0) out.push(m.zone);
+    return out;
+  }
+  // The substeps that can never fire because every zone their rules point at is undrawn. drawn: array or object of zone ids.
+  // A substep with no zone rule at all is not listed. Each entry: the substep plus missing: [zone ids].
+  function unobserved(station, drawn) {
+    const have = Array.isArray(drawn) ? drawn : Object.keys(drawn || {});
+    const out = [];
+    for (const sub of (station && station.substeps) || []) {
+      const zs = ruleZones(sub);
+      if (zs.length && zs.every(z => have.indexOf(z) < 0)) out.push(Object.assign({}, sub, { missing: zs }));
+    }
+    return out;
+  }
+  const NO_DATA = 'no data: ';
   // The config the page, the summary and the exports run on: one station per layout entry, a copy of its role with the
   // layout's id, name, position and order. Models are keyed by station id (a station runs its role's model), and a fail
   // reason's cause station is the first station in flow order that runs that role. Entries with an unknown role are left out.
@@ -819,6 +847,9 @@
         const per = d.cycles.map(c => c.occ.filter(x => x.substep === sub.id).reduce((a, x) => a + ((x.end == null ? x.start : x.end) - x.start) / 1000, 0));
         subAvg[sub.id] = per.length ? r1(mean(per)) : null;
       }
+      // Steps the session started without a drawn zone (the page's "no data" flags): no average, not a 0.
+      const noData = sorted.filter(e => e.type === 'flag' && e.station === st.id && e.substep && typeof e.note === 'string' && e.note.startsWith(NO_DATA)).map(e => e.substep);
+      for (const id of noData) if (id in subAvg) subAvg[id] = null;
       const obs = observedMs(sorted, st.id, tEnd);
       const busy = secs.reduce((a, b) => a + b, 0) * 1000 + (d.open ? Math.max(0, tEnd - d.open.start) : 0);
       const det = {
@@ -831,7 +862,7 @@
       const basis = o.basis === 'detected' || o.basis === 'manual' ? o.basis : (det.cycles > 0 ? 'detected' : 'manual');
       const use = basis === 'detected' ? det : man;
       const per = perUnitOf(st);
-      stations[st.id] = { detected: det, manual: man, basis, cycles: use.cycles, avgSec: use.avgSec, lastSec: use.lastSec, stdSec: use.stdSec,
+      stations[st.id] = { detected: det, manual: man, basis, unobserved: noData.filter((id, k) => noData.indexOf(id) === k), cycles: use.cycles, avgSec: use.avgSec, lastSec: use.lastSec, stdSec: use.stdSec,
         perUnit: per, units: Math.floor(use.cycles / per), unitSec: use.avgSec == null ? null : r1(use.avgSec * per), _d: d, _m: m };
     }
 
@@ -1044,6 +1075,6 @@
     members, activeRule, evalRule, missingOf, ruleText, checkConfig, modelFor, checkModelOutput, e2eBadClass, qaDecide, createStation,
     operatorCode, defaultName, shortName, classTestLayout, setupKey, nextStationId, freeSpot, saveScheduler, applyLayout,
     zoneSignals, calibrationFrom, classSignals, handPresence, steadyClasses, mergeSignals, createChecker,
-    sortEvents, detectedCycles, manualCycles, summarize, substepsCsv, cyclesCsv, verdictsCsv, linkUnits, unitCols, unitsCsv, csvCell
+    sortEvents, ruleZones, unobserved, NO_DATA, detectedCycles, manualCycles, summarize, substepsCsv, cyclesCsv, verdictsCsv, linkUnits, unitCols, unitsCsv, csvCell
   };
 });

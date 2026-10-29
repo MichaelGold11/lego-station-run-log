@@ -736,6 +736,28 @@ console.log('units linked by order (units.csv)');
   check('summary: the bottleneck compares time per unit (S1 3 x 10 s = 30 s beats S3 15 s)', sum.stations.s1.unitSec === 30 && sum.line.bottleneck === 's1', sum.line.bottleneck);
 }
 
+console.log('steps without a drawn zone');
+{
+  const s2 = CFG.stations.find(x => x.id === 's2');
+  const un = LE.unobserved(s2, ['in', 'out']);
+  check('unobserved: a step whose rules point only at undrawn zones is listed with the zones it misses', un.map(x => x.id).join() === 's2_get_splice,s2_insert,s2_crimp,s2_pull_test' && un[0].missing.join() === 'parts' && un[3].missing.join() === 'crimp', un.map(x => x.id).join());
+  check('unobserved: all zones drawn means none; no zones drawn means every step with a zone rule', LE.unobserved(s2, { in: {}, parts: {}, crimp: {}, out: {} }).length === 0 && LE.unobserved(s2, []).length === 6);
+  check('unobserved: a step with zones rule and model rule in different zones counts as observed when either is drawn', LE.unobserved({ substeps: [{ id: 'a', zones: { zone: 'z1', signal: 'activity' }, model: { zone: 'z2', class: 'c' } }] }, ['z2']).length === 0);
+  const t0 = 1000;
+  const flags = LE.unobserved(s2, ['in', 'out']).map(x => ({ type: 'flag', station: 's2', substep: x.id, note: LE.NO_DATA + x.id + ' not drawn', source: 'page', t: t0 }));
+  const evs = [{ type: 'session_start', t: t0 }].concat(flags, [
+    { type: 'substep', station: 's2', substep: 's2_pick', move: 'start', source: 'zones', conf: 1, t: 2000, cycle: 1 },
+    { type: 'substep', station: 's2', substep: 's2_handoff', move: 'jump', source: 'zones', conf: 1, t: 5000, cycle: 1 },
+    { type: 'cycle_end', station: 's2', substep: 's2_handoff', source: 'zones', conf: 1, t: 5000, cycle: 1, dur: 3 }]);
+  const sm = LE.summarize(evs, CFG).stations.s2;
+  check('summary: a step with no data has substepAvg null (not 0) and is listed in unobserved', sm.detected.substepAvg.s2_insert === null && sm.detected.substepAvg.s2_pick === 3 && sm.unobserved.join() === 's2_get_splice,s2_insert,s2_crimp,s2_pull_test', JSON.stringify(sm.detected.substepAvg) + sm.unobserved);
+  check('summary: the session-start flags are not cycle flags', sm.detected.flags === 0 && LE.summarize(evs, CFG).stations.s1.unobserved.length === 0);
+  const csv = LE.cyclesCsv(evs, CFG, { id: 'x' }).split('\n').filter(Boolean);
+  check('cycles.csv: the no-data flags do not break the export', csv.length === 2 && csv[1].split(',')[12] === '0', csv.join('|'));
+  const sub = LE.substepsCsv(evs, CFG, { id: 'x' }).split('\n').filter(Boolean);
+  check('substeps.csv: still two rows (pick, handoff)', sub.length === 3, sub.length + '');
+}
+
 console.log('floor layouts (docs/canvas-plan.md)');
 {
   const ct = LE.classTestLayout(CFG);
@@ -743,6 +765,13 @@ console.log('floor layouts (docs/canvas-plan.md)');
   check('Class test is the L from the photo: S1 on top, S2 below it, S3 right of S2, S4 right of S3', ct.stations.map(s => s.x + ',' + s.y).join(' ') === '0,0 0,560 760,560 1520,560', ct.stations.map(s => s.x + ',' + s.y).join(' '));
   check('positions sit on the 40-unit grid', ct.stations.every(s => s.x % LE.FLOOR.grid === 0 && s.y % LE.FLOOR.grid === 0));
   check('the next station id is the lowest free s<n>', LE.nextStationId(ct.stations) === 's5' && LE.nextStationId([{ id: 's1' }, { id: 's2' }, { id: 's4' }]) === 's3' && LE.nextStationId([]) === 's1');
+  check('a new station takes its role id when free', LE.nextStationId([{ id: 's1' }], 's2') === 's2' && LE.nextStationId([], 's4') === 's4');
+  check('a taken role id gets _2, _3 and so on', LE.nextStationId([{ id: 's2' }], 's2') === 's2_2' && LE.nextStationId([{ id: 's2' }, { id: 's2_2' }], 's2') === 's2_3');
+  check('a taken role id plus suffix skips only what is taken', LE.nextStationId([{ id: 's2' }, { id: 's2_3' }], 's2') === 's2_2');
+  const longRole = 'a_very_long_role_id', sfx = LE.nextStationId([{ id: 'x' }], 'abcdefghijklmnop');
+  check('a role id of 16 characters fits; its suffix still keeps the id within 16', sfx === 'abcdefghijklmnop' && LE.nextStationId([{ id: 'abcdefghijklmnop' }], 'abcdefghijklmnop') === 'abcdefghijklmn_2');
+  check('a role id longer than allowed (or odd) falls back to s<n>', LE.nextStationId([{ id: 's1' }], longRole) === 's2' && LE.nextStationId([], 'S2') === 's1' && LE.nextStationId([], '2x') === 's1');
+  check('ids from nextStationId match the station id and setup key patterns', ['s2', 's2_2', 'abcdefghijklmn_2'].every(id => /^[a-z][a-z0-9_]{0,15}$/.test(id) && /^([a-z][a-z0-9_]{0,15})(?::([a-z][a-z0-9_]{0,15}))?$/.test(id)));
   check('setup keys: s2 for its own role, s5:s4 for station s5 running role s4', LE.setupKey('s2', 's2') === 's2' && LE.setupKey('s5', 's4') === 's5:s4' && LE.setupKey('s3') === 's3');
   check('short name drops a leading station id only', LE.shortName('s5', 'S5 QA test', 'QA test') === 'QA test' && LE.shortName('s1', 'S10 tester', 'QA test') === 'S10 tester' && LE.shortName('s5', 'Back tester', 'QA test') === 'Back tester' && LE.shortName('s5', 'S5', 'QA test') === 'QA test');
   const cfgM = Object.assign({}, CFG, { models: { s2: { file: '/models/crimp.onnx', classes: ['wire', 'splice', 'crimp_tool', 'crimped_splice'] } } });

@@ -259,6 +259,16 @@ try {
   const stdGot = (await req('GET', '/api/line/standard')).json;
   check('PUT /api/line/standard saves a role\'s zones; zones the role does not have are dropped', stdPut.status === 200 && stdGot.roles.s1.zones.supply.h === 0.4 && !stdGot.roles.s1.zones.ghost && stdGot.roles.s1.note === 'trained mount', JSON.stringify(stdGot));
   check('the standard is written to meta/wire-line-standard.json in the data folder', fs.existsSync(path.join(DATA, 'meta', 'wire-line-standard.json')));
+  const stdAs = await req('PUT', '/api/line/standard', { roles: { s1: { zones: {}, aspect: 0.75, source: 'phone' } } }, jsonHdr);
+  const stdAsGot = (await req('GET', '/api/line/standard')).json;
+  check('a standard role keeps aspect and source when given', stdAs.status === 200 && stdAsGot.roles.s1.aspect === 0.75 && stdAsGot.roles.s1.source === 'phone', JSON.stringify(stdAsGot.roles.s1));
+  const stdAsBad = [
+    await req('PUT', '/api/line/standard', { roles: { s1: { zones: {}, aspect: 0 } } }, jsonHdr),
+    await req('PUT', '/api/line/standard', { roles: { s1: { zones: {}, aspect: 9 } } }, jsonHdr),
+    await req('PUT', '/api/line/standard', { roles: { s1: { zones: {}, aspect: '1.3' } } }, jsonHdr),
+    await req('PUT', '/api/line/standard', { roles: { s1: { zones: {}, source: 'drone' } } }, jsonHdr)
+  ];
+  check('an aspect outside 0.2 to 5, a non-number aspect or an unknown source is refused', stdAsBad.every(r => r.status === 400), stdAsBad.map(r => r.status).join());
   const stdBad = [
     await req('PUT', '/api/line/standard', { roles: { s9: { zones: {} } } }, jsonHdr),
     await req('PUT', '/api/line/standard', { roles: { 's5:s4': { zones: {} } } }, jsonHdr),
