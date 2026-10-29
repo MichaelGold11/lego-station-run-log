@@ -78,6 +78,17 @@ before it (from the previous station finishing to the arrival), its mistakes, an
    opens its setup panel. Drag a box on each station's video around each parts pile or work area it
    asks for; the next zone is picked for you. Keep boxes off walkways, because a hand passing
    through counts as activity. Zones are saved on the laptop and come back after a reload.
+
+   **Standard setup.** Each role (S1 to S4) has a standard setup: the zones for the camera mount
+   the models were trained on. It is the file `data/meta/wire-line-standard.json`, committed to
+   git. The first time, draw the zones once on the trained mount, press **Save as standard** in
+   that station's Setup panel, and commit that file. After that every laptop gets the zones
+   automatically when a station has none saved ("Standard setup applied"), so nobody redraws them.
+   **Use standard setup** puts the standard back on a station that was edited. When the mount or
+   the environment changes, edit the boxes and press **Save as standard** again. A station uses the
+   standard of its role, whatever its own id. The standard holds only the zones: **Calibrate**
+   (next step) is never part of it, because the brightness and motion baselines depend on the
+   light that day.
 4. **Calibrate.** With each work area empty and still, press **Calibrate empty** (2 seconds). Press
    **Done**. Each station's head now says **Ready**.
 5. **Recording is on.** Every camera and phone records its video during a session (Setup has

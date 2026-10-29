@@ -40,6 +40,7 @@ const MODELS = path.join(ROOT, 'app', 'models');
 // Wire line (/line): config, per-station setup and recorded sessions. The CSV exports use the same engine as the page.
 const SESSIONS = path.join(DATA, 'sessions');
 const SETUP_FILE = path.join(DATA, 'meta', 'wire-line-setup.json');
+const STANDARD_FILE = path.join(DATA, 'meta', 'wire-line-standard.json');    // tracked in the repo's data/meta: the standard zones per role, shared through git
 const LAYOUTS_FILE = path.join(DATA, 'meta', 'wire-line-layouts.json');    // saved floor layouts and the active one (git-ignored)
 const LineEngine = (() => { const mod = { exports: {} }; new Function('module', fs.readFileSync(path.join(ROOT, 'app', 'line-engine.js'), 'utf8'))(mod); return mod.exports; })();
 const SESSION_ID = /^\d{8}-\d{6}-[a-f0-9]{4}$/;
@@ -284,6 +285,25 @@ function cleanSetup(body, cfg) {
   }
   return { setup: out };
 }
+// The standard setup per role: only the drawn zones, for the camera mount the models were trained on. Committed to git,
+// so every laptop starts with the same boxes. Calibration is not part of it (it depends on the light that day).
+function cleanStandard(body, cfg) {
+  if (!body || typeof body !== 'object' || Array.isArray(body) || !body.roles || typeof body.roles !== 'object' || Array.isArray(body.roles)) return { error: 'Body must look like { "roles": { "<role>": { "zones": {} } } }.' };
+  const roles = {};
+  for (const [rid, v] of Object.entries(body.roles)) {
+    const st = STATION_ID.test(rid) && cfg.stations.find(s => s.id === rid);
+    if (!st) return { error: 'Unknown role "' + String(rid).slice(0, 40) + '".' };
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return { error: 'Role ' + rid + ' must be an object.' };
+    const zoneIds = (st.zones || []).map(z => z.id), zones = {};
+    for (const [zid, r] of Object.entries(v.zones || {})) {
+      if (!zoneIds.includes(zid)) continue;
+      if (!r || !num01(r.x) || !num01(r.y) || !num01(r.w) || !num01(r.h) || r.w <= 0 || r.h <= 0) return { error: rid + ': zone ' + zid + ' needs x, y, w, h between 0 and 1 (w and h above 0).' };
+      zones[zid] = { x: r.x, y: r.y, w: r.w, h: r.h };
+    }
+    roles[rid] = { zones, note: text(v.note, 300), updatedAt: text(v.updatedAt, 40) || new Date().toISOString() };
+  }
+  return { standard: { version: 1, roles } };
+}
 // The saved correct state for positionCheck: per class, its box relative to the anchor zone (Save correct state on /line).
 function cleanRef(r) {
   if (!r || typeof r !== 'object' || Array.isArray(r) || typeof r.anchor !== 'string' || !r.classes || typeof r.classes !== 'object' || Array.isArray(r.classes)) return null;
@@ -371,6 +391,22 @@ async function lineApi(req, res, p) {
     if (r.error) return fail(res, 400, 'invalid_argument', r.error);
     writeJson(SETUP_FILE, r.setup);
     return send(res, 200, { ok: true, setup: r.setup });
+  }
+  if (p === '/api/line/standard') {
+    if (req.method === 'GET') {
+      // DATA_DIR can point somewhere without one: fall back to the one in the repo.
+      const f = fs.existsSync(STANDARD_FILE) ? STANDARD_FILE : path.join(ROOT, 'data', 'meta', 'wire-line-standard.json');
+      try { return send(res, 200, fs.existsSync(f) ? readJson(f) : { version: 1, roles: {} }); } catch (e) { return send(res, 200, { version: 1, roles: {} }); }
+    }
+    if (req.method !== 'PUT') return fail(res, 405, 'invalid_argument', 'Method not allowed.');
+    const cfg = lineConfig();
+    if (!cfg) return fail(res, 500, 'unavailable', 'data/meta/wire-line.json is missing or is not valid JSON.');
+    let body;
+    try { body = JSON.parse((await readBody(req, 512 * 1024)).toString('utf8')); } catch (e) { return fail(res, 400, 'invalid_argument', 'Body must be JSON.'); }
+    const r = cleanStandard(body, cfg);
+    if (r.error) return fail(res, 400, 'invalid_argument', r.error);
+    writeJson(STANDARD_FILE, r.standard);
+    return send(res, 200, { ok: true, standard: r.standard });
   }
   if (p === '/api/line/layouts' || p.startsWith('/api/line/layouts/')) {
     const cfg = lineConfig();

@@ -252,6 +252,27 @@ try {
   const badSet = [await req('PUT', '/api/line/setup', { 's5:s9': { zones: {} } }, jsonHdr), await req('PUT', '/api/line/setup', { s5: { zones: {} } }, jsonHdr), await req('PUT', '/api/line/setup', { 's5:s4:x': { zones: {} } }, jsonHdr)];
   check('a setup key with an unknown role, a new station without its role, or a bad key is refused', badSet.every(r => r.status === 400), badSet.map(r => r.status).join());
 
+  console.log('standard setup per role');
+  const std0 = await req('GET', '/api/line/standard');
+  check('GET /api/line/standard returns the committed file (roles with no zones yet)', std0.status === 200 && std0.json.version === 1 && std0.json.roles && std0.json.roles.s1 && Object.keys(std0.json.roles.s1.zones).length === 0, std0.text.slice(0, 200));
+  const stdPut = await req('PUT', '/api/line/standard', { roles: { s1: { zones: { supply: { x: 0.1, y: 0.2, w: 0.3, h: 0.4 }, ghost: { x: 0, y: 0, w: 0.1, h: 0.1 } }, note: 'trained mount' } } }, jsonHdr);
+  const stdGot = (await req('GET', '/api/line/standard')).json;
+  check('PUT /api/line/standard saves a role\'s zones; zones the role does not have are dropped', stdPut.status === 200 && stdGot.roles.s1.zones.supply.h === 0.4 && !stdGot.roles.s1.zones.ghost && stdGot.roles.s1.note === 'trained mount', JSON.stringify(stdGot));
+  check('the standard is written to meta/wire-line-standard.json in the data folder', fs.existsSync(path.join(DATA, 'meta', 'wire-line-standard.json')));
+  const stdBad = [
+    await req('PUT', '/api/line/standard', { roles: { s9: { zones: {} } } }, jsonHdr),
+    await req('PUT', '/api/line/standard', { roles: { 's5:s4': { zones: {} } } }, jsonHdr),
+    await req('PUT', '/api/line/standard', { roles: { s1: { zones: { supply: { x: 2, y: 0, w: 0.1, h: 0.1 } } } } }, jsonHdr),
+    await req('PUT', '/api/line/standard', { roles: { s1: { zones: { supply: { x: 0, y: 0, w: 0, h: 0.1 } } } } }, jsonHdr),
+    await req('PUT', '/api/line/standard', { s1: { zones: {} } }, jsonHdr),
+    await req('PUT', '/api/line/standard', Buffer.from('not json'), jsonHdr)
+  ];
+  check('a standard with an unknown role, a station key, a bad rectangle, a zero size or a wrong shape is refused', stdBad.every(r => r.status === 400), stdBad.map(r => r.status).join());
+  const stdBig = await req('PUT', '/api/line/standard', { roles: { s1: { zones: {}, note: 'x'.repeat(600 * 1024) } } }, jsonHdr).catch(e => ({ status: 'closed', text: String(e) }));
+  check('an oversized standard body is refused (an error or a closed connection)', stdBig.status === 'closed' || stdBig.status >= 400, String(stdBig.status));
+  const stdOrigin = await req('PUT', '/api/line/standard', { roles: {} }, Object.assign({ Origin: 'http://evil.example' }, jsonHdr));
+  check('PUT /api/line/standard from a foreign origin is refused', stdOrigin.status === 403, String(stdOrigin.status));
+
   console.log('six stations end to end (s5, s6)');
   const lay6 = (await req('GET', '/api/line/layouts')).json.layouts.find(l => l.id === lid);
   const sLayout = { id: lid, name: lay6.name, builtIn: false, stations: lay6.stations.map(s => Object.assign({}, s, { input: s.id === 's5' ? 'camera' : s.id === 's6' ? 'phone' : 'clip', operator: s.id === 's5' ? { code: 'Op-07', level: 'training' } : null })) };

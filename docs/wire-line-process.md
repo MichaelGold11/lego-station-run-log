@@ -242,6 +242,13 @@ bin has no reason, and the yield tile says "Turn on Score the cameras to log rea
    code). Pick a zone and drag a box on the video around that parts pile, ruler or work area. The next zone
    is picked for you. Zones save to the laptop (`data/meta/wire-line-setup.json`) and come back after
    a reload. During a session, Setup warns that changes count from then on.
+   A station with no saved zones starts from the **standard setup** of its role: the zones for the
+   camera mount the models were trained on, kept in `data/meta/wire-line-standard.json` and committed
+   to git ("Standard setup applied"). Draw the zones once on the trained mount, press **Save as
+   standard** in Setup and commit that file; **Use standard setup** puts it back on a station, and
+   editing then pressing **Save as standard** updates it when the mount changes. The standard is the
+   zones only: calibration depends on the light that day, so each laptop calibrates itself. It is read
+   and written through `GET` and `PUT /api/line/standard`.
 4. With the work area empty and still, press **Calibrate empty** (2 seconds).
 5. Press **Done**. Each station's head says **Ready**, or what is missing ("Setup needed", which opens
    Setup). Recording is on for cameras and phones (Setup's **Record video**, per station, off by

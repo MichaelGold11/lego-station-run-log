@@ -33,7 +33,7 @@ Open http://localhost:4173 in **Chrome**. It opens the wire line (`/line`):
 
 1. Each station shows **Connect a camera**. Pick **Phone or tablet** and scan the QR code with that
    station's phone, or pick a **USB camera** or a **Recorded clip**. The laptop remembers it.
-2. Once per laptop, press **Setup**: draw each station's boxes, press **Calibrate**, then **Done**.
+2. Once per laptop, press **Setup**: the boxes come from the committed standard setup (`data/meta/wire-line-standard.json`; draw them and press **Save as standard** if a role has none), press **Calibrate**, then **Done**.
 3. Press **Start session**, then **Enter**. Press **Stop session** at the end: the banner links the
    CSVs.
 
@@ -71,7 +71,7 @@ the screen looks the way it does: [docs/lean-plan.md](docs/lean-plan.md) and
 
 | Path | |
 |---|---|
-| `app/line.html`, `app/line-engine.js` | The wire line (`/line`, the floor) and its config-driven engine. The process is `data/meta/wire-line.json`: its stations are the roles a floor station can run, and it lists one ONNX model per role under `models`. Saved floor layouts are in `data/meta/wire-line-layouts.json` (not committed). |
+| `app/line.html`, `app/line-engine.js` | The wire line (`/line`, the floor) and its config-driven engine. The process is `data/meta/wire-line.json`: its stations are the roles a floor station can run, and it lists one ONNX model per role under `models`. Saved floor layouts are in `data/meta/wire-line-layouts.json` (not committed). The standard zones per role are in `data/meta/wire-line-standard.json` (committed). |
 | `server.mjs` | Local server (`npm start`). |
 | `app/live-detect.js`, `app/models/` | YOLO pre and post processing (shared by `/line` and `/live`) and the models (see `app/models/README.md`). |
 | `app/phone.html`, `scripts/phone-cert.mjs` | Phone and tablet camera page (HTTPS, port 4174) and its local certificate. The certificate and pairing secret live in `data/phone-cert/` (not committed). |

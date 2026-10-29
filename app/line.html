@@ -411,7 +411,7 @@ details.raw[open] summary { margin-right: 6px; }
 
   // config: the effective config (G.base, the file, with the floor layout applied: one station per layout entry).
   const G = {
-    config: null, base: null, layout: null, layouts: [], roles: [], editMode: false, qaIds: [], setup: {}, events: [], queue: [], session: null, lastSession: null, basis: store.get('wire-line:basis') || 'auto',
+    config: null, base: null, standard: { roles: {} }, layout: null, layouts: [], roles: [], editMode: false, qaIds: [], setup: {}, events: [], queue: [], session: null, lastSession: null, basis: store.get('wire-line:basis') || 'auto',
     modelOn: false, handsOn: false, cameras: [], clips: [], camAllowed: false, failPick: null, sending: false, summary: null, sumAt: 0, evSeen: -1,
     qaId: null, saveTimer: null, starting: false, stopping: false, soundOn: store.get('wire-line:sound') !== false, setupMode: false,
     score: store.get('wire-line:score') === true    // Score the cameras: the answer key shows (off by default)
@@ -477,6 +477,37 @@ details.raw[open] summary { margin-right: 6px; }
       } catch (e) { banner('setup', 'Setup was not saved: the local server is not answering.', 'crit'); }
     }, 400);
   }
+  // The standard setup (data/meta/wire-line-standard.json): the role's zones for the trained camera mount, no calibration.
+  // A station uses the standard of its role, whatever its own id.
+  function stdZones(st) {
+    const r = G.standard.roles[st.cfg.role || st.cfg.id], out = {};
+    if (r && r.zones) for (const z of st.cfg.zones) { const b = r.zones[z.id]; if (b) out[z.id] = { x: b.x, y: b.y, w: b.w, h: b.h }; }
+    return out;
+  }
+  function useStandard(st) {
+    const z = stdZones(st);
+    if (!Object.keys(z).length) return;
+    if (Object.keys(st.setup.zones).length && !confirm('Replace the zones on ' + st.cfg.id.toUpperCase() + ' with the standard setup? Calibration is kept.')) return;
+    st.setup.zones = z; st.prevGray = null; st.stdMsg = 'Standard setup applied';
+    saveSetup(st); renderSetup(st); drawOverlay(st);
+  }
+  async function saveStandard(st) {
+    const zones = {};
+    for (const zn of st.cfg.zones) if (st.setup.zones[zn.id]) zones[zn.id] = st.setup.zones[zn.id];
+    if (!Object.keys(zones).length) { st.stdMsg = 'Draw the zones first.'; renderSetup(st); return; }
+    const role = st.cfg.role || st.cfg.id;
+    if (!confirm('Save these zones as the standard for ' + role.toUpperCase() + '? This changes the shared file data/meta/wire-line-standard.json, which gets committed and is used by every laptop.')) return;
+    const roles = Object.assign({}, G.standard.roles);
+    roles[role] = { zones, note: '', updatedAt: new Date().toISOString() };
+    try {
+      const r = await fetch('/api/line/standard', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ version: 1, roles }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.message || r.status);
+      G.standard = j.standard;
+      st.stdMsg = 'Saved as the ' + role.toUpperCase() + ' standard. Commit data/meta/wire-line-standard.json to share it.';
+    } catch (e) { st.stdMsg = 'Standard not saved: ' + (e && e.message || e); }
+    for (const x of Object.values(ST)) if (x.setupOn) renderSetup(x);
+  }
   // The zone(s) the bulb test reads, so the QA card can offer Bulb off / Bulb on.
   function bulbZones(cfg) {
     if (!cfg.qa || !cfg.qa.lightSubstep) return [];
@@ -509,6 +540,14 @@ details.raw[open] summary { margin-right: 6px; }
       phone: null, phoneKey: '', lastChip: ''
     };
     st.chk.setRef(st.setup.ref || null);
+    // A station with no saved zones starts from its role's standard setup, when one is committed.
+    if (!Object.keys(st.setup.zones).length && Object.keys(stdZones(st)).length) {
+      st.setup.zones = stdZones(st);
+      saveSetup(st);
+      st.stdMsg = 'Standard setup applied';
+      banner('std:' + cfg.id, esc(cfg.id.toUpperCase()) + ': standard setup applied. Calibrate with the work area empty.');
+      setTimeout(() => banner('std:' + cfg.id, ''), 8000);
+    }
     const el = document.createElement('section');
     el.className = 'panel st'; el.dataset.st = cfg.id;
     el.innerHTML = `
@@ -553,6 +592,7 @@ details.raw[open] summary { margin-right: 6px; }
           <button type="button" class="btn sm pqr" hidden title="Show this station's phone QR code and link, to swap in another phone or tablet">Show QR</button></div>
         <div class="zbtns"></div>
         <div class="calrow"><button class="btn sm calb" type="button">Calibrate empty</button>${bulbs.length ? '<button class="btn sm bon" type="button">Bulb on</button>' : ''}<button class="btn sm clr" type="button">Clear zones</button><span class="calst muted"></span></div>
+        <div class="calrow"><button class="btn sm stdu" type="button">Use standard setup</button><button class="btn sm stds" type="button">Save as standard</button><span class="stdst muted"></span></div>
         <div class="muted">Pick a zone, then drag a box on the video. Calibrate with the work area empty${bulbs.length ? ' and the bulb dark, then light the bulb and press Bulb on' : ''}.</div>
         ${cfg.positionCheck ? `<div class="calrow"><button class="btn sm refb" type="button">Save correct state</button><span class="refst muted"></span></div>
         <div class="muted">Position check: build it correctly with the model running, take your hands away, then press Save correct state. It saves where the model sees ${esc(cfg.positionCheck.classes.join(', '))} inside the ${esc((cfg.zones.find(z => z.id === cfg.positionCheck.anchor) || {}).label || cfg.positionCheck.anchor)} zone.</div>` : ''}
@@ -586,6 +626,8 @@ details.raw[open] summary { margin-right: 6px; }
     q('.calb').onclick = () => calibrate(st, 'empty');
     if (bulbs.length) q('.bon').onclick = () => calibrate(st, 'on');
     q('.clr').onclick = () => clearZones(st);
+    q('.stdu').onclick = () => useStandard(st);
+    q('.stds').onclick = () => saveStandard(st);
     bindDrawing(st);
     if (window.ResizeObserver) {
       new ResizeObserver(() => { sizeCanvas(st); drawOverlay(st); }).observe(st.stage);
@@ -1293,6 +1335,10 @@ details.raw[open] summary { margin-right: 6px; }
     // The next step lights up: Calibrate once every box is drawn, then Bulb on.
     st.el.querySelector('.calb').classList.toggle('primary', st.cfg.zones.every(z => st.setup.zones[z.id]) && !nm);
     if (st.bulbs.length) st.el.querySelector('.bon').classList.toggle('primary', nm > 0 && bulb.on == null);
+    const hasStd = Object.keys(stdZones(st)).length > 0, su = st.el.querySelector('.stdu');
+    su.disabled = !hasStd;
+    su.title = hasStd ? 'Replace this station\'s zones with the saved standard for its role. Calibration is not touched.' : 'No standard is saved yet for this role. Draw the zones and press Save as standard.';
+    st.el.querySelector('.stdst').textContent = st.stdMsg || '';
     if (st.refst) st.refst.textContent = st.refMsg || (st.setup.ref ? 'Correct state saved ' + new Date(st.setup.ref.saved).toLocaleString() + '.' : 'No correct state saved yet.');
   }
   function contentRect(st) {
@@ -2317,6 +2363,7 @@ details.raw[open] summary { margin-right: 6px; }
     const problems = LE.checkConfig(G.base);
     if (problems.length) banner('config', '<b>data/meta/wire-line.json has problems:</b> ' + problems.map(esc).join(' '), 'crit');
     try { G.setup = await (await fetch('/api/line/setup', { cache: 'no-store' })).json() || {}; } catch (e) { G.setup = {}; }
+    try { const j = await (await fetch('/api/line/standard', { cache: 'no-store' })).json(); G.standard = j && j.roles ? j : { roles: {} }; } catch (e) { G.standard = { roles: {} }; }
     // The floor layout this laptop shows (Class test unless a saved one was picked).
     let lay = null;
     try {

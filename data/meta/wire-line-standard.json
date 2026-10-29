@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "roles": {
+    "s1": { "zones": {}, "note": "No standard saved yet. Draw the zones on the trained camera mount, then press Save as standard in Setup.", "updatedAt": null },
+    "s2": { "zones": {}, "note": "No standard saved yet. Draw the zones on the trained camera mount, then press Save as standard in Setup.", "updatedAt": null },
+    "s3": { "zones": {}, "note": "No standard saved yet. Draw the zones on the trained camera mount, then press Save as standard in Setup.", "updatedAt": null },
+    "s4": { "zones": {}, "note": "No standard saved yet. Draw the zones on the trained camera mount, then press Save as standard in Setup.", "updatedAt": null }
+  }
+}
