@@ -90,6 +90,8 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
 .more-f { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr); gap: 10px; margin-top: 6px; }
 .rline { font-size: 13px; color: var(--ink-2); }
 .rline.warn { color: var(--warn-ink); }
+.rline .ri { display: inline-block; margin-right: 8px; }
+.rline .ri .btn { margin-left: 4px; }
 @media (max-width: 900px) { .form, .more-f { grid-template-columns: 1fr; } }
 
 .summary { display: flex; flex-wrap: wrap; align-items: stretch; }
@@ -211,6 +213,9 @@ button.chip:hover { border-color: var(--warn-ink); }
 .check li.done .ic { border-color: var(--good); background: var(--good); }
 .check li.off, .check li.wait { color: var(--muted); }
 .check li.off .ic { border-style: dashed; }
+.check li.nodata { color: var(--muted); }
+.check li.nodata .ic { border-style: dotted; border-color: var(--line-2); }
+.check li.nodata .num { font-size: 11px; color: var(--muted); }
 .check li.wait .ic { border-color: var(--warn); }
 .check li small { display: block; font-weight: 400; font-size: 11px; color: var(--muted); line-height: 1.15; }
 .check li.wait small { color: var(--warn-ink); }
@@ -484,9 +489,41 @@ details.raw[open] summary { margin-right: 6px; }
     if (r && r.zones) for (const z of st.cfg.zones) { const b = r.zones[z.id]; if (b) out[z.id] = { x: b.x, y: b.y, w: b.w, h: b.h }; }
     return out;
   }
+  // The view the live video has now: width / height, and the words for it in messages.
+  const viewAspect = st => (st.video && st.video.videoWidth && st.video.videoHeight ? st.video.videoWidth / st.video.videoHeight : null);
+  const viewWord = a => (a < 0.9 ? 'portrait' : a > 1.1 ? 'landscape' : 'square');
+  const viewSource = st => (st.source.type === 'phone' ? 'phone' : st.source.type === 'camera' ? 'camera' : null);
+  // Zones are fractions of the frame, so a standard drawn on another shape of view does not fit. Null when it fits or when
+  // either side is unknown; else a plain sentence for the person to read.
+  function stdMismatch(st) {
+    const r = G.standard.roles[st.cfg.role || st.cfg.id], a = viewAspect(st);
+    if (!r || !(r.aspect > 0) || !a || Math.abs(a / r.aspect - 1) <= 0.1) return null;
+    return 'The standard was set on a ' + viewWord(r.aspect) + (r.source ? ' ' + r.source : '') + ' view; this view is ' + viewWord(a) + (viewSource(st) ? ' ' + viewSource(st) : '') + '.';
+  }
+  // A station with no saved zones starts from its role's standard when one is committed and it fits the view. A standard
+  // with a recorded aspect waits for the live video (the check runs again from the render until it can decide).
+  function autoStandard(st) {
+    const z = stdZones(st), r = G.standard.roles[st.cfg.role || st.cfg.id];
+    if (!Object.keys(z).length || Object.keys(st.setup.zones).length) { st.stdAuto = true; return; }
+    if (r && r.aspect > 0 && !viewAspect(st)) return;
+    st.stdAuto = true;
+    const why = stdMismatch(st);
+    if (why) {
+      st.stdMsg = why + ' Not applied: draw the zones, or press Use standard setup to apply it anyway.';
+      banner('std:' + st.cfg.id, esc(st.cfg.id.toUpperCase()) + ': ' + esc(st.stdMsg));
+    } else {
+      st.setup.zones = z; st.prevGray = null; st.stdMsg = 'Standard setup applied';
+      saveSetup(st);
+      banner('std:' + st.cfg.id, esc(st.cfg.id.toUpperCase()) + ': standard setup applied. Calibrate with the work area empty.');
+    }
+    setTimeout(() => banner('std:' + st.cfg.id, ''), 8000);
+    if (st.zbtns) { renderSetup(st); drawOverlay(st); }
+  }
   function useStandard(st) {
     const z = stdZones(st);
     if (!Object.keys(z).length) return;
+    const why = stdMismatch(st);
+    if (why && !confirm(why + ' The boxes may not fit. Use the standard setup anyway?')) return;
     if (Object.keys(st.setup.zones).length && !confirm('Replace the zones on ' + st.cfg.id.toUpperCase() + ' with the standard setup? Calibration is kept.')) return;
     st.setup.zones = z; st.prevGray = null; st.stdMsg = 'Standard setup applied';
     saveSetup(st); renderSetup(st); drawOverlay(st);
@@ -499,6 +536,9 @@ details.raw[open] summary { margin-right: 6px; }
     if (!confirm('Save these zones as the standard for ' + role.toUpperCase() + '? This changes the shared file data/meta/wire-line-standard.json, which gets committed and is used by every laptop.')) return;
     const roles = Object.assign({}, G.standard.roles);
     roles[role] = { zones, note: '', updatedAt: new Date().toISOString() };
+    const asp = viewAspect(st), src = viewSource(st);
+    if (asp) roles[role].aspect = Math.round(asp * 1000) / 1000;
+    if (src) roles[role].source = src;
     try {
       const r = await fetch('/api/line/standard', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ version: 1, roles }) });
       const j = await r.json();
@@ -540,14 +580,7 @@ details.raw[open] summary { margin-right: 6px; }
       phone: null, phoneKey: '', lastChip: ''
     };
     st.chk.setRef(st.setup.ref || null);
-    // A station with no saved zones starts from its role's standard setup, when one is committed.
-    if (!Object.keys(st.setup.zones).length && Object.keys(stdZones(st)).length) {
-      st.setup.zones = stdZones(st);
-      saveSetup(st);
-      st.stdMsg = 'Standard setup applied';
-      banner('std:' + cfg.id, esc(cfg.id.toUpperCase()) + ': standard setup applied. Calibrate with the work area empty.');
-      setTimeout(() => banner('std:' + cfg.id, ''), 8000);
-    }
+    autoStandard(st);
     const el = document.createElement('section');
     el.className = 'panel st'; el.dataset.st = cfg.id;
     el.innerHTML = `
@@ -593,7 +626,7 @@ details.raw[open] summary { margin-right: 6px; }
         <div class="zbtns"></div>
         <div class="calrow"><button class="btn sm calb" type="button">Calibrate empty</button>${bulbs.length ? '<button class="btn sm bon" type="button">Bulb on</button>' : ''}<button class="btn sm clr" type="button">Clear zones</button><span class="calst muted"></span></div>
         <div class="calrow"><button class="btn sm stdu" type="button">Use standard setup</button><button class="btn sm stds" type="button">Save as standard</button><span class="stdst muted"></span></div>
-        <div class="muted">Pick a zone, then drag a box on the video. Calibrate with the work area empty${bulbs.length ? ' and the bulb dark, then light the bulb and press Bulb on' : ''}.</div>
+        <div class="muted">Pick a zone, then drag a box on the video. Calibrate with the work area empty${bulbs.length ? ' and the bulb dark, then light the bulb and press Bulb on' : ''}. The standard setup has the boxes only, not the calibration: calibrate again each day.</div>
         ${cfg.positionCheck ? `<div class="calrow"><button class="btn sm refb" type="button">Save correct state</button><span class="refst muted"></span></div>
         <div class="muted">Position check: build it correctly with the model running, take your hands away, then press Save correct state. It saves where the model sees ${esc(cfg.positionCheck.classes.join(', '))} inside the ${esc((cfg.zones.find(z => z.id === cfg.positionCheck.anchor) || {}).label || cfg.positionCheck.anchor)} zone.</div>` : ''}
         <div class="diag mono"></div>
@@ -1590,20 +1623,64 @@ details.raw[open] summary { margin-right: 6px; }
     renderReadyLine();
     $('fTitle').focus(); $('fTitle').select();
   }
-  // One check before a start, in place of the old Rec warning: what has no camera, what Setup still needs, what records.
-  function renderReadyLine() {
+  // One check before a start, in place of the old Rec warning: what has no camera, what Setup still needs (zones, calibration,
+  // with a one-click Calibrate empty), the steps that will have no data, what the cameras are not checked against, what records.
+  // Each item is {t: text, cal: station id when a Calibrate empty button goes with it}.
+  function readyItems() {
     const out = [];
     for (const st of LIST) {
       const id = st.id.toUpperCase(), rd = readiness(st, st.eng.rules());
-      if (st.source.type === 'none') out.push(id + ' has no camera.');
-      else if (rd && rd.need) out.push(id + ': ' + rd.need[0].toLowerCase() + rd.need.slice(1) + '.');
-      else if (rd && rd.wait) out.push(id + ' ' + rd.wait + '.');
-      else if (rd && !rd.ok) out.push(id + ': ' + rd.text[0].toLowerCase() + rd.text.slice(1) + '.');
+      if (st.source.type === 'none') out.push({ t: id + ' has no camera.' });
+      else if (rd && rd.wait) out.push({ t: id + ' ' + rd.wait + '.' });
+      else if (rd && rd.need && !rd.zones && !rd.calibrate) out.push({ t: id + ': ' + rd.need[0].toLowerCase() + rd.need.slice(1) + '.' });
+      else if (rd && !rd.ok && !rd.need) out.push({ t: id + ': ' + rd.text[0].toLowerCase() + rd.text.slice(1) + '.' });
+      if (st.source.type === 'none' || (rd && rd.wait)) continue;
+      const gz = missingZones(st), nod = noDataSteps(st), cal = !isCalibrated(st);
+      if (gz.length) out.push({ t: id + ': Draw: ' + gz.join(', ') + '.' + (nod.length ? ' No data for: ' + nod.map(u => u.label).join(', ') + '.' : '') });
+      if (cal) out.push({ t: id + ': not calibrated.', cal: st.id });
     }
+    if (!G.handsOn) {
+      for (const st of LIST) if (st.source.type !== 'none') {
+        const nod = noDataSteps(st).map(u => u.id);
+        for (const sub of st.cfg.substeps) if (sub.zones && !sub.model && nod.indexOf(sub.id) < 0) out.push({ t: 'Hand tracking is off; ' + st.id.toUpperCase() + ' ' + sub.label + ' depends on motion only.' });
+      }
+    }
+    if (G.modelOn && !G.score) out.push({ t: 'Score is off; nothing to compare the cameras against.' });
+    return out;
+  }
+  // The steps a start would leave without data, as one sentence per station for the confirm.
+  function noDataText() {
+    const parts = [];
+    for (const st of LIST) {
+      if (st.source.type === 'none') continue;
+      const nod = noDataSteps(st);
+      if (nod.length) parts.push(st.id.toUpperCase() + ': ' + nod.map(u => u.label).join(', ') + ' (' + [...new Set(nod.flatMap(u => u.zones))].join(', ') + ' not drawn)');
+    }
+    return parts.join('; ');
+  }
+  function renderReadyLine() {
+    const out = readyItems();
     const recs = LIST.filter(st => st.recOn && st.source.type !== 'none').length;
-    if (!recs) out.push('No station records video: nothing to train on.');
-    const txt = out.length ? out.join(' ') : 'All ' + LIST.length + ' stations are ready' + (recs === LIST.length ? ' and recording.' : ', ' + recs + ' recording.') + ' Counts start from zero.';
-    if (txt !== G.lastReady) { G.lastReady = txt; $('readyLine').textContent = txt; $('readyLine').className = 'rline' + (out.length ? ' warn' : ''); }
+    if (!recs) out.push({ t: 'No station records video: nothing to train on.' });
+    const sig = JSON.stringify(out);
+    if (sig === G.lastReady) return;
+    G.lastReady = sig;
+    const line = $('readyLine');
+    line.className = 'rline' + (out.length ? ' warn' : '');
+    line.textContent = '';
+    if (!out.length) { line.textContent = 'All ' + LIST.length + ' stations are ready' + (recs === LIST.length ? ' and recording.' : ', ' + recs + ' recording.') + ' Counts start from zero.'; return; }
+    for (const it of out) {
+      const span = document.createElement('span');
+      span.className = 'ri'; span.textContent = it.t;
+      if (it.cal) {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'btn sm'; b.textContent = 'Calibrate empty';
+        b.title = 'Keep the work area empty and still for a few seconds';
+        b.onclick = () => { const st = ST[it.cal]; if (st) calibrate(st, 'empty'); };
+        span.appendChild(b);
+      }
+      line.appendChild(span);
+    }
   }
   async function startSession(info) {
     if (G.session || G.starting) return;
@@ -1626,6 +1703,8 @@ details.raw[open] summary { margin-right: 6px; }
       emit({ type: 'session_start', t: j.startedAtMs, source: 'page', note: info.title || '' });
       for (const st of LIST) emit({ type: 'source_change', station: st.id, t: j.startedAtMs, input: inputOf(st), note: noteOf(st) });
       for (const st of LIST) if (st.op) emit({ type: 'operator', station: st.id, code: st.op.code, level: st.op.level, t: j.startedAtMs });    // who is where, from the start
+      // A step whose zones are not drawn can never fire: one flag each, so the summary and the exports say "no data" and not 0.
+      for (const st of LIST) if (st.source.type !== 'none') for (const u of noDataSteps(st)) emit({ type: 'flag', station: st.id, substep: u.id, note: LE.NO_DATA + u.zones.join(', ') + ' not drawn', source: 'page', t: j.startedAtMs });
       if (G.editMode) setEditMode(false);
       closeAdd();
       for (const st of LIST) if (st.recOn && st.source.type !== 'none') startRecording(st);
@@ -1698,12 +1777,25 @@ details.raw[open] summary { margin-right: 6px; }
   function readiness(st, rules) {
     if (st.source.type === 'none') return null;
     if (st.source.type === 'phone' && !phoneLive(st)) return { wait: st.phone && st.phone.state === 'lost' ? 'lost its phone' : 'waits for its phone' };
-    if (!Object.keys(st.setup.zones).length) return { need: 'Draw its boxes' };
+    const gz = missingZones(st);
+    if (gz.length) return { need: 'Draw: ' + gz.join(', '), zones: gz };
     const r = rules.find(x => x.kind && !x.ready), m = r ? missingText(st, r, true) : '';
     if (m === 'waiting for video') return { text: 'Starting the video' };
     if (m) return { need: m[0].toUpperCase() + m.slice(1) };
-    if (!Object.keys(st.setup.calib.motion || {}).length) return { need: 'Calibrate it with the work area empty' };
+    if (!isCalibrated(st)) return { need: 'Calibrate it with the work area empty', calibrate: true };
     return { ok: true, text: 'Ready' };
+  }
+  const isCalibrated = st => Object.keys(st.setup.calib.motion || {}).length > 0;
+  // The labels of the zones some step uses (a zones rule or a model rule) that are not drawn yet.
+  function missingZones(st) {
+    const used = [];
+    for (const sub of st.cfg.substeps) for (const z of LE.ruleZones(sub)) if (used.indexOf(z) < 0) used.push(z);
+    return st.cfg.zones.filter(z => used.indexOf(z.id) >= 0 && !st.setup.zones[z.id]).map(z => z.label);
+  }
+  // The steps with no data now: every zone their rules point at is undrawn. Each: {id, label, zones: [labels]}.
+  function noDataSteps(st) {
+    const lab = id => (st.cfg.zones.find(z => z.id === id) || {}).label || id;
+    return LE.unobserved(st.cfg, Object.keys(st.setup.zones)).map(u => ({ id: u.id, label: u.label, zones: u.missing.map(lab) }));
   }
   function sourceText(st) {
     const t = st.source.type, ph = st.phone;
@@ -1713,6 +1805,7 @@ details.raw[open] summary { margin-right: 6px; }
     return '';
   }
   function renderStation(st, sum, t) {
+    if (!st.stdAuto) autoStandard(st);
     const s = st.eng.state(), cfg = st.cfg, label = id => (cfg.substeps.find(x => x.id === id) || {}).label || id;
     const ss = sum && sum.stations[st.id], takt = G.config.taktSec, rules = st.eng.rules(), rd = readiness(st, rules);
     // head: what films the station, Ready or what is missing, and the REC readout
@@ -1758,15 +1851,18 @@ details.raw[open] summary { margin-right: 6px; }
     // checklist
     const counts = {};
     s.occ.forEach(o => { counts[o.id] = (counts[o.id] || 0) + 1; });
+    const nod = {};
+    if (st.source.type !== 'none') for (const u of noDataSteps(st)) nod[u.id] = u;
     const html = rules.map(r => {
       let c = '', why = '';
-      if (!r.kind) { c = 'off'; why = r.hasModelRule ? 'needs the model' : 'needs a model rule'; }
+      if (nod[r.id]) { c = 'nodata'; why = 'no data: ' + nod[r.id].zones.join(', ') + ' not drawn'; }
+      else if (!r.kind) { c = 'off'; why = r.hasModelRule ? 'needs the model' : 'needs a model rule'; }
       else if (!r.ready) { c = 'wait'; why = missingText(st, r); }
       if (s.current === r.id) c += ' now'; else if (counts[r.id]) c += ' done';
       if (bad && bad.substep === r.id) { c += ' ' + bad.kind; why = bad.kind === 'mistake' ? 'Mistake - fix and clear the view' : 'Needs review'; }
       const avg = d && d.substepAvg[r.id];
       const tip = r.rule ? LE.ruleText(r.rule, cfg) : why;
-      return `<li class="${c}" title="${esc(tip)}"><span class="ic"></span><span class="nm">${esc(r.label)}${counts[r.id] > 1 ? ` <span class="rep">x${counts[r.id]}</span>` : ''}${r.kind === 'model' ? ' <span class="tag">model</span>' : ''}${r.closes ? ' <span class="muted" style="font-size:11px">(ends the cycle)</span>' : ''}${why ? `<small>${esc(why)}</small>` : ''}</span><span class="num mono">${avg != null && !r.closes && d.cycles && (r.kind || avg > 0) ? fmtS(avg) : ''}</span></li>`;
+      return `<li class="${c}" title="${esc(tip)}"><span class="ic"></span><span class="nm">${esc(r.label)}${counts[r.id] > 1 ? ` <span class="rep">x${counts[r.id]}</span>` : ''}${r.kind === 'model' ? ' <span class="tag">model</span>' : ''}${r.closes ? ' <span class="muted" style="font-size:11px">(ends the cycle)</span>' : ''}${why ? `<small>${esc(why)}</small>` : ''}</span><span class="num mono">${nod[r.id] ? 'no data' : avg != null && !r.closes && d.cycles && (r.kind || avg > 0) ? fmtS(avg) : ''}</span></li>`;
     }).join('');
     if (html !== st.lastCheck) { st.elCheck.innerHTML = html; st.lastCheck = html; }
     if (st.err !== st.lastErr) { st.elMsg.textContent = st.err; st.lastErr = st.err; }
@@ -2177,7 +2273,7 @@ details.raw[open] summary { margin-right: 6px; }
     const sts = G.layout.stations, last = sts[sts.length - 1], role = last ? last.role : (G.roles[0] || {}).id;
     $('addRole').innerHTML = G.roles.map(r => `<option value="${esc(r.id)}">${esc(r.label)}</option>`).join('');
     $('addRole').value = role;
-    G.addAuto = $('addName').value = LE.defaultName(LE.nextStationId(sts), roleLabel(role));
+    G.addAuto = $('addName').value = LE.defaultName(LE.nextStationId(sts, role), roleLabel(role));
     $('addPanel').hidden = false; $('btnAdd').classList.add('on');
     $('addName').focus(); $('addName').select();
   }
@@ -2185,12 +2281,12 @@ details.raw[open] summary { margin-right: 6px; }
   // The spot nearest (x, y) where a new card does not cover another one (LineEngine.freeSpot).
   const freeSpot = (x, y) => LE.freeSpot(LIST.map(cardRect), x, y);
   // A new station goes in the middle of the view (or the nearest free spot), then its Connect a camera sheet opens. Its id
-  // is the lowest free s<n>: a station that was removed and comes back finds its camera again.
+  // is its role id when free (s2, then s2_2, s2_3): a station that was removed and comes back finds its camera again.
   async function addStation(role, name) {
     if (G.session) return noEdits('add a station');
     const b = floorBox(), [x, y] = freeSpot(snap((b.w / 2 - V.x) / V.z - FLOOR.cardW / 2), snap((b.h / 2 - V.y) / V.z - 170));
     let id = null;
-    const l = await commitLayout(lay => { id = LE.nextStationId(lay.stations); lay.stations.push({ id, name: name || LE.defaultName(id, roleLabel(role)), role, x, y }); });
+    const l = await commitLayout(lay => { id = LE.nextStationId(lay.stations, role); lay.stations.push({ id, name: name || LE.defaultName(id, roleLabel(role)), role, x, y }); });
     closeAdd();
     const st = l && ST[id];
     if (st) { revealCard(st); if (st.source.type === 'none') showConnect(st, 'choose'); }
@@ -2242,14 +2338,19 @@ details.raw[open] summary { margin-right: 6px; }
   $('startForm').onkeydown = e => { if (e.key === 'Escape') { e.preventDefault(); showStartForm(false); } };
   $('fShift').oninput = () => { if ($('fTitle').value === G.autoTitle) $('fTitle').value = G.autoTitle = autoTitle(G.formAt, $('fShift').value.trim()); };
   $('chkScore').onchange = () => setScore($('chkScore').checked);
-  $('startForm').onsubmit = e => { e.preventDefault(); startSession({ title: $('fTitle').value.trim(), crew: $('fCrew').value.trim(), shift: $('fShift').value.trim(), notes: $('fNotes').value.trim() }); };
+  $('startForm').onsubmit = e => {
+    e.preventDefault();
+    const nd = noDataText();
+    if (nd && !confirm('These steps will have no data: ' + nd + '. Start anyway?')) return;
+    startSession({ title: $('fTitle').value.trim(), crew: $('fCrew').value.trim(), shift: $('fShift').value.trim(), notes: $('fNotes').value.trim() });
+  };
   $('btnStop').onclick = () => stopSession();
   $('btnSetup').onclick = () => setSetupMode(!G.setupMode);
   $('btnDone').onclick = () => setSetupMode(false);
   $('btnSessions').onclick = () => { const p = $('sessionsPanel'); p.hidden = !p.hidden; $('btnSessions').classList.toggle('on', !p.hidden); if (!p.hidden) loadSessions(); };
   setInterval(() => { if (!$('sessionsPanel').hidden) loadSessions(); }, 10000);    // the panel keeps itself current while open
   $('btnModel').onclick = () => { const on = !G.modelOn; store.set('wire-line:model', on); setModel(on); };
-  $('btnHands').onclick = () => setHands(!G.handsOn);
+  $('btnHands').onclick = () => { const on = !G.handsOn; store.set('wire-line:hands', on); setHands(on); };    // remembered per laptop, off until someone turns it on
   $('btnSound').onclick = () => { G.soundOn = !G.soundOn; store.set('wire-line:sound', G.soundOn); unlockAudio(); renderSetupBar(); };
   // Two clicks, no dialog: the first arms it for 3 seconds.
   $('btnPair').onclick = async () => {
@@ -2274,7 +2375,7 @@ details.raw[open] summary { margin-right: 6px; }
   $('btnLayoutDone').onclick = () => setEditMode(false);
   $('btnAdd').onclick = openAdd;
   $('btnAddX').onclick = closeAdd;
-  $('addRole').onchange = () => { if ($('addName').value === G.addAuto) G.addAuto = $('addName').value = LE.defaultName(LE.nextStationId(G.layout.stations), roleLabel($('addRole').value)); };
+  $('addRole').onchange = () => { if ($('addName').value === G.addAuto) G.addAuto = $('addName').value = LE.defaultName(LE.nextStationId(G.layout.stations, $('addRole').value), roleLabel($('addRole').value)); };
   $('addPanel').onsubmit = e => { e.preventDefault(); addStation($('addRole').value, $('addName').value.trim()); };
   $('addPanel').onkeydown = e => { if (e.key === 'Escape') { e.preventDefault(); closeAdd(); } };
   $('zOut').onclick = () => zoomAt(V.z / 1.25);
@@ -2387,6 +2488,7 @@ details.raw[open] summary { margin-right: 6px; }
     await restoreSources(false);
     G.ready = true;
     if (LIST.some(modelOf) && store.get('wire-line:model') !== false) setModel(true);
+    if (store.get('wire-line:hands') === true) setHands(true);
   })();
 })();
 </script>
