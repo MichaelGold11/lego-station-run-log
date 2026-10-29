@@ -322,6 +322,8 @@ try {
   check('refused: an operator with a name, a level that does not exist, no station; an event for a station not in the layout', badOpR.every(c => c === 400), badOpR.join());
   const v5 = await req('POST', `/api/sessions/${sid6}/video/s5?seq=0&t0=${t6 + 200}`, A, vh), v7 = await req('POST', `/api/sessions/${sid6}/video/s7?seq=0`, A, vh);
   check('Rec: s5 records into s5.webm; a station not in the layout gets 400', v5.status === 200 && fs.existsSync(path.join(d6, 's5.webm')) && v7.status === 400 && !fs.existsSync(path.join(d6, 's7.webm')), v5.status + ',' + v7.status);
+  const clips6 = (await req('GET', '/api/line/clips')).json.clips.filter(c => c.key.startsWith('session:' + sid6 + ':'));
+  check('a clip list entry carries the role its session layout gave that station (s5 ran s4); a session with no layout has none', clips6.length === 1 && clips6[0].key.endsWith(':s5.webm') && clips6[0].role === 's4' && clips.json.clips.filter(c => c.key.startsWith('session:' + id + ':')).every(c => c.role === null), JSON.stringify(clips6));
   const end6 = await req('POST', `/api/sessions/${sid6}/end`, {}, jsonHdr);
   const sum6 = end6.json.summary;
   check('the summary covers the layout\'s stations: s5 is a QA station, so its unit counts', sum6 && sum6.stations.s5 && sum6.stations.s6 && sum6.stations.s5.cycles === 1 && sum6.line.units === 1 && sum6.line.passed === 1, JSON.stringify(sum6 && sum6.line).slice(0, 300));

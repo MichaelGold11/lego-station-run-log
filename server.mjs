@@ -470,7 +470,7 @@ async function lineApi(req, res, p) {
       clips.sort((a, b) => (a.label.startsWith('Run ') === b.label.startsWith('Run ') ? a.label.localeCompare(b.label, 'en', { numeric: true }) : a.label.startsWith('Run ') ? -1 : 1));
     }
     for (const s of listSessions().slice(0, 30)) {
-      for (const v of s.videos) clips.push({ key: 'session:' + s.id + ':' + v.file, label: (s.title || s.id) + ', ' + v.station + (v.part > 1 ? ' part ' + v.part : ''), url: '/api/sessions/' + s.id + '/video/' + v.station + (v.part > 1 ? '?part=' + v.part : ''), group: 'sessions' });
+      for (const v of s.videos) clips.push({ role: s.roles[v.station] || null, key: 'session:' + s.id + ':' + v.file, label: (s.title || s.id) + ', ' + v.station + (v.part > 1 ? ' part ' + v.part : ''), url: '/api/sessions/' + s.id + '/video/' + v.station + (v.part > 1 ? '?part=' + v.part : ''), group: 'sessions' });
     }
     return send(res, 200, { clips });
   }
@@ -514,13 +514,19 @@ function videoList(doc) {
   for (const [station, parts] of Object.entries(doc.recordings || {})) for (const r of parts) out.push({ station, part: r.part, file: r.file, mime: r.mime, bytes: r.bytes, chunks: r.chunks, gaps: (r.gaps || []).length, startedAt: r.startedAt });
   return out;
 }
+// Station id to role from a session's layout ({} for a session with no layout).
+function layoutRoles(doc) {
+  const out = {};
+  if (doc.layout && Array.isArray(doc.layout.stations)) for (const s of doc.layout.stations) if (s && typeof s.id === 'string' && typeof s.role === 'string') out[s.id] = s.role;
+  return out;
+}
 function listSessions() {
   if (!fs.existsSync(SESSIONS)) return [];
   const out = [];
   for (const id of fs.readdirSync(SESSIONS).filter(n => SESSION_ID.test(n)).sort().reverse()) {
     try {
       const d = SESS.has(id) ? SESS.get(id).doc : readJson(sessionFile(id));
-      out.push({ id, title: d.title, crew: d.crew, shift: d.shift, startedAt: d.startedAt, endedAt: d.endedAt || null, videos: videoList(d) });
+      out.push({ id, title: d.title, crew: d.crew, shift: d.shift, startedAt: d.startedAt, endedAt: d.endedAt || null, videos: videoList(d), roles: layoutRoles(d) });
     } catch (e) { /* not a session */ }
   }
   return out;

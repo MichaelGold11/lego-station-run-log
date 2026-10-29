@@ -492,13 +492,18 @@ details.raw[open] summary { margin-right: 6px; }
   // The view the live video has now: width / height, and the words for it in messages.
   const viewAspect = st => (st.video && st.video.videoWidth && st.video.videoHeight ? st.video.videoWidth / st.video.videoHeight : null);
   const viewWord = a => (a < 0.9 ? 'portrait' : a > 1.1 ? 'landscape' : 'square');
+  // The ratio of a view for a message: "9:16" when it is close to a simple one, else width over height to two decimals.
+  function viewRatio(a) {
+    for (const [w, h] of [[9, 16], [3, 4], [2, 3], [1, 1], [4, 3], [3, 2], [16, 9]]) if (Math.abs(a / (w / h) - 1) < 0.03) return w + ':' + h;
+    return a.toFixed(2);
+  }
   const viewSource = st => (st.source.type === 'phone' ? 'phone' : st.source.type === 'camera' ? 'camera' : null);
   // Zones are fractions of the frame, so a standard drawn on another shape of view does not fit. Null when it fits or when
   // either side is unknown; else a plain sentence for the person to read.
   function stdMismatch(st) {
     const r = G.standard.roles[st.cfg.role || st.cfg.id], a = viewAspect(st);
     if (!r || !(r.aspect > 0) || !a || Math.abs(a / r.aspect - 1) <= 0.1) return null;
-    return 'The standard was set on a ' + viewWord(r.aspect) + (r.source ? ' ' + r.source : '') + ' view; this view is ' + viewWord(a) + (viewSource(st) ? ' ' + viewSource(st) : '') + '.';
+    return 'The standard was set on a ' + viewWord(r.aspect) + (r.source ? ' ' + r.source : '') + ' view (' + viewRatio(r.aspect) + '); this view is ' + viewWord(a) + (viewSource(st) ? ' ' + viewSource(st) : '') + ' (' + viewRatio(a) + ').';
   }
   // A station with no saved zones starts from its role's standard when one is committed and it fits the view. A standard
   // with a recorded aspect waits for the live video (the check runs again from the render until it can decide).
@@ -535,7 +540,7 @@ details.raw[open] summary { margin-right: 6px; }
     const role = st.cfg.role || st.cfg.id;
     if (!confirm('Save these zones as the standard for ' + role.toUpperCase() + '? This changes the shared file data/meta/wire-line-standard.json, which gets committed and is used by every laptop.')) return;
     const roles = Object.assign({}, G.standard.roles);
-    roles[role] = { zones, note: '', updatedAt: new Date().toISOString() };
+    roles[role] = { zones, note: (G.standard.roles[role] && G.standard.roles[role].note) || '', updatedAt: new Date().toISOString() };
     const asp = viewAspect(st), src = viewSource(st);
     if (asp) roles[role].aspect = Math.round(asp * 1000) / 1000;
     if (src) roles[role].source = src;
@@ -673,7 +678,10 @@ details.raw[open] summary { margin-right: 6px; }
   // ---------- sources ----------
   const OWN_CLIPS = 10;    // a station lists its own newest recordings only
   // Which station a session recording belongs to: its file is <station>.mp4, or <station>-<part>.mp4.
+  // Also its station when the session's layout gave the station that file is named for the same role as this one (an old
+  // s1.mp4 from a station that ran S2): the server sends that role as c.role.
   function clipStation(c) { const m = /^(.+?)(-\d+)?\.\w+$/.exec(String(c.key).split(':')[2] || ''); return m ? m[1] : null; }
+  const clipIsOn = (c, st) => clipStation(c) === st.id || (!!c.role && c.role === (st.cfg.role || st.cfg.id));
   // USB cameras (freeOnly: leave out the ones other stations use).
   function cameraOptions(st, freeOnly) {
     const used = {};
@@ -682,7 +690,7 @@ details.raw[open] summary { margin-right: 6px; }
   }
   // The LEGO run videos are demo clips for every station; past session recordings only for their own station, newest first.
   function clipOptions(st) {
-    const a = G.clips.filter(c => c.group === 'assets'), s = G.clips.filter(c => c.group === 'sessions' && clipStation(c) === st.id).slice(0, OWN_CLIPS);
+    const a = G.clips.filter(c => c.group === 'assets'), s = G.clips.filter(c => c.group === 'sessions' && clipIsOn(c, st)).slice(0, OWN_CLIPS);
     const cur = st.source.type === 'clip' && G.clips.find(c => 'clip:' + c.key === st.source.key && c.group === 'sessions');
     if (cur && !s.includes(cur)) s.push(cur);
     let html = '';

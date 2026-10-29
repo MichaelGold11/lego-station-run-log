@@ -86,7 +86,7 @@ before it (from the previous station finishing to the arrival), its mistakes, an
    automatically when a station has none saved ("Standard setup applied"), so nobody redraws them.
    **Use standard setup** puts the standard back on a station that was edited. When the mount or
    the environment changes, edit the boxes and press **Save as standard** again. A station uses the
-   standard of its role, whatever its own id. The standard holds only the zones: **Calibrate**
+   standard of its role, whatever its own id. Saving keeps the role's existing note. If the standard was drawn on a different shape of view than the live one, the warning names both ratios (for example 3:4 and 9:16). The standard holds only the zones: **Calibrate**
    (next step) is never part of it, because the brightness and motion baselines depend on the
    light that day.
 4. **Calibrate.** With each work area empty and still, press **Calibrate empty** (2 seconds). Press
@@ -284,7 +284,7 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions**),
 ## 9. Test your model against the answer key
 
 1. On your station, play a past session's video: **Connect a camera** > **Recorded clip** (or the
-   Camera list in Setup). Each station lists its own 10 newest recordings. Pick a session that was
+   Camera list in Setup). Each station lists its own 10 newest recordings, including older ones named for another station that ran the same role (an `s1.mp4` recorded by a station that ran S2 shows on S2). Pick a session that was
    recorded with **Score the cameras** on, so it has key presses to compare with.
 2. Press **Start session**, play the clip through, and **Stop session**.
 3. Compare the detected cycles in the new `cycles.csv` (`basis` = `detected`) with the original
