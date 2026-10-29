@@ -68,7 +68,7 @@ test): its substeps, zones, QA block, and its model under `models.<role>`. The c
   the config (`LineEngine.classTestLayout`) with id `class-test`. No file means Class test is active.
 - Flow order is the array order. x and y are floor units (1 unit = 1 CSS pixel at 100%), snapped to the 40-unit grid.
   A card is 640 units wide. Class test: S1 (0, 0), S2 (0, 560), S3 (760, 560), S4 (1520, 560).
-- **Station id = a camera spot on this laptop.** A new station gets the lowest free `s<n>` in its layout. The browser
+- **Station id = a camera spot on this laptop.** A new station gets its role's id when free (`s2`), then `s2_2`, `s2_3`; a role id that is not a valid station id falls back to the lowest free `s<n>`. Ids already in saved layouts are never rewritten. The browser
   keeps each id's camera, Rec and Mute (the same `wire-line:source:<id>` keys as today), and phone links are keyed by id,
   so a copied layout keeps its cameras and phones, and a station removed and added again gets its camera back.
 - **Zones and calibration belong to a station id and its role**: key `s2` when the role is the station's own id (so

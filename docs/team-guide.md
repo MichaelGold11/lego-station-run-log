@@ -216,9 +216,11 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions**),
 
 ## 6. Share the footage
 
-- Each session saves a folder `data/sessions/<id>/`: one video per station (`s1.mp4`, `s2.mp4` and so on),
+- Each session saves a folder `data/sessions/<id>/`: one video per station, named `<station id>.mp4`
+  (`s1.mp4`, `s2.mp4` and so on). A new station's id now defaults to its role id, so S2 footage is `s2.mp4`,
   `events.jsonl` (every detected step and key press, with the time into each video) and
-  `session.json`. The CSVs are under **Sessions**.
+  `session.json`. The CSVs are under **Sessions**. Older sessions may use another id for a role (a
+  one-station layout for S2 saved `s1.mp4`): read `roles` in `session.json` (under **raw**), not the file name.
 - Upload the whole folder to the team's shared Drive folder. It is about 1 GB per hour. Never
   commit it to git (the folder is git-ignored).
 - Each trainer takes their own station's video: `s1.mp4` for S1, `s2.mp4` for S2, and so on. An
@@ -288,6 +290,18 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions**),
 3. Compare the detected cycles in the new `cycles.csv` (`basis` = `detected`) with the original
    session's key presses (`basis` = `manual`). The go-live targets are in Stage 5 of the Playbook:
    95% or more of steps confirmed, timing within 0.3 s.
+
+### Test recipe for S2 (a live run with the answer key)
+
+1. In **Setup**, turn **Score the cameras** on.
+2. Start the session. One person stands by the keyboard and presses **1** each time a unit leaves S2.
+3. Run 3 to 5 cycles, then stop the session.
+4. The **Done** tile shows detected cycles next to keyed cycles, and `events.jsonl` has the key presses.
+   This scores cycle counts and cycle times only, not individual steps. To review steps, use the saved
+   video and the `events.jsonl` times.
+
+The Start-session line says "Score is off; nothing to compare the cameras against" when a model is on and
+Score is off.
 
 ## 10. Troubleshooting
 

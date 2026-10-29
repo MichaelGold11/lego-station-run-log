@@ -74,6 +74,10 @@ How the page counts:
 - A substep counts after its signal holds for 3 frames in a row (`holdFrames`, about 0.4 s).
 - Going back to an earlier substep inside a cycle is a **repeat**, not an error.
 - Jumping forward past a substep the camera could have seen raises a **flag**: "skipped <substep>".
+- A substep whose zones are all undrawn when the session starts can never fire. The page raises one **flag** per such
+  substep at the start: "no data: <zone label> not drawn" (it carries the substep id and no cycle number, so it is in
+  `events.jsonl` and not in the per-cycle counts of `cycles.csv`). In the summary that substep has `substepAvg` `null`
+  (never 0) and its id is in the station's `unobserved` list. Start session asks for a confirm when any step has no data.
 - A cycle runs from its first detected substep to the moment the closing substep starts. The time
   between cycles is idle time.
 - QA: the engine can also read a bulb and bins (`qa.lightSubstep`, `qa.sortSubstep`, `qa.bins`, as in
@@ -379,7 +383,7 @@ the last two under **raw**).
 | `action` | answer key press (Score the cameras on): `cycle_done`, `pass`, `fail` |
 | `input` | on `source_change`: `camera`, `clip`, `phone` or `none`. A phone counts as `phone` only while it is connected: picking it, losing it or cutting it off is `none` (the note says "Phone (waiting for the phone)", "Phone lost" or "Phone cut off: new pairing code") |
 | `code`, `level` | on `operator`: the operator's anonymous code (`Op-07`) and training level (`new`, `training`, `certified`); both `null` when nobody is set |
-| `note` | flag text ("skipped ...", "quality mismatch, review the video"), or the source label |
+| `note` | flag text ("skipped ...", "no data: <zone> not drawn", "quality mismatch, review the video"), or the source label |
 | `kind` | on a verdict: `verified`, `mistake`, `review` or `cleared` |
 | `reason` | on a verdict: `progress`, `complete`, `low_confidence`, `wrong_order`, `missing`, `wrong_position`, `turned`, `flicker` or `cleared` |
 | `message` | on a verdict: what the card said |
