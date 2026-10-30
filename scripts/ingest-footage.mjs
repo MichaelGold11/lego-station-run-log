@@ -10,6 +10,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { openOnnx } from './lib-onnx.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const load = f => { const mod = { exports: {} }; new Function('module', fs.readFileSync(path.join(ROOT, 'app', f), 'utf8'))(mod); return mod.exports; };
@@ -122,11 +123,8 @@ async function openModel(cfg, role) {
   if (!m || !m.file) throw new Error('No model is configured for role ' + role + ' in wire-line.json.');
   const file = path.join(ROOT, 'app', m.file.replace(/^\/+/, ''));
   if (!fs.existsSync(file)) throw new Error('Model file not found: ' + file);
-  const ort = await import(pathToFileURL(path.join(ROOT, 'node_modules/onnxruntime-web/dist/ort.wasm.min.mjs')).href);
-  ort.env.wasm.numThreads = 1;
-  ort.env.wasm.wasmPaths = path.join(ROOT, 'node_modules/onnxruntime-web/dist/') ;
-  const sess = await ort.InferenceSession.create(fs.readFileSync(file), { executionProviders: ['wasm'] });
-  return { ort, sess, classes: m.classes, size: m.imgsz || 640, file: m.file, version: m.version };
+  const base = await openOnnx(file, m.classes, m.imgsz);
+  return Object.assign(base, { file: m.file, version: m.version });
 }
 
 // Runs the model over every candidate frame (2 fps), streaming raw frames out of ffmpeg.
