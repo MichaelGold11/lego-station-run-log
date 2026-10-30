@@ -218,6 +218,15 @@ try {
     const sj = JSON.parse(fs.readFileSync(path.join(f2, 'session.json'), 'utf8'));
     check('session.json tags the station, mode and contributor code, and holds no title, crew or notes', sj.station === 's2' && sj.mode === 'group' && sj.contributor === 'Ab-01' && sj.sessionId === RUN.id && sj.classes.join() === shipped.models.s2.classes.join() && !/Export run|Group B|Morning/.test(JSON.stringify(sj)), JSON.stringify(sj));
     check('the copied JPEG is the stored one and the leftover temp folders are gone', fs.readFileSync(path.join(f2, 'captures', RUN.a + '.jpg')).equals(jpegBuf(300)) && !fs.readdirSync(path.join(POOLDIR, 's2')).some(n => n.startsWith('.')));
+    {
+      const allowCap = ['id', 'role', 'station', 'reason', 't', 'cycle', 'mode', 'contributor', 'boxes', 'model', 'standard'], allowRev = ['captureId', 'verdict', 'boxes', 'reviewedAt'];
+      const pc = lines(path.join(f2, 'captures.jsonl')), pr = lines(path.join(f2, 'review.jsonl'));
+      const raw = ['captures.jsonl', 'review.jsonl', 'session.json'].map(n => fs.readFileSync(path.join(f2, n), 'utf8')).join('\n');
+      check('published captures.jsonl holds only allowlisted fields', pc.length === 3 && pc.every(c => Object.keys(c).every(k => allowCap.includes(k)) && c.contributor === 'Ab-01' && c.mode === 'group'), JSON.stringify(pc[0]));
+      check('operator, stationName, claim, substep, videoFile, videoT and zones are absent from the published files', !/"(operator|stationName|claim|substep|videoFile|videoT|zones)":|Open the lever connector|s2\.mp4|Arrange|s2_open/.test(raw), raw.slice(0, 300));
+      check('published review.jsonl holds only captureId, verdict, boxes, reviewedAt (no note)', pr.length === 3 && pr.every(r => Object.keys(r).every(k => allowRev.includes(k))) && !/it was open|"note"/.test(raw));
+      check('session.json holds only known keys with no free text', Object.keys(sj).every(k => ['version', 'station', 'mode', 'contributor', 'sessionId', 'publishedAt', 'startedAt', 'endedAt', 'classes', 'captures'].includes(k)));
+    }
     const before = fs.readFileSync(path.join(f2, 'review.jsonl'), 'utf8');
     await review(RUN.id, { captureId: RUN.a, verdict: 'rejected' });
     const p2 = await pub(RUN.id, { contributor: 'Ab-01', mode: 'group' });
@@ -271,6 +280,78 @@ try {
     check('holding out the only contributor of a station is 409 (nothing left to train on)', (await req('GET', '/api/pool/s3/snapshot.zip?holdout=Ab-01')).status === 409);
     check('a station with nothing in the pool is 404; a bad role is 404; POST is 405', (await req('GET', '/api/pool/s1/snapshot.zip')).status === 404 && (await req('GET', '/api/pool/..%2Fx/snapshot.zip')).status === 404 && (await req('POST', '/api/pool/s2/snapshot.zip', {}, jsonHdr)).status === 405);
     check('GET /pool serves the pool page', (await req('GET', '/pool')).status === 200 && /<title>Shared pool<\/title>/.test((await req('GET', '/pool')).text));
+
+    // ---- hostile pool: the shared folder is untrusted ----
+    {
+      const SID = '20261016-101010-abcd', OUT = path.join(TMP, 'outside');
+      fs.mkdirSync(OUT, { recursive: true });
+      fs.writeFileSync(path.join(OUT, 'secret.jpg'), jpegBuf(300, 1));
+      fs.writeFileSync(path.join(OUT, 'SECRETFILE.txt'), 'SECRETOUT');
+      const wr = (dirp, name, text) => { fs.mkdirSync(dirp, { recursive: true }); fs.writeFileSync(path.join(dirp, name), text); };
+      const mkc = (folder, station, meta, caps, revs, jpgs) => {
+        const d = path.join(POOLDIR, station, folder);
+        wr(d, 'session.json', JSON.stringify(Object.assign({ version: 1, station, mode: 'home', sessionId: SID, publishedAt: new Date().toISOString() }, meta)));
+        wr(d, 'captures.jsonl', caps.map(c => JSON.stringify(c)).join('\n') + '\n');
+        wr(d, 'review.jsonl', revs.map(c => JSON.stringify(c)).join('\n') + '\n');
+        fs.mkdirSync(path.join(d, 'captures'), { recursive: true });
+        for (const j of jpgs || []) fs.writeFileSync(path.join(d, 'captures', j + '.jpg'), jpegBuf(300, 2));
+        return d;
+      };
+      const good = { id: 'c0001', role: 's2', station: 's2', reason: 'claim', t: 1, boxes: [box('connector_open', [0.1, 0.1, 0.5, 0.5])], operator: { code: 'SECRETOP-07', level: 2 }, claim: 'SECRETCLAIM' };
+      const rv = id => ({ captureId: id, verdict: 'confirmed', note: 'SECRETNOTE' });
+      const before = (await req('GET', '/api/pool')).json;
+      // 1. a valid-looking contribution with an extra operator field, an out-of-range box, a symlinked jpg, a traversal id, a newline class.
+      const H = 'Hk-01-' + SID;
+      const hd = mkc(H, 's2', { contributor: 'Hk-01', classes: ['evil\nnames: x', 'a: b'] }, [
+        good,
+        Object.assign({}, good, { id: 'c0002', boxes: [box('connector_open', [0, 0, 2, 2])] }),
+        Object.assign({}, good, { id: 'c0003' }),
+        Object.assign({}, good, { id: '../../x' }),
+        Object.assign({}, good, { id: 'c0004', boxes: [box('red_wire\nnc: 99', [0.1, 0.1, 0.5, 0.5])] })
+      ], ['c0001', 'c0002', 'c0003', '../../x', 'c0004'].map(rv), ['c0001', 'c0002', 'c0004']);
+      fs.symlinkSync(path.join(OUT, 'secret.jpg'), path.join(hd, 'captures', 'c0003.jpg'));
+      // 2. folder name that is not contributor-sessionId; contributor with a traversal; a session id that is not one.
+      mkc('Hk-02-' + SID, 's2', { contributor: 'Zz-77' }, [good], [rv('c0001')], ['c0001']);
+      mkc('Hk-03-..', 's2', { contributor: 'Hk-03', sessionId: '..' }, [good], [rv('c0001')], ['c0001']);
+      // 3. a symlinked folder out of the pool
+      fs.mkdirSync(path.join(OUT, 'folder'), { recursive: true });
+      mkc('Hk-04-' + SID, 's2', { contributor: 'Hk-04' }, [good], [rv('c0001')], ['c0001']);
+      fs.cpSync(path.join(POOLDIR, 's2', 'Hk-04-' + SID), path.join(OUT, 'folder'), { recursive: true });
+      fs.rmSync(path.join(POOLDIR, 's2', 'Hk-04-' + SID), { recursive: true });
+      fs.symlinkSync(path.join(OUT, 'folder'), path.join(POOLDIR, 's2', 'Hk-04-' + SID));
+      // 4. a station that has no class list here, whose only classes come from the pool
+      mkc('Hk-05-' + SID, 's8', { contributor: 'Hk-05', station: 's8', classes: ['pool_only_class', 'x\ny: z'] }, [Object.assign({}, good, { role: 's8', station: 's8', boxes: [box('pool_only_class', [0.1, 0.1, 0.5, 0.5])] })], [rv('c0001')], ['c0001']);
+      // 5. session.json symlinked out of the pool
+      const d6 = mkc('Hk-06-' + SID, 's2', { contributor: 'Hk-06' }, [good], [rv('c0001')], ['c0001']);
+      fs.writeFileSync(path.join(OUT, 'session.json'), JSON.stringify({ version: 1, station: 's2', mode: 'home', contributor: 'Hk-06', sessionId: SID }));
+      fs.rmSync(path.join(d6, 'session.json')); fs.symlinkSync(path.join(OUT, 'session.json'), path.join(d6, 'session.json'));
+
+      const ap = await req('GET', '/api/pool'), apj = ap.json;
+      const hk = apj.contributions.filter(c => /^Hk-/.test(c.contributor));
+      check('hostile pool: only the one well-formed contribution is listed; the traversal, mismatch and symlinked ones are not', hk.length === 2 && hk.map(c => c.folder).sort().join() === H + ',Hk-05-' + SID, JSON.stringify(hk.map(c => c.folder)));
+      check('hostile pool: skipped is counted in the response', typeof apj.skipped === 'number' && apj.skipped >= (before.skipped || 0) + 4, String(apj.skipped));
+      const hc = hk.find(c => c.folder === H);
+      check('hostile pool: only the clean frame counts (out-of-range box, symlinked jpg, traversal id, newline class all refused)', hc.images === 1 && Object.keys(hc.byClass).join() === 'connector_open', JSON.stringify(hc));
+      check('hostile pool: nothing from the extra fields leaks through /api/pool', !/SECRET/.test(ap.text));
+      const sz = await req('GET', '/api/pool/s2/snapshot.zip');
+      check('hostile pool: the snapshot still builds', sz.status === 200, sz.status + sz.text.slice(0, 120));
+      const hz = readZip(sz.raw), hnames = hz.files.map(f => f.name);
+      check('hostile pool: every zip entry name is clean (no .., backslash, absolute path, odd characters)', hnames.every(n => /^[A-Za-z0-9_\-.\/]+$/.test(n) && !n.includes('..') && !n.startsWith('/') && !n.includes('//')), hnames.filter(n => !/^[A-Za-z0-9_\-.\/]+$/.test(n) || n.includes('..')).join());
+      const alltext = hz.files.map(f => f.data ? f.data.toString('latin1') : '').join('\n');
+      check('hostile pool: no operator, claim, note, outside file or foreign class text is in the zip', !/SECRET|evil|nc: 99|pool_only_class/.test(alltext));
+      const hy = hz.files.find(f => f.name === 'data.yaml').data.toString(), hman = JSON.parse(hz.files.find(f => f.name === 'manifest.json').data);
+      check('hostile pool: data.yaml has exactly this machine\'s classes and no extra lines', hy.split('\n').filter(l => /^ {2}\d+:/.test(l)).length === hman.classes.length && !/names: x|a: b/.test(hy));
+      check('hostile pool: the manifest reports skipped', typeof hman.skipped === 'number' && hman.skipped >= 4, String(hman.skipped));
+      check('hostile pool: only the hostile contribution\'s one clean frame is taken from it', Object.values(hman.images).filter(x => x.contributor === 'Hk-01').length === 1);
+      const s8 = await req('GET', '/api/pool/s8/snapshot.zip');
+      check('hostile pool: a station with no class list here is refused (4xx) rather than using the pool\'s classes', s8.status >= 400 && s8.status < 500 && !/pool_only_class/.test(s8.text), s8.status + ' ' + s8.text.slice(0, 120));
+      // a bad class name in this machine's own config is refused, not written to data.yaml
+      const cfgBad = JSON.parse(fs.readFileSync(CFGF, 'utf8')); const keep = cfgBad.models.s2.classes.slice(); cfgBad.models.s2.classes = keep.concat(['x\nnames: y']);
+      fs.writeFileSync(CFGF, JSON.stringify(cfgBad));
+      const sb = await req('GET', '/api/pool/s2/snapshot.zip');
+      check('a class name with a newline or colon in the config is refused with a 4xx', sb.status >= 400 && sb.status < 500, sb.status + ' ' + sb.text.slice(0, 120));
+      cfgBad.models.s2.classes = keep; fs.writeFileSync(CFGF, JSON.stringify(cfgBad));
+    }
 
     // A class list that changed since publishing: boxes with a class the list no longer has are dropped, and counted.
     const cfgNow = JSON.parse(fs.readFileSync(CFGF, 'utf8')); cfgNow.models.s2.classes = cfgNow.models.s2.classes.filter(c => c !== 'red_wire');

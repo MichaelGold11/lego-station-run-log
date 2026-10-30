@@ -166,9 +166,11 @@
   // Ultralytics resolves a relative "path" against its own datasets folder, so the training cell sets path to the
   // folder the zip was unpacked into.
   function dataYaml(classes) {
+    if (!Array.isArray(classes) || !classes.length || !classes.every(isClassName)) throw new Error('data.yaml: every class name must match ' + CLASS_NAME);
+    const q = c => /^[A-Za-z_][A-Za-z0-9_-]*( [A-Za-z0-9_-]+)*$/.test(c) && !/^(true|false|yes|no|on|off|null|y|n)$/i.test(c) ? c : JSON.stringify(c);
     return '# YOLO dataset from the wire line review page. Set path to the folder this zip was unpacked into.\n'
       + 'path: .\ntrain: train/images\nval: val/images\ntest: test/images\nnc: ' + classes.length + '\nnames:\n'
-      + classes.map((c, i) => '  ' + i + ': ' + c).join('\n') + '\n';
+      + classes.map((c, i) => '  ' + i + ': ' + q(c)).join('\n') + '\n';
   }
 
   // ---------- retention ----------
@@ -191,6 +193,8 @@
 
   // ---------- shared pool ----------
   // A contributor is a short code like "Mg-07" (letters, a dash, digits). Never a name.
+  const CLASS_NAME = /^[A-Za-z0-9_\- ]{1,60}$/;
+  const isClassName = v => typeof v === 'string' && CLASS_NAME.test(v);
   const CONTRIBUTOR = /^[A-Za-z]{1,4}-\d{1,3}$/;
   const POOL_MODES = ['home', 'group'];
   const isContributor = v => typeof v === 'string' && CONTRIBUTOR.test(v);
@@ -205,5 +209,5 @@
     return { pool: { dir: p.dir.trim() } };
   }
 
-  return { REASONS, VERDICTS, isContributor, cleanPool, POOL_MODES, MAX_BOXES, captureId, nextCaptureNumber, trainingName, classIndex, yoloLine, labelText, cleanBoxes, isJpeg, sha1, sessionSplit, crc32, zip, dataYaml, planSweep };
+  return { REASONS, VERDICTS, isContributor, isClassName, cleanPool, POOL_MODES, MAX_BOXES, captureId, nextCaptureNumber, trainingName, classIndex, yoloLine, labelText, cleanBoxes, isJpeg, sha1, sessionSplit, crc32, zip, dataYaml, planSweep };
 });

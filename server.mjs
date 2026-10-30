@@ -746,6 +746,7 @@ function trainingApi(req, res, p) {
 // img, lab, info }]. Both the local training set and the pool snapshot are built here.
 function yoloZip(role, classes, items, extra) {
   const entries = [], exported = {};
+  for (const it of items) if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,120}$/.test(it.name) || it.name.includes('..') || !['train', 'val', 'test'].includes(it.split)) throw new Error('Unsafe name in the export: ' + JSON.stringify(String(it.name).slice(0, 60)));
   for (const d of ['train', 'val', 'test']) for (const k of ['images', 'labels']) entries.push({ name: d + '/' + k + '/' });
   for (const it of items) {
     entries.push({ name: it.split + '/images/' + it.name + '.jpg', data: it.img }, { name: it.split + '/labels/' + it.name + '.txt', data: it.lab });
@@ -769,26 +770,69 @@ function poolDir() {
   if (d === '~' || d.startsWith('~/')) d = path.join(os.homedir(), d.slice(1));
   return { dir: path.resolve(ROOT, d) };
 }
+// Everything under the pool dir is UNTRUSTED (it is a shared Drive folder): names are validated, files must be real files whose
+// resolved path stays inside the pool dir, sizes are capped, boxes are re-validated. Anything else is skipped and counted.
+const POOL_TEXT_MAX = 8 * 1024 * 1024;
+function poolInside(rootReal, p) {
+  try {
+    const real = fs.realpathSync(p);
+    return real === rootReal || real.startsWith(rootReal + path.sep) ? real : null;
+  } catch (e) { return null; }
+}
+function poolReadLines(rootReal, f) {
+  const out = [];
+  const real = poolInside(rootReal, f);
+  if (!real) return out;
+  const st = fs.statSync(real);
+  if (!st.isFile() || st.size > POOL_TEXT_MAX) return out;
+  for (const line of fs.readFileSync(real, 'utf8').split('\n')) { if (!line.trim()) continue; try { out.push(JSON.parse(line)); } catch (e) { /* a torn line */ } }
+  return out;
+}
 // Every contribution: { station, folder, dirPath, meta (session.json), items: reviewed frames with their final boxes }.
+// The returned array has .skipped: how many contributions or frames were refused.
 function readPool(dir) {
   const out = [];
+  out.skipped = 0;
   if (!fs.existsSync(dir)) return out;
+  let rootReal;
+  try { rootReal = fs.realpathSync(dir); } catch (e) { return out; }
+  const isDir = p => { const l = fs.lstatSync(p); return l.isDirectory() && !l.isSymbolicLink(); };
   for (const station of fs.readdirSync(dir).sort()) {
     const sdirp = path.join(dir, station);
-    if (!STATION_ID.test(station) || !fs.statSync(sdirp).isDirectory()) continue;
+    if (station.startsWith('.')) continue;
+    if (!STATION_ID.test(station)) { out.skipped++; continue; }
+    if (!isDir(sdirp) || !poolInside(rootReal, sdirp)) { out.skipped++; continue; }
     for (const folder of fs.readdirSync(sdirp).sort()) {
+      if (folder.startsWith('.')) continue;
       const dirPath = path.join(sdirp, folder);
-      if (folder.startsWith('.') || !fs.statSync(dirPath).isDirectory()) continue;
+      if (!isDir(dirPath) || !poolInside(rootReal, dirPath)) { out.skipped++; continue; }
       let meta;
-      try { meta = readJson(path.join(dirPath, 'session.json')); } catch (e) { continue; }
-      if (!meta || meta.station !== station || !CaptureLib.isContributor(meta.contributor) || !CaptureLib.POOL_MODES.includes(meta.mode)) continue;
+      try {
+        const mf = poolInside(rootReal, path.join(dirPath, 'session.json'));
+        meta = mf && fs.statSync(mf).isFile() && fs.statSync(mf).size <= POOL_TEXT_MAX ? JSON.parse(fs.readFileSync(mf, 'utf8')) : null;
+      } catch (e) { meta = null; }
+      if (!meta || typeof meta !== 'object' || meta.station !== station || !CaptureLib.isContributor(meta.contributor) || !CaptureLib.POOL_MODES.includes(meta.mode)
+        || typeof meta.sessionId !== 'string' || !SESSION_ID.test(meta.sessionId) || folder !== meta.contributor + '-' + meta.sessionId) { out.skipped++; continue; }
       const rv = new Map();
-      for (const r of readLines(path.join(dirPath, 'review.jsonl'))) if (r && typeof r.captureId === 'string') rv.set(r.captureId, r);
-      const items = [];
-      for (const cap of readLines(path.join(dirPath, 'captures.jsonl'))) {
-        const r = rv.get(cap.id), jpg = path.join(dirPath, 'captures', cap.id + '.jpg');
-        if (!r || r.verdict === 'unsure' || !CAPTURE_ID.test(String(cap.id)) || !fs.existsSync(jpg)) continue;
-        items.push({ cap, review: r, jpg, boxes: r.verdict === 'rejected' ? [] : r.verdict === 'corrected' ? (r.boxes || []) : (cap.boxes || []) });
+      for (const r of poolReadLines(rootReal, path.join(dirPath, 'review.jsonl'))) if (r && typeof r.captureId === 'string' && CAPTURE_ID.test(r.captureId)) rv.set(r.captureId, r);
+      const items = [], seen = new Set();
+      for (const cap of poolReadLines(rootReal, path.join(dirPath, 'captures.jsonl'))) {
+        if (!cap || typeof cap !== 'object' || typeof cap.id !== 'string' || !CAPTURE_ID.test(cap.id) || seen.has(cap.id)) { out.skipped++; continue; }
+        seen.add(cap.id);
+        const r = rv.get(cap.id);
+        if (!r || r.verdict === 'unsure') continue;
+        if (!CaptureLib.VERDICTS.includes(r.verdict)) { out.skipped++; continue; }
+        const jpg = poolInside(rootReal, path.join(dirPath, 'captures', cap.id + '.jpg'));
+        let ok = !!jpg;
+        if (ok) { const st = fs.statSync(jpg); ok = st.isFile() && st.size > 0 && st.size <= CAPTURE_IMAGE_MAX; }
+        if (!ok) { out.skipped++; continue; }
+        let boxes = [];
+        if (r.verdict !== 'rejected') {
+          const cb = CaptureLib.cleanBoxes(r.verdict === 'corrected' ? r.boxes : cap.boxes);
+          if (cb.error || cb.boxes.some(b => !CaptureLib.isClassName(b.cls))) { out.skipped++; continue; }
+          boxes = cb.boxes;
+        }
+        items.push({ cap: { id: cap.id, reason: typeof cap.reason === 'string' ? cap.reason.slice(0, 40) : '' }, review: { verdict: r.verdict }, jpg, boxes });
       }
       out.push({ station, folder, dirPath, meta, items });
     }
@@ -796,7 +840,7 @@ function readPool(dir) {
   return out;
 }
 function poolCounts(list) {
-  const byClass = {};
+  const byClass = Object.create(null);
   let images = 0, negatives = 0;
   for (const c of list) for (const it of c.items) {
     images++;
@@ -821,10 +865,21 @@ function poolSummary(all, dir) {
     for (const mode of CaptureLib.POOL_MODES) { const ms = mine.filter(c => c.meta.mode === mode); if (ms.length) st.byMode[mode] = Object.assign({ contributions: ms.length }, poolCounts(ms)); }
   }
   return {
-    dir, stations,
+    dir, stations, skipped: all.skipped || 0,
     contributions: all.map(c => Object.assign({ station: c.station, folder: c.folder, contributor: c.meta.contributor, mode: c.meta.mode, sessionId: c.meta.sessionId, publishedAt: c.meta.publishedAt }, poolCounts([c])))
   };
 }
+
+// What leaves this machine: an allowlist, never the whole record (no operator, station name, claim, substep, video file or note).
+function poolCapture(c, body) {
+  const o = { id: c.id, role: c.role, station: c.station, reason: c.reason, t: c.t };
+  if (c.cycle != null) o.cycle = c.cycle;
+  o.mode = body.mode; o.contributor = body.contributor; o.boxes = c.boxes || [];
+  if (c.model) o.model = { file: c.model.file, version: c.model.version };
+  if (c.standard != null) o.standard = c.standard;
+  return o;
+}
+function poolReview(r) { return { captureId: r.captureId, verdict: r.verdict, boxes: r.boxes || [], reviewedAt: r.reviewedAt }; }
 
 // POST /api/sessions/<id>/pool { contributor, mode, station? }: one immutable folder per station (role) that has reviewed frames.
 async function publishToPool(req, res, id, doc, dir) {
@@ -854,8 +909,8 @@ async function publishToPool(req, res, id, doc, dir) {
     try {
       fs.mkdirSync(path.join(tmp, 'captures'), { recursive: true });
       for (const c of caps) fs.copyFileSync(path.join(dir, 'captures', c.id + '.jpg'), path.join(tmp, 'captures', c.id + '.jpg'));
-      fs.writeFileSync(path.join(tmp, 'captures.jsonl'), caps.map(c => JSON.stringify(c) + '\n').join(''));
-      fs.writeFileSync(path.join(tmp, 'review.jsonl'), caps.map(c => JSON.stringify(reviews.get(c.id)) + '\n').join(''));
+      fs.writeFileSync(path.join(tmp, 'captures.jsonl'), caps.map(c => JSON.stringify(poolCapture(c, body))  + '\n').join(''));
+      fs.writeFileSync(path.join(tmp, 'review.jsonl'), caps.map(c => JSON.stringify(poolReview(reviews.get(c.id))) + '\n').join(''));
       // Nothing that names a person: no title, crew, notes or operator codes ride along in session.json.
       fs.writeFileSync(path.join(tmp, 'session.json'), JSON.stringify({ version: 1, station: role, mode: body.mode, contributor: body.contributor, sessionId: id, publishedAt, startedAt: doc.startedAt, endedAt: doc.endedAt || null, classes: roleClasses(cfg, role) || [], captures: caps.length }, null, 2) + '\n');
       fs.renameSync(tmp, targets[i]);
@@ -878,13 +933,14 @@ function poolApi(req, res, p, url) {
   if (!m) return fail(res, 404, 'not_found', 'Nothing here.');
   const role = m[1], holdout = url.searchParams.get('holdout');
   if (holdout != null && !CaptureLib.isContributor(holdout)) return fail(res, 400, 'invalid_argument', 'holdout must be a contributor code like Mg-07.');
-  const mine = readPool(pd.dir).filter(c => c.station === role);
+  const all = readPool(pd.dir), mine = all.filter(c => c.station === role);
   if (!mine.some(c => c.items.length)) return fail(res, 404, 'not_found', 'No reviewed frames for ' + role + ' in the pool yet.');
   const hold = holdout && holdout.toLowerCase();
   if (hold && !mine.some(c => c.meta.contributor.toLowerCase() === hold)) return fail(res, 400, 'invalid_argument', 'Nobody with code ' + holdout + ' has published ' + role + ' frames.');
   if (hold && mine.every(c => c.meta.contributor.toLowerCase() === hold)) return fail(res, 409, 'nothing_left', 'Holding out ' + holdout + ' leaves nothing to train on.');
-  const classes = roleClasses(lineConfig() || {}, role) || (mine.find(c => Array.isArray(c.meta.classes) && c.meta.classes.length) || { meta: {} }).meta.classes;
+  const classes = roleClasses(lineConfig() || {}, role);   // only this machine's config: the pool's own class lists are never used
   if (!classes || !classes.length) return fail(res, 409, 'no_classes', 'No class list for ' + role + ' (set models.' + role + '.classes or suggestedClasses in wire-line.json).');
+  if (!classes.every(CaptureLib.isClassName)) return fail(res, 409, 'no_classes', 'The class list for ' + role + ' has a name with characters other than letters, digits, space, dash and underscore.');
   const pinned = readSplits(), items = [], units = {};
   let dropped = 0;
   for (const c of mine) {
@@ -901,7 +957,7 @@ function poolApi(req, res, p, url) {
     (units[split] = units[split] || []).push(c.folder);
   }
   let zip;
-  try { zip = yoloZip(role, classes, items, { source: 'pool', holdout: holdout || null, contributions: units, droppedBoxes: dropped }); } catch (e) { return fail(res, 500, 'unavailable', String(e.message || e)); }
+  try { zip = yoloZip(role, classes, items, { source: 'pool', holdout: holdout || null, contributions: units, droppedBoxes: dropped, skipped: all.skipped }); } catch (e) { return fail(res, 500, 'unavailable', String(e.message || e)); }
   return send(res, 200, zip, 'application/zip', { 'Content-Disposition': `attachment; filename="${role}-pool-snapshot.zip"` });
 }
 
