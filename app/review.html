@@ -254,6 +254,7 @@ html { scroll-padding-top: 64px; }
     try {
       const [doc, cj] = await Promise.all([getJson('/api/sessions/' + encodeURIComponent(id)), getJson('/api/sessions/' + encodeURIComponent(id) + '/captures')]);
       S.doc = doc; S.caps = cj.captures || []; S.split = cj.split || null;
+      if ($('poolMode') && (doc.mode === 'home' || S.caps.some(c => c.mode === 'home'))) $('poolMode').value = 'home';
     } catch (e) { main.innerHTML = '<div class="banner bad">Could not open this session. ' + esc(e.message) + '</div>'; return; }
     S.cur = null;
     render();
