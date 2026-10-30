@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Review frames</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Saira:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #eef0ee; --surface: #fcfcfb; --surface-2: #f3f4f2; --sunk: #e4e7e4;
+  --ink: #15181b; --ink-2: #4a4f56; --muted: #767b83; --line: #dcdfdc; --line-2: #c5c9c5;
+  --accent: #a3522a; --accent-2: #8a4321; --on-accent: #ffffff; --accent-wash: rgba(163, 82, 42, .09);
+  --good: #0ca30c; --good-ink: #006300; --warn: #fab219; --warn-ink: #7a5200; --crit: #d03b3b; --crit-ink: #b02e2e;
+  --shadow: 0 1px 2px rgba(21, 24, 27, .06);
+  --f-ui: "Saira", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101214; --surface: #181a1d; --surface-2: #1f2225; --sunk: #0c0d0f;
+    --ink: #eff1ef; --ink-2: #bfc3c8; --muted: #8a8f96; --line: #2a2e33; --line-2: #3a3f45;
+    --accent: #dc8b55; --accent-2: #e9a273; --on-accent: #15181b; --accent-wash: rgba(220, 139, 85, .14);
+    --good-ink: #3fbf3f; --warn-ink: #fab219; --crit-ink: #e66767;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .35);
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { color-scheme: light; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-ui); font-size: 14px; line-height: 1.4; }
+h1, h2, h3 { margin: 0; font-weight: 600; }
+p { margin: 0; }
+a { color: var(--accent-2); }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 5px 12px; min-height: 34px; border-radius: 6px; border: 1px solid var(--line-2); background: var(--surface); cursor: pointer; font-weight: 500; font-size: 13.5px; white-space: nowrap; text-decoration: none; color: var(--ink); }
+.btn:hover { border-color: var(--ink-2); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
+.btn.sm { padding: 2px 9px; min-height: 28px; font-size: 12.5px; }
+.btn.on { background: var(--accent-wash); border-color: var(--accent); color: var(--accent-2); }
+.btn.pass { border-color: color-mix(in srgb, var(--good) 60%, var(--line-2)); color: var(--good-ink); }
+.btn.fail { border-color: color-mix(in srgb, var(--crit) 55%, var(--line-2)); color: var(--crit-ink); }
+.btn.pass.on { background: color-mix(in srgb, var(--good) 14%, var(--surface)); }
+.btn.fail.on { background: color-mix(in srgb, var(--crit) 12%, var(--surface)); }
+kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2); border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; color: var(--ink-2); }
+.chip { display: inline-block; font-size: 11px; font-weight: 600; padding: 0 7px; border-radius: 4px; border: 1px solid var(--line-2); color: var(--ink-2); white-space: nowrap; line-height: 18px; }
+.chip.good { border-color: color-mix(in srgb, var(--good) 60%, var(--line-2)); color: var(--good-ink); }
+.chip.bad { border-color: color-mix(in srgb, var(--crit) 55%, var(--line-2)); color: var(--crit-ink); }
+.chip.warn { border-color: color-mix(in srgb, var(--warn) 70%, var(--line-2)); color: var(--warn-ink); }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); }
+.pad { padding: 12px 14px; }
+
+.top { position: sticky; top: 0; z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); padding: 8px 16px; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.top h1 { font-size: 17px; }
+.top .sp { flex: 1; }
+main { max-width: 1180px; margin: 0 auto; padding: 14px 16px 80px; display: grid; gap: 14px; }
+.banner { padding: 10px 14px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--surface-2); color: var(--ink-2); }
+.banner.bad { border-color: color-mix(in srgb, var(--crit) 50%, transparent); background: color-mix(in srgb, var(--crit) 8%, var(--surface)); color: var(--ink); }
+
+.slist { display: grid; gap: 10px; }
+.srow { display: grid; gap: 6px; padding: 12px 14px; text-decoration: none; color: inherit; }
+.srow:hover { border-color: var(--ink-2); }
+.srow .h { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.srow .h b { font-size: 15px; }
+.rates { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; color: var(--ink-2); }
+.bar { height: 8px; border-radius: 4px; background: var(--sunk); overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--good); }
+
+.prog { display: grid; gap: 6px; }
+.prog .row { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+.filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.grp { display: grid; gap: 8px; }
+.grp h2 { font-size: 15px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.grp h3 { font-size: 12.5px; color: var(--ink-2); font-weight: 600; margin-top: 4px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.card { display: grid; gap: 8px; padding: 10px; align-content: start; scroll-margin-top: 70px; }
+.card.cur { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-wash); }
+.card.v-confirmed { border-left: 4px solid var(--good); }
+.card.v-corrected { border-left: 4px solid var(--accent); }
+.card.v-rejected { border-left: 4px solid var(--crit); }
+.card.v-unsure { border-left: 4px solid var(--warn); }
+.shot { position: relative; background: var(--sunk); border-radius: 6px; overflow: hidden; line-height: 0; }
+.shot img { width: 100%; height: auto; display: block; }
+.shot svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.claim { font-size: 14px; font-weight: 500; }
+.meta { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; font-size: 12px; color: var(--ink-2); }
+.acts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.acts .btn { min-height: 42px; }
+.acts2 { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--ink-2); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+
+.modal { position: fixed; inset: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 88%, transparent); overflow: auto; padding: 12px; }
+.modal .box { max-width: 900px; margin: 0 auto; display: grid; gap: 10px; }
+.editor { position: relative; background: var(--sunk); border-radius: 6px; overflow: hidden; line-height: 0; touch-action: none; user-select: none; cursor: crosshair; }
+.editor img { width: 100%; height: auto; display: block; pointer-events: none; }
+.editor svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.blist { display: grid; gap: 6px; }
+.brow { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.brow.off { opacity: .55; }
+.brow .sw { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.brow select { padding: 4px 6px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--surface); min-height: 32px; }
+.brow .sp { flex: 1; }
+.toast { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 30; background: var(--ink); color: var(--surface); padding: 8px 14px; border-radius: 8px; font-size: 13px; max-width: 90vw; }
+.toast.err { background: var(--crit); color: #fff; }
+@media (max-width: 560px) {
+  main { padding: 10px 10px 80px; }
+  .grid { grid-template-columns: 1fr; }
+  .top { padding: 8px 10px; }
+  .kbdhint { display: none; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Review frames</h1>
+  <a class="btn sm" href="/line" id="backLine">Back to the line</a>
+  <a class="btn sm" href="#" id="backList" hidden>All sessions</a>
+  <span class="sp"></span>
+  <span class="muted kbdhint"><kbd>C</kbd> right <kbd>W</kbd> wrong <kbd>U</kbd> not sure <kbd>F</kbd> fix boxes <kbd>N</kbd> next unreviewed</span>
+</header>
+<main id="main"><div class="muted">Loading...</div></main>
+<div id="modal" class="modal" hidden></div>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const PALETTE = ['#e4572e', '#17bebb', '#f0b429', '#7a5af8', '#2e9e44', '#d6409f', '#2d7dd2', '#a3522a'];
+  const colorMemo = {};
+  // A class keeps one color across the page (by its position among the classes seen so far).
+  function colorOf(cls) { if (!colorMemo[cls]) colorMemo[cls] = PALETTE[Object.keys(colorMemo).length % PALETTE.length]; return colorMemo[cls]; }
+  const mmss = t => { t = Math.max(0, Math.floor(Number(t) || 0)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
+  const REASON = { claim: 'step claim', unsure: 'unsure moment', cycle_end: 'cycle end', cycle_start: 'cycle start', stalled: 'stalled', sample: 'random sample', manual: 'manual' };
+  const VERDICT_LABEL = { confirmed: 'Right', corrected: 'Fixed', rejected: 'Wrong', unsure: 'Not sure' };
+
+  let toastTimer = 0;
+  function toast(msg, err) { const t = $('toast'); t.textContent = msg; t.className = 'toast' + (err ? ' err' : ''); t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, err ? 6000 : 2200); }
+  async function getJson(url) {
+    const r = await fetch(url, { cache: 'no-store' });
+    const j = await r.json().catch(() => null);
+    if (!r.ok) throw new Error((j && j.error && j.error.message) || (j && j.message) || ('HTTP ' + r.status));
+    return j;
+  }
+  async function postJson(url, body) {
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => null);
+    if (!r.ok) throw new Error((j && j.error && j.error.message) || (j && j.message) || ('HTTP ' + r.status));
+    return j;
+  }
+
+  // ---------- numbers ----------
+  const iou = (a, b) => {
+    const w = Math.min(a[2], b[2]) - Math.max(a[0], b[0]), h = Math.min(a[3], b[3]) - Math.max(a[1], b[1]);
+    if (w <= 0 || h <= 0) return 0;
+    const i = w * h, u = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - i;
+    return u > 0 ? i / u : 0;
+  };
+  // Per class: of the model's boxes on reviewed frames, how many a person kept. Unsure frames do not count.
+  function hitRates(caps) {
+    const per = {};
+    for (const c of caps) {
+      const rv = c.review;
+      if (!rv || rv.verdict === 'unsure') continue;
+      for (const b of c.boxes || []) {
+        const e = per[b.cls] = per[b.cls] || { right: 0, total: 0 };
+        e.total++;
+        if (rv.verdict === 'confirmed') e.right++;
+        else if (rv.verdict === 'corrected' && (rv.boxes || []).some(f => f.cls === b.cls && iou(f.nbox, b.nbox) >= 0.5)) e.right++;
+      }
+    }
+    return per;
+  }
+  const reviewedCount = caps => caps.filter(c => c.review).length;
+  const ratesHtml = per => {
+    const k = Object.keys(per).sort();
+    if (!k.length) return '<span class="muted">No class numbers yet.</span>';
+    return k.map(c => `<span><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${colorOf(c)};margin-right:4px"></i>${esc(c)} <b class="mono">${Math.round(100 * per[c].right / per[c].total)}%</b> right <span class="muted mono">(${per[c].right}/${per[c].total})</span></span>`).join('');
+  };
+
+  // ---------- state ----------
+  const S = { id: null, doc: null, caps: [], split: null, cur: null, filter: 'all', station: 'all' };
+
+  // ---------- session list ----------
+  async function showList() {
+    S.id = null; $('backList').hidden = true;
+    const main = $('main');
+    main.innerHTML = '<div class="muted">Loading sessions...</div>';
+    let sessions;
+    try { sessions = (await getJson('/api/sessions')).sessions || []; } catch (e) { main.innerHTML = '<div class="banner bad">The local server is not answering. ' + esc(e.message) + '</div>'; return; }
+    if (!sessions.length) { main.innerHTML = '<div class="banner">No sessions yet. Record one on the line, and its captured frames show up here.</div>'; return; }
+    main.innerHTML = '<div class="slist" id="slist"></div>';
+    const list = $('slist');
+    for (const s of sessions) {
+      const a = document.createElement('a');
+      a.className = 'panel srow'; a.href = '#s=' + encodeURIComponent(s.id);
+      a.innerHTML = `<div class="h"><b>${esc(s.title || s.id)}</b><span class="mono muted">${esc(s.id)}</span><span class="muted">${s.startedAt ? esc(new Date(s.startedAt).toLocaleString()) : ''}</span></div><div class="muted">Loading captures...</div>`;
+      list.appendChild(a);
+      getJson('/api/sessions/' + encodeURIComponent(s.id) + '/captures').then(j => {
+        const caps = j.captures || [], n = reviewedCount(caps);
+        if (!caps.length) { a.lastElementChild.outerHTML = '<div class="muted">No captures in this session.</div>'; return; }
+        a.lastElementChild.outerHTML = `<div class="mono">${caps.length} capture${caps.length === 1 ? '' : 's'}, ${n} reviewed${j.split === 'test' ? ' <span class="chip warn">held out as test</span>' : ''}</div>` +
+          `<div class="bar"><i style="width:${caps.length ? Math.round(100 * n / caps.length) : 0}%"></i></div><div class="rates">${ratesHtml(hitRates(caps))}</div>`;
+      }).catch(() => { a.lastElementChild.textContent = 'Could not read the captures.'; });
+    }
+  }
+
+  // ---------- one session ----------
+  function classesFor(role) {
+    const c = S.doc && S.doc.config || {};
+    const m = c.models && c.models[role], s = c.suggestedClasses && c.suggestedClasses[role];
+    return m && Array.isArray(m.classes) && m.classes.length ? m.classes : Array.isArray(s) && s.length ? s : [];
+  }
+  function videoUrl(cap) {
+    const vids = (S.doc && S.doc.videos) || [];
+    const v = vids.find(x => x.station === cap.station && x.file === cap.videoFile) || vids.find(x => x.station === cap.station);
+    if (!v || cap.videoT == null) return null;
+    return '/api/sessions/' + encodeURIComponent(S.id) + '/video/' + encodeURIComponent(cap.station) + (v.part > 1 ? '?part=' + v.part : '') + '#t=' + cap.videoT;
+  }
+  // The claim in plain words. The page stores it as text; fall back to the step name.
+  function claimText(c) { return c.claim || (c.substep ? 'The step "' + c.substep.replace(/_/g, ' ') + '" is happening here.' : 'What is happening here?'); }
+
+  function boxesSvg(boxes) {
+    return '<svg viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">' + (boxes || []).map(b => {
+      const [x1, y1, x2, y2] = b.nbox, col = colorOf(b.cls);
+      return `<rect x="${x1 * 1000}" y="${y1 * 1000}" width="${(x2 - x1) * 1000}" height="${(y2 - y1) * 1000}" fill="none" stroke="${col}" stroke-width="4" vector-effect="non-scaling-stroke"/>`;
+    }).join('') + '</svg>';
+  }
+  const legend = boxes => { const k = [...new Set((boxes || []).map(b => b.cls))]; return k.length ? '<div class="legend">' + k.map(c => `<span><i style="background:${colorOf(c)}"></i>${esc(c)}</span>`).join('') + '</div>' : '<div class="legend muted">No boxes on this frame.</div>'; };
+
+  async function showSession(id) {
+    S.id = id; $('backList').hidden = false;
+    const main = $('main');
+    main.innerHTML = '<div class="muted">Loading...</div>';
+    try {
+      const [doc, cj] = await Promise.all([getJson('/api/sessions/' + encodeURIComponent(id)), getJson('/api/sessions/' + encodeURIComponent(id) + '/captures')]);
+      S.doc = doc; S.caps = cj.captures || []; S.split = cj.split || null;
+    } catch (e) { main.innerHTML = '<div class="banner bad">Could not open this session. ' + esc(e.message) + '</div>'; return; }
+    S.cur = null;
+    render();
+    nextUnreviewed(true);
+  }
+
+  function visible() {
+    return S.caps.filter(c => (S.station === 'all' || c.station === S.station) && (S.filter === 'all' || (S.filter === 'todo' ? !c.review : c.review && c.review.verdict === S.filter)));
+  }
+
+  function render() {
+    const main = $('main'), caps = S.caps, n = reviewedCount(caps);
+    const stations = [...new Set(caps.map(c => c.station))].sort();
+    const head = `<section class="panel pad prog">
+      <div class="row"><b>${esc(S.doc.title || S.id)}</b><span class="mono muted">${esc(S.id)}</span>${S.split === 'test' ? '<span class="chip warn">held out as test</span>' : ''}<span class="sp" style="flex:1"></span>
+        <button class="btn sm ${S.split === 'test' ? 'on' : ''}" id="btnPin" type="button" title="A test session is kept out of training and used only to score a new model">${S.split === 'test' ? 'Release from test' : 'Hold out as test'}</button></div>
+      <div class="mono">${caps.length} capture${caps.length === 1 ? '' : 's'}, ${n} reviewed${caps.length ? ' (' + Math.round(100 * n / caps.length) + '%)' : ''}</div>
+      <div class="bar"><i style="width:${caps.length ? Math.round(100 * n / caps.length) : 0}%"></i></div>
+      <div class="rates">${ratesHtml(hitRates(caps))}</div>
+      <div class="row"><button class="btn primary" id="btnNext" type="button">Next unreviewed <kbd>N</kbd></button>
+        <div class="filters" id="filters"></div></div>
+    </section>`;
+    if (!caps.length) { main.innerHTML = head + '<div class="banner">This session has no captured frames. Capture runs while a session records; the manual capture key is X.</div>'; wireHead(); return; }
+    main.innerHTML = head + '<div id="groups"></div>';
+    renderFilters(stations);
+    renderGroups();
+    wireHead();
+  }
+
+  function renderFilters(stations) {
+    const f = [['all', 'All'], ['todo', 'To review'], ['confirmed', 'Right'], ['corrected', 'Fixed'], ['rejected', 'Wrong'], ['unsure', 'Not sure']];
+    $('filters').innerHTML = f.map(([k, l]) => `<button class="btn sm ${S.filter === k ? 'on' : ''}" data-f="${k}" type="button">${l}</button>`).join('') +
+      (stations.length > 1 ? '<select id="stSel" aria-label="Station" style="padding:3px 6px;border:1px solid var(--line-2);border-radius:6px;background:var(--surface);min-height:28px"><option value="all">All stations</option>' + stations.map(s => `<option value="${esc(s)}" ${S.station === s ? 'selected' : ''}>${esc(stationName(s))}</option>`).join('') + '</select>' : '');
+    $('filters').querySelectorAll('[data-f]').forEach(b => { b.onclick = () => { S.filter = b.dataset.f; renderFilters(stations); renderGroups(); }; });
+    const sel = $('stSel'); if (sel) sel.onchange = () => { S.station = sel.value; renderGroups(); };
+  }
+  function stationName(id) { const c = S.caps.find(x => x.station === id); return (c && c.stationName) || id; }
+
+  function renderGroups() {
+    const root = $('groups'), list = visible();
+    if (!list.length) { root.innerHTML = '<div class="banner">Nothing matches this filter.</div>'; return; }
+    const byStation = {};
+    for (const c of list) { const s = byStation[c.station] = byStation[c.station] || {}; const k = c.substep || '(no step)'; (s[k] = s[k] || []).push(c); }
+    root.innerHTML = Object.keys(byStation).sort().map(st => {
+      const all = S.caps.filter(c => c.station === st), done = reviewedCount(all);
+      return `<div class="grp"><h2>${esc(stationName(st))} <span class="muted mono" style="font-size:12.5px;font-weight:400">${done}/${all.length} reviewed</span></h2>` +
+        Object.keys(byStation[st]).map(step => `<h3>${esc(step.replace(/_/g, ' '))}</h3><div class="grid">${byStation[st][step].map(cardHtml).join('')}</div>`).join('') + '</div>';
+    }).join('');
+    root.querySelectorAll('.card').forEach(el => {
+      const id = el.dataset.id;
+      el.addEventListener('pointerdown', () => setCur(id, false));
+      el.querySelectorAll('[data-a]').forEach(b => { b.onclick = () => act(id, b.dataset.a); });
+    });
+    markCur();
+  }
+
+  function cardHtml(c) {
+    const rv = c.review, url = videoUrl(c), shown = rv && rv.verdict === 'corrected' ? rv.boxes : c.boxes;
+    const v = rv ? rv.verdict : '';
+    return `<article class="panel card ${rv ? 'v-' + v : ''}" data-id="${esc(c.id)}" tabindex="0">
+      <div class="shot"><img src="/api/sessions/${encodeURIComponent(S.id)}/captures/${encodeURIComponent(c.id)}.jpg" alt="Frame ${esc(c.id)}" loading="lazy">${boxesSvg(shown)}</div>
+      ${legend(shown)}
+      <div class="claim">${esc(claimText(c))}</div>
+      <div class="meta"><span class="chip">${esc(REASON[c.reason] || c.reason)}</span>${c.cycle != null ? `<span class="mono">cycle ${esc(c.cycle)}</span>` : ''}
+        ${url ? `<a href="${url}" target="_blank" rel="noopener">Play at ${mmss(c.videoT)}</a>` : '<span class="muted">no video</span>'}
+        ${rv ? `<span class="chip ${v === 'confirmed' ? 'good' : v === 'rejected' ? 'bad' : v === 'unsure' ? 'warn' : ''}">${esc(VERDICT_LABEL[v])}</span>` : ''}</div>
+      <div class="acts">
+        <button class="btn pass ${v === 'confirmed' ? 'on' : ''}" data-a="C" type="button">Right <kbd>C</kbd></button>
+        <button class="btn fail ${v === 'rejected' ? 'on' : ''}" data-a="W" type="button">Wrong <kbd>W</kbd></button>
+        <button class="btn ${v === 'unsure' ? 'on' : ''}" data-a="U" type="button">Not sure <kbd>U</kbd></button>
+      </div>
+      <div class="acts2"><button class="btn sm" data-a="F" type="button">Fix boxes <kbd>F</kbd></button></div>
+    </article>`;
+  }
+
+  function wireHead() {
+    $('btnNext').onclick = () => nextUnreviewed(false);
+    $('btnPin').onclick = async () => {
+      const to = S.split === 'test' ? null : 'test';
+      try { await postJson('/api/sessions/' + encodeURIComponent(S.id) + '/split', { split: to }); S.split = to; render(); toast(to ? 'Held out as a test session.' : 'Released from test.'); } catch (e) { toast('Could not change the split. ' + e.message, true); }
+    };
+  }
+
+  // ---------- current card, next unreviewed ----------
+  function markCur() { document.querySelectorAll('.card').forEach(el => el.classList.toggle('cur', el.dataset.id === S.cur)); }
+  function setCur(id, scroll) {
+    S.cur = id; markCur();
+    if (scroll) { const el = document.querySelector('.card[data-id="' + id + '"]'); if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  }
+  function nextUnreviewed(quiet) {
+    const list = visible(); if (!list.length) return;
+    const i = Math.max(0, list.findIndex(c => c.id === S.cur));
+    const order = list.slice(i + 1).concat(list.slice(0, i + 1));
+    const pick = order.find(c => !c.review);
+    if (!pick) { if (!quiet) toast('Every frame in this view is reviewed.'); return; }
+    setCur(pick.id, true);
+  }
+  function step(d) {
+    const list = visible(); if (!list.length) return;
+    const i = list.findIndex(c => c.id === S.cur);
+    setCur(list[Math.min(list.length - 1, Math.max(0, i < 0 ? 0 : i + d))].id, true);
+  }
+
+  // ---------- outcomes ----------
+  async function sendReview(cap, verdict, boxes) {
+    const body = { captureId: cap.id, verdict };
+    if (verdict === 'corrected') body.boxes = boxes;
+    const j = await postJson('/api/sessions/' + encodeURIComponent(S.id) + '/review', body);
+    cap.review = { captureId: cap.id, verdict, boxes: verdict === 'corrected' ? boxes : verdict === 'confirmed' ? (cap.boxes || []).map(b => ({ cls: b.cls, nbox: b.nbox })) : [], reviewedAt: new Date().toISOString() };
+    return j;
+  }
+  async function act(id, key) {
+    const cap = S.caps.find(c => c.id === id); if (!cap) return;
+    S.cur = id;
+    if (key === 'F') return openEditor(cap);
+    const verdict = { C: 'confirmed', W: 'rejected', U: 'unsure' }[key];
+    if (!verdict) return;
+    try {
+      await sendReview(cap, verdict);
+      toast(VERDICT_LABEL[verdict] + ' saved.');
+      refreshAfter(id);
+    } catch (e) { toast('Not saved. ' + e.message, true); }
+  }
+  // After a save: redraw, and when the view only shows unreviewed frames move on to the next one.
+  function refreshAfter(id) {
+    const y = window.scrollY;
+    render();
+    window.scrollTo(0, y);
+    setCur(id, false);
+    nextUnreviewed(true);
+  }
+
+  // ---------- box editor ----------
+  const E = { cap: null, boxes: [], drag: null, classes: [], pick: '' };
+  function openEditor(cap) {
+    E.cap = cap; E.classes = classesFor(cap.role);
+    const base = cap.review && cap.review.verdict === 'corrected' ? cap.review.boxes : cap.boxes;
+    E.boxes = (base || []).map(b => ({ cls: b.cls, nbox: b.nbox.slice(), on: true, conf: b.conf }));
+    // A class the model produced stays available even if the list does not have it.
+    for (const b of E.boxes) if (!E.classes.includes(b.cls)) E.classes = E.classes.concat(b.cls);
+    E.pick = E.classes[0] || '';
+    const m = $('modal'); m.hidden = false; document.body.style.overflow = 'hidden';
+    m.innerHTML = `<div class="box panel pad">
+      <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>Fix boxes</b><span class="muted">${esc(claimText(cap))}</span><span style="flex:1"></span>
+        <button class="btn" id="edCancel" type="button">Cancel <kbd>Esc</kbd></button><button class="btn primary" id="edSave" type="button">Save fix</button></div>
+      <div class="muted">Untick a box to remove it. Change a box's class from the list. To add a missing box, pick its class, then drag on the picture.</div>
+      <div class="editor" id="edImg"><img src="/api/sessions/${encodeURIComponent(S.id)}/captures/${encodeURIComponent(cap.id)}.jpg" alt=""><svg id="edSvg" viewBox="0 0 1000 1000" preserveAspectRatio="none"></svg></div>
+      <div class="brow"><span>New box class</span><select id="edPick">${E.classes.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}</select><span class="muted">then drag on the picture</span></div>
+      <div class="blist" id="edList"></div>
+    </div>`;
+    $('edPick').onchange = e => { E.pick = e.target.value; };
+    $('edCancel').onclick = closeEditor;
+    $('edSave').onclick = saveEditor;
+    wireDraw();
+    drawEditor();
+  }
+  function closeEditor() { $('modal').hidden = true; $('modal').innerHTML = ''; document.body.style.overflow = ''; E.cap = null; }
+  function drawEditor() {
+    $('edSvg').innerHTML = E.boxes.map((b, i) => {
+      const [x1, y1, x2, y2] = b.nbox, col = colorOf(b.cls);
+      return `<rect x="${x1 * 1000}" y="${y1 * 1000}" width="${(x2 - x1) * 1000}" height="${(y2 - y1) * 1000}" fill="${b.on ? 'none' : 'rgba(0,0,0,.25)'}" stroke="${col}" stroke-width="${b.on ? 4 : 2}" stroke-dasharray="${b.on ? '' : '8 6'}" vector-effect="non-scaling-stroke"/><text x="${x1 * 1000 + 6}" y="${y1 * 1000 + 30}" fill="${col}" font-size="26" font-family="monospace" font-weight="700">${i + 1}</text>`;
+    }).join('') + (E.drag ? `<rect x="${Math.min(E.drag.x0, E.drag.x1) * 1000}" y="${Math.min(E.drag.y0, E.drag.y1) * 1000}" width="${Math.abs(E.drag.x1 - E.drag.x0) * 1000}" height="${Math.abs(E.drag.y1 - E.drag.y0) * 1000}" fill="none" stroke="${colorOf(E.pick)}" stroke-width="3" stroke-dasharray="6 4" vector-effect="non-scaling-stroke"/>` : '');
+    $('edList').innerHTML = E.boxes.length ? E.boxes.map((b, i) => `<div class="brow ${b.on ? '' : 'off'}"><span class="sw" style="background:${colorOf(b.cls)}"></span>
+      <label style="display:inline-flex;gap:6px;align-items:center;min-height:32px"><input type="checkbox" data-i="${i}" data-k="on" ${b.on ? 'checked' : ''} style="width:20px;height:20px"> ${i + 1}. ${b.on ? 'keep' : 'rejected'}</label>
+      <select data-i="${i}" data-k="cls" aria-label="Class">${E.classes.map(c => `<option value="${esc(c)}" ${c === b.cls ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
+      ${b.conf != null ? `<span class="muted mono">model ${Math.round(b.conf * 100)}%</span>` : '<span class="chip">added</span>'}<span class="sp"></span></div>`).join('') : '<div class="muted">No boxes. Drag on the picture to add one, or save as is to keep this frame with no boxes.</div>';
+    $('edList').querySelectorAll('[data-k]').forEach(el => {
+      el.onchange = () => { const b = E.boxes[Number(el.dataset.i)]; if (el.dataset.k === 'on') b.on = el.checked; else b.cls = el.value; drawEditor(); };
+    });
+  }
+  function wireDraw() {
+    const el = $('edImg');
+    const pt = ev => { const r = el.getBoundingClientRect(); return { x: Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (ev.clientY - r.top) / r.height)) }; };
+    el.addEventListener('pointerdown', ev => { ev.preventDefault(); el.setPointerCapture(ev.pointerId); const p = pt(ev); E.drag = { x0: p.x, y0: p.y, x1: p.x, y1: p.y }; drawEditor(); });
+    el.addEventListener('pointermove', ev => { if (!E.drag) return; const p = pt(ev); E.drag.x1 = p.x; E.drag.y1 = p.y; drawEditor(); });
+    const end = () => {
+      const d = E.drag; E.drag = null;
+      if (d && E.pick && Math.abs(d.x1 - d.x0) > 0.012 && Math.abs(d.y1 - d.y0) > 0.012) {
+        E.boxes.push({ cls: E.pick, nbox: [Math.min(d.x0, d.x1), Math.min(d.y0, d.y1), Math.max(d.x0, d.x1), Math.max(d.y0, d.y1)], on: true });
+      }
+      drawEditor();
+    };
+    el.addEventListener('pointerup', end); el.addEventListener('pointercancel', () => { E.drag = null; drawEditor(); });
+  }
+  async function saveEditor() {
+    const cap = E.cap; if (!cap) return;
+    const boxes = E.boxes.filter(b => b.on).map(b => ({ cls: b.cls, nbox: b.nbox.map(v => Math.round(v * 1e6) / 1e6) }));
+    try {
+      await sendReview(cap, 'corrected', boxes);
+      closeEditor();
+      toast('Fix saved (' + boxes.length + ' box' + (boxes.length === 1 ? '' : 'es') + ').');
+      refreshAfter(cap.id);
+    } catch (e) { toast('Not saved. ' + e.message, true); }
+  }
+
+  // ---------- keys and routing ----------
+  document.addEventListener('keydown', ev => {
+    if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+    const t = ev.target, typing = t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA');
+    if (!$('modal').hidden) { if (ev.key === 'Escape') closeEditor(); return; }
+    if (typing || !S.id) return;
+    const k = ev.key.toUpperCase();
+    if (k === 'N' || k === 'J' || ev.key === 'ArrowRight') { ev.preventDefault(); k === 'N' ? nextUnreviewed(false) : step(1); }
+    else if (k === 'K' || ev.key === 'ArrowLeft') { ev.preventDefault(); step(-1); }
+    else if ((k === 'C' || k === 'W' || k === 'U' || k === 'F') && S.cur) { ev.preventDefault(); act(S.cur, k); }
+  });
+  function route() {
+    const m = /^#s=(.+)$/.exec(location.hash);
+    if (m) showSession(decodeURIComponent(m[1])); else showList();
+  }
+  window.addEventListener('hashchange', route);
+  route();
+})();
+</script>
+</body>
+</html>

@@ -176,6 +176,7 @@ async function handle(req, res) {
     return fail(res, 404, 'not_found', 'No such model file.');
   }
   if (p === '/line') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'line.html')), 'text/html; charset=utf-8', ISOLATE);
+  if (p === '/review') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'review.html')), 'text/html; charset=utf-8', ISOLATE);
   if (p === '/line-engine.js') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'line-engine.js')), 'text/javascript; charset=utf-8', ISOLATE);
   if (p === '/line-hands-worker.js') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'line-hands-worker.js')), 'text/javascript; charset=utf-8', ISOLATE);
   if (p === '/vendor/qrcode.js') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'vendor', 'qrcode.js')), 'text/javascript; charset=utf-8', ISOLATE);
