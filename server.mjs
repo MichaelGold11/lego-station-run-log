@@ -178,6 +178,7 @@ async function handle(req, res) {
   }
   if (p === '/line') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'line.html')), 'text/html; charset=utf-8', ISOLATE);
   if (p === '/pool') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'pool.html')), 'text/html; charset=utf-8', ISOLATE);
+  if (p === '/collect') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'collect.html')), 'text/html; charset=utf-8', ISOLATE);
   if (p === '/review') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'review.html')), 'text/html; charset=utf-8', ISOLATE);
   if (p === '/line-engine.js') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'line-engine.js')), 'text/javascript; charset=utf-8', ISOLATE);
   if (p === '/line-hands-worker.js') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'line-hands-worker.js')), 'text/javascript; charset=utf-8', ISOLATE);
@@ -187,6 +188,7 @@ async function handle(req, res) {
   if (p === '/api/sessions' || p.startsWith('/api/sessions/')) return sessionsApi(req, res, p, url);
   if (p === '/api/training' || p.startsWith('/api/training/')) return trainingApi(req, res, p);
   if (p === '/api/pool' || p.startsWith('/api/pool/')) return poolApi(req, res, p, url);
+  if (p === '/api/collect') return collectApi(req, res, url);
   if (p === '/local-runtime.js') return send(res, 200, fs.readFileSync(RUNTIME_FILE), 'text/javascript; charset=utf-8');
   if (p === '/api/info') return send(res, 200, { ffmpeg: hasFfmpeg, root: ROOT });
 
@@ -755,6 +757,70 @@ function yoloZip(role, classes, items, extra) {
   entries.push({ name: 'data.yaml', data: CaptureLib.dataYaml(classes) });
   entries.push({ name: 'manifest.json', data: JSON.stringify(Object.assign({ version: 1, role, classes, exportedAt: new Date().toISOString() }, extra, { images: exported }), null, 2) + '\n' });
   return Buffer.from(CaptureLib.zip(entries));
+}
+
+// ---------- intake path A in the app: POST /api/collect ----------
+// The body IS the video (one file, up to 500 MB), streamed to a temp file under DATA/tmp, never held in memory. Role and
+// contributor come in the query string and are checked strictly. The temp name is made here, never taken from the upload.
+// scripts/ingest-footage.mjs runs as a child process (args array, no shell); one at a time. The video is deleted afterwards.
+let collectBusy = false;
+const COLLECT_CONTRIBUTOR = /^[A-Za-z]{1,4}-\d{1,3}$/;
+const COLLECT_TIMEOUT_MS = 30 * 60 * 1000;
+function collectApi(req, res, url) {
+  if (req.method !== 'POST') return fail(res, 405, 'method_not_allowed', 'Use POST.');
+  const closeHdr = { Connection: 'close' };
+  const refuse = (code, err, msg) => send(res, code, { code: err, message: msg }, 'application/json', closeHdr);
+  const role = url.searchParams.get('role') || '', contributor = url.searchParams.get('contributor') || '';
+  if (!/^s[1-4]$/.test(role)) return refuse(400, 'invalid_argument', 'Pick a station: s1, s2, s3 or s4.');
+  if (!COLLECT_CONTRIBUTOR.test(contributor)) return refuse(400, 'invalid_argument', 'Your code is letters, a dash and digits, like Mg-07. Never a name.');
+  const len = Number(req.headers['content-length']);
+  if (!Number.isInteger(len) || len < 1) return refuse(411, 'length_required', 'Send one video file with its size.');
+  if (len > MAX_UPLOAD) return refuse(413, 'too_large', 'Videos over 500 MB are refused. Trim the clip or film a shorter one.');
+  if (!hasFfmpeg) return refuse(503, 'unavailable', 'ffmpeg is not installed on this laptop, so videos cannot be read. Install it (macOS: brew install ffmpeg) and restart the server.');
+  if (collectBusy) return refuse(409, 'busy', 'Another video is being processed. Wait a minute and try again.');
+  collectBusy = true;
+  const tmpDir = path.join(DATA, 'tmp');
+  const tmp = path.join(tmpDir, 'collect-' + crypto.randomBytes(8).toString('hex') + '.upload');
+  let done = false;
+  const finish = (code, err, msg, extra) => {
+    if (done) return; done = true;
+    try { fs.unlinkSync(tmp); } catch (e) { /* already gone */ }
+    collectBusy = false;
+    send(res, code, err ? { code: err, message: msg } : extra, 'application/json', err ? closeHdr : undefined);
+  };
+  try { fs.mkdirSync(tmpDir, { recursive: true }); } catch (e) { return finish(500, 'unavailable', 'Could not make the temp folder: ' + String(e.message || e)); }
+  const out = fs.createWriteStream(tmp + '.part', { flags: 'wx' });
+  let n = 0, aborted = false;
+  const abort = (code, err, msg) => { if (aborted) return; aborted = true; req.unpipe(out); out.destroy(); try { fs.unlinkSync(tmp + '.part'); } catch (e) { /* none */ } finish(code, err, msg); };
+  req.on('data', c => { n += c.length; if (n > MAX_UPLOAD || n > len) abort(413, 'too_large', 'Videos over 500 MB are refused.'); });
+  req.on('aborted', () => abort(400, 'invalid_argument', 'The upload was cut off.'));
+  out.on('error', e => abort(500, 'unavailable', 'Could not save the upload: ' + String(e.message || e)));
+  req.pipe(out);
+  out.on('finish', () => {
+    if (aborted) return;
+    if (n !== len) return abort(400, 'invalid_argument', 'The upload was cut off.');
+    try { fs.renameSync(tmp + '.part', tmp); } catch (e) { return finish(500, 'unavailable', 'Could not save the upload: ' + String(e.message || e)); }
+    let so = '', se = '', timedOut = false;
+    const child = spawn(process.execPath, [path.join(ROOT, 'scripts', 'ingest-footage.mjs'), '--role', role, '--contributor', contributor, '--video', tmp, '--data-dir', DATA, '--source', 'phone upload'], { stdio: ['ignore', 'pipe', 'pipe'], shell: false });
+    const timer = setTimeout(() => { timedOut = true; child.kill(); }, COLLECT_TIMEOUT_MS);
+    child.stdout.on('data', d => { so = (so + d).slice(-8000); });
+    child.stderr.on('data', d => { se = (se + d).slice(-8000); });
+    child.on('error', e => { clearTimeout(timer); finish(500, 'unavailable', 'Could not start the frame picker: ' + String(e.message || e)); });
+    child.on('close', code => {
+      clearTimeout(timer);
+      if (timedOut) return finish(504, 'timeout', 'This video took too long to process and was stopped. Try a shorter clip.');
+      if (code === 0) {
+        const m = /Wrote session (\S+): (\d+) frames/.exec(so);
+        if (m && /^[0-9]{8}-[0-9]{6}-[0-9a-f]+$/.test(m[1])) return finish(200, null, null, { id: m[1], frames: Number(m[2]), review: '/review#s=' + m[1] });
+        return finish(500, 'unavailable', 'The frame picker finished but did not report a session.');
+      }
+      const last = se.trim().split('\n').filter(Boolean).pop() || '';
+      if (code === 2 || /not installed or not on PATH/.test(se)) return finish(503, 'unavailable', 'ffmpeg is not installed on this laptop, so videos cannot be read. Install it (macOS: brew install ffmpeg) and restart the server.');
+      if (/No model is configured|Model file not found|onnx|model/i.test(last)) return finish(500, 'unavailable', 'The station model could not be loaded: ' + last.slice(0, 200));
+      if (/No video stream|Invalid data|moov atom|could not be read|No frames/i.test(se)) return finish(422, 'invalid_argument', 'That file does not look like a video this laptop can read. Try an mp4 or mov from your phone.');
+      finish(500, 'unavailable', 'Could not process the video' + (last ? ': ' + last.slice(0, 200) : '.'));
+    });
+  });
 }
 
 // ---------- shared pool ----------
@@ -1561,9 +1627,11 @@ function startPhone() {
   });
 }
 
-http.createServer((req, res) => {
+const mainServer = http.createServer((req, res) => {
   handle(req, res).catch(e => { console.error(e); if (!res.headersSent) fail(res, 500, 'unavailable', String(e && e.message || e)); });
-}).listen(PORT, '127.0.0.1', () => {
+});
+mainServer.requestTimeout = 0;   // a 500 MB video over wifi can take longer than Node's 5 minute default (/api/collect)
+mainServer.listen(PORT, '127.0.0.1', () => {
   console.log(`Wire line: http://localhost:${PORT}/line`);
   console.log(`LEGO run log (archived): http://localhost:${PORT}/runs`);
   console.log(`Data folder: ${DATA}`);

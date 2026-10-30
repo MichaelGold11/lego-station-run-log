@@ -526,6 +526,7 @@ All on the localhost server, with the same Host and Origin checks as the rest of
 | `GET /api/sessions/<id>/export.zip` | the whole run (below); add `?video=1` for the recordings |
 | `GET /api/sessions/<id>/digest.txt` | a short plain-text summary of the run |
 | `POST /api/sessions/<id>/pool` | publish reviewed frames to the shared pool |
+| `POST /api/collect?role=<s1..s4>&contributor=<code>` | intake path A from the app: the request body is one video (up to 500 MB, `Content-Length` required), streamed to a temp file under `DATA_DIR/tmp`, then `scripts/ingest-footage.mjs` runs on it as a child process (args array, no shell; the temp name is server made). Returns `{ id, frames, review: "/review#s=<id>" }`. 400 bad role or code, 411 no length, 413 over 500 MB, 403 foreign Host or Origin, 409 `busy` (one at a time), 422 unreadable video, 503 ffmpeg missing, 500 model error. The video is deleted afterwards |
 | `GET /api/pool` | counts per station, class, contributor and mode |
 | `GET /api/pool/<role>/snapshot.zip` | the trainer's YOLO set from the pool; `?holdout=<code>` |
 
@@ -542,7 +543,7 @@ Two ways of collecting feed one shared pool, which one person trains from.
 
 - **Path A, home collection.** Varied footage filmed at home. `node scripts/ingest-footage.mjs --role s2 --video clip.mp4 [--contributor Mg-07] [--frames 150] [--data-dir <dir>]`
   samples the video at 2 fps, pre-labels with the role's current model, picks about 150 frames (balanced across classes, with a fixed
-  share of low-confidence and empty frames), and writes a pseudo-session (`reason: "home"`, `mode: "home"`) that opens in `/review`. Needs ffmpeg, ffprobe and the role's model.
+  share of low-confidence and empty frames), and writes a pseudo-session (`reason: "home"`, `mode: "home"`) that opens in `/review`. Needs ffmpeg, ffprobe and the role's model. `[--source <label>]` sets the source shown in `session.json`. The `/collect` page does the same from a phone: a shot list (checkboxes kept in `localStorage`), then one video upload with the contributor code and role, which `POST /api/collect` hands to this script.
   Shot list for a home video (each about a minute): different lighting (bright, dim, a lamp from the side); different angles and heights; the connector open and the connector closed, slowly, more than once; a hand covering the part; an empty table.
 - **Path B, group run-throughs.** Ordinary sessions with capture on, reviewed at `/review`.
 

@@ -254,18 +254,19 @@ Tip: if you want a session kept only to test a new model, press **Hold out as te
 The team trains each station's model from one shared pile of checked pictures, the pool. You add to
 it in one of two ways, then press one button.
 
-**A. Film at home.** Film about a minute of your station's work on your phone, a few times. Change something each time:
-- the light (bright, dim, a lamp from the side)
-- the camera angle and height
-- the connector open, then closed
-- a hand covering part of the table
-- an empty table
+**A. Film at home.** Film about a minute of your station's work on your phone, a few times. Change one thing each time.
 
-Copy the video to the laptop, then in a terminal:
+Film at home, step by step:
+1. On the laptop, open http://localhost:4173/collect (or **Collect** at the top of Review or Pool). Pick your station. The shot list ticks off on this device.
+2. Film one take for each item: bright light, dim light, a lamp from the side; top-down, 30 degrees, from the operator's side; the connector open and held still for 3 seconds, then closed and held for 3 seconds; a hand over the part, then the hand moving away; an empty table.
+3. Put your code in **Your code** (like `Mg-07`, never your name), pick the station the video shows and choose the video (one file, up to 500 MB). Press **Send video**. Keep the page open until it says Done.
+4. Press **Open in Review**. About 150 pictures are waiting as a new session. The video itself is deleted once the pictures are picked.
 
-    node scripts/ingest-footage.mjs --role s2 --video myclip.mp4
+To send a video from the terminal instead, copy it to the laptop and run:
 
-(use your station's `s1` to `s4`). It picks about 150 useful pictures and opens them as a new session in **Review**.
+    node scripts/ingest-footage.mjs --role s2 --video myclip.mp4 --contributor Mg-07
+
+(use your station's `s1` to `s4`).
 
 **B. Group run-throughs.** Do a normal recorded run with capture on.
 

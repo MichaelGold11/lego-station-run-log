@@ -186,7 +186,7 @@ function parseArgs(argv) {
   }
   return a;
 }
-const USAGE = 'Usage: node scripts/ingest-footage.mjs --role <s1|s2|s3|s4> --video <file> [--contributor <code>] [--frames 150] [--data-dir <dir>]';
+const USAGE = 'Usage: node scripts/ingest-footage.mjs --role <s1|s2|s3|s4> --video <file> [--contributor <code>] [--frames 150] [--data-dir <dir>] [--source <label>]';
 
 async function main() {
   let a;
@@ -225,7 +225,7 @@ async function main() {
   fs.writeFileSync(path.join(dir, 'captures.jsonl'), lines.map(l => JSON.stringify(l) + '\n').join(''));
   fs.writeFileSync(path.join(dir, 'session.json'), JSON.stringify({
     id: sid, title: 'Home footage ' + a.role + (a.contributor ? ' (' + a.contributor + ')' : ''), mode: 'home', contributor: a.contributor || undefined,
-    startedAt: new Date(now).toISOString(), startedAtMs: now, endedAt: new Date(now).toISOString(), source: path.basename(a.video),
+    startedAt: new Date(now).toISOString(), startedAtMs: now, endedAt: new Date(now).toISOString(), source: a.source ? String(a.source).slice(0, 80) : path.basename(a.video),
     stations: { [a.role]: { input: 'clip', label: 'Home footage', record: false } }, config: cfg
   }, null, 2));
   const empty = lines.filter(l => !l.boxes.length).length;
