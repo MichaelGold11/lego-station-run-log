@@ -5,6 +5,7 @@ import zlib from 'node:zlib';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { readZip } from './zip-read.mjs';
 const load = f => { const mod = { exports: {} }; new Function('module', fs.readFileSync(new URL('../app/' + f, import.meta.url), 'utf8'))(mod); return mod.exports; };
 const CL = load('capture-lib.js');
 
@@ -54,25 +55,6 @@ console.log('ids, JPEG check, session split');
 
 console.log('zip writer');
 {
-  // A small reader of the zip structure: end record, central directory, local headers.
-  function readZip(buf) {
-    const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
-    let e = buf.length - 22;
-    if (dv.getUint32(e, true) !== 0x06054b50) return null;
-    const n = dv.getUint16(e + 10, true), cdSize = dv.getUint32(e + 12, true), cdOff = dv.getUint32(e + 16, true);
-    const files = [];
-    let p = cdOff;
-    for (let i = 0; i < n; i++) {
-      if (dv.getUint32(p, true) !== 0x02014b50) return null;
-      const method = dv.getUint16(p + 10, true), crc = dv.getUint32(p + 16, true), cs = dv.getUint32(p + 20, true), us = dv.getUint32(p + 24, true), nl = dv.getUint16(p + 28, true), off = dv.getUint32(p + 42, true);
-      const name = Buffer.from(buf.subarray(p + 46, p + 46 + nl)).toString('utf8');
-      if (dv.getUint32(off, true) !== 0x04034b50) return null;
-      const lnl = dv.getUint16(off + 26, true), lel = dv.getUint16(off + 28, true), start = off + 30 + lnl + lel;
-      files.push({ name, method, crc, size: us, csize: cs, data: Buffer.from(buf.subarray(start, start + cs)) });
-      p += 46 + nl;
-    }
-    return { files, count: n, cdEnd: cdOff + cdSize, cdOff };
-  }
   check('crc32 matches node zlib', [Buffer.alloc(0), Buffer.from('hello'), crypto.randomBytes(5000)].every(b => CL.crc32(b) === zlib.crc32(b)));
   const jpg = Buffer.concat([Buffer.from([0xFF, 0xD8, 0xFF, 0xE0]), crypto.randomBytes(3000)]);
   const z = CL.zip([{ name: 'train/', data: null }, { name: 'train/images/a.jpg', data: jpg }, { name: 'train/labels/a.txt', data: '0 0.5 0.5 1.000000 1.000000\n' }, { name: 'empty.txt', data: '' }, { name: 'ünï.txt', data: 'x' }], new Date(2026, 9, 30, 12, 0, 0));

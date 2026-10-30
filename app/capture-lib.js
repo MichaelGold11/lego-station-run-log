@@ -73,7 +73,7 @@
   }
 
   // A real JPEG starts with the bytes FF D8 FF.
-  function isJpeg(bytes) { return !!bytes && bytes.length >= 4 && bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF; }
+  function isJpeg(bytes) { return !!bytes && bytes.length >= 3 && bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF; }
 
   // ---------- hashing (pure, so the review page can split exactly like the server) ----------
   function utf8(s) { return typeof s === 'string' ? new TextEncoder().encode(s) : s; }

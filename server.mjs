@@ -115,11 +115,19 @@ function send(res, code, body, type = 'application/json', extra) {
   res.end(buf);
 }
 const fail = (res, code, err, message) => send(res, code, { code: err, message });
-function readBody(req, limit) {
+// drain: past the limit, keep reading (and dropping) up to 8 times the limit before failing, so the caller can still send a clean 413.
+function readBody(req, limit, drain) {
   return new Promise((resolve, reject) => {
-    const chunks = []; let n = 0;
-    req.on('data', c => { n += c.length; if (n > limit) { reject(Object.assign(new Error('too large'), { code: 'too_large' })); req.destroy(); } else chunks.push(c); });
-    req.on('end', () => resolve(Buffer.concat(chunks)));
+    const chunks = []; let n = 0, over = false;
+    req.on('data', c => {
+      n += c.length;
+      if (over) { if (n > limit * 8) req.destroy(); return; }
+      if (n > limit) {
+        if (drain) { over = true; chunks.length = 0; return; }
+        reject(Object.assign(new Error('too large'), { code: 'too_large' })); req.destroy();
+      } else chunks.push(c);
+    });
+    req.on('end', () => over ? reject(Object.assign(new Error('too large'), { code: 'too_large' })) : resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
 }
@@ -174,6 +182,7 @@ async function handle(req, res) {
   if (p.startsWith('/api/line/')) return lineApi(req, res, p);
   if (p.startsWith('/api/phone/')) return phoneApi(req, res, p);
   if (p === '/api/sessions' || p.startsWith('/api/sessions/')) return sessionsApi(req, res, p, url);
+  if (p === '/api/training' || p.startsWith('/api/training/')) return trainingApi(req, res, p);
   if (p === '/local-runtime.js') return send(res, 200, fs.readFileSync(RUNTIME_FILE), 'text/javascript; charset=utf-8');
   if (p === '/api/info') return send(res, 200, { ffmpeg: hasFfmpeg, root: ROOT });
 
@@ -552,6 +561,190 @@ function cleanEvent(e, ids) {
   return null;
 }
 
+// ---------- wire line: captures, review and the training set ----------
+// Per session: captures/<id>.jpg and captures.jsonl (what the page saw), review.jsonl (what a person said; the latest line
+// per capture wins). Reviewed frames are copied into DATA/training/<role>/ as a YOLO set (images, labels, manifest.json).
+// The pure parts (labels, split, zip, retention plan) are in app/capture-lib.js, shared with the review page.
+const CaptureLib = (() => { const mod = { exports: {} }; new Function('module', fs.readFileSync(path.join(ROOT, 'app', 'capture-lib.js'), 'utf8'))(mod); return mod.exports; })();
+const TRAINING = path.join(DATA, 'training');
+const SPLITS_FILE = path.join(TRAINING, 'splits.json');    // { version: 1, sessions: { "<sessionId>": "test" } }
+const CAPTURE_BODY_MAX = 600 * 1024;    // JSON with the image as base64
+const CAPTURE_IMAGE_MAX = 400 * 1024;   // the decoded JPEG
+const CAPTURE_ID = /^c\d{4,}$/;
+
+function readLines(f) {
+  const out = [];
+  if (!fs.existsSync(f)) return out;
+  for (const line of fs.readFileSync(f, 'utf8').split('\n')) { if (!line.trim()) continue; try { out.push(JSON.parse(line)); } catch (e) { /* a torn line */ } }
+  return out;
+}
+function writeFileAtomic(f, data) {
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  const tmp = f + '.tmp';
+  fs.writeFileSync(tmp, data);
+  fs.renameSync(tmp, f);
+}
+const readCaptures = sid => readLines(path.join(SESSIONS, sid, 'captures.jsonl'));
+function readReviews(sid) {
+  const m = new Map();
+  for (const r of readLines(path.join(SESSIONS, sid, 'review.jsonl'))) if (r && typeof r.captureId === 'string') m.set(r.captureId, r);
+  return m;
+}
+// A role's class list, in the order the model and the notebooks use: its model's, else the suggested list.
+function roleClasses(cfg, role) {
+  const m = cfg && cfg.models && cfg.models[role], s = cfg && cfg.suggestedClasses && cfg.suggestedClasses[role];
+  return m && Array.isArray(m.classes) && m.classes.length ? m.classes : Array.isArray(s) && s.length ? s : null;
+}
+const readSplits = () => { try { const j = readJson(SPLITS_FILE); return j && typeof j.sessions === 'object' && j.sessions ? j.sessions : {}; } catch (e) { return {}; } };
+
+// One capture from the page: only known fields are kept. Returns { meta, image } or { error }.
+function cleanCapture(b, ids, roles) {
+  if (!b || typeof b !== 'object' || Array.isArray(b)) return { error: 'Body must be a JSON object.' };
+  if (typeof b.station !== 'string' || !ids.includes(b.station)) return { error: 'station must be one of this session\'s stations.' };
+  if (typeof b.role !== 'string' || !roles.includes(b.role)) return { error: 'role must be one of the config\'s station ids.' };
+  if (typeof b.t !== 'number' || !isFinite(b.t)) return { error: 't (milliseconds since 1970) is required.' };
+  if (!CaptureLib.REASONS.includes(b.reason)) return { error: 'reason must be one of ' + CaptureLib.REASONS.join(', ') + '.' };
+  if (b.videoT != null && !(typeof b.videoT === 'number' && isFinite(b.videoT) && b.videoT >= 0)) return { error: 'videoT must be seconds from the start of the recording.' };
+  if (b.cycle != null && !(Number.isInteger(b.cycle) && b.cycle >= 0 && b.cycle < 1e6)) return { error: 'cycle must be a whole number.' };
+  const r = CaptureLib.cleanBoxes(b.boxes, { conf: true });
+  if (r.error) return { error: r.error };
+  if (b.zones != null && (typeof b.zones !== 'object' || Array.isArray(b.zones) || JSON.stringify(b.zones).length > 4000)) return { error: 'zones must be a small object.' };
+  if (b.standard != null && !(typeof b.standard === 'number' ? isFinite(b.standard) : typeof b.standard === 'string' && b.standard.length <= 60)) return { error: 'standard must be a short text or number.' };
+  let model;
+  if (b.model != null) {
+    const mv = b.model.version;
+    if (typeof b.model !== 'object' || Array.isArray(b.model) || typeof b.model.file !== 'string' || b.model.file.length > 120 || (mv != null && !(typeof mv === 'number' ? isFinite(mv) : typeof mv === 'string' && mv.length <= 40))) return { error: 'model must look like { "file": "/models/x.onnx", "version": "1" }.' };
+    model = { file: b.model.file }; if (mv != null) model.version = mv;
+  }
+  const operator = b.operator == null ? undefined : cleanOperator(b.operator);
+  if (operator === undefined && b.operator != null) return { error: 'operator needs a code like Op-07 and a level (no names).' };
+  if (typeof b.image !== 'string') return { error: 'image must be a data:image/jpeg;base64 string.' };
+  const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/]+={0,2})$/.exec(b.image);
+  if (!m) return { error: 'image must be a data:image/jpeg;base64 string.' };
+  const image = Buffer.from(m[1], 'base64');
+  if (image.length > CAPTURE_IMAGE_MAX) return { error: 'The image is over 400 KB.', status: 413, code: 'too_large' };
+  if (!CaptureLib.isJpeg(image)) return { error: 'The image is not a JPEG.' };
+  const meta = {
+    station: b.station, role: b.role, stationName: text(b.stationName, 80) || undefined, t: b.t, videoT: b.videoT == null ? undefined : b.videoT,
+    videoFile: text(b.videoFile, 100) || undefined, reason: b.reason, substep: text(b.substep, 60) || undefined, cycle: b.cycle == null ? undefined : b.cycle,
+    claim: text(b.claim, 300) || undefined, boxes: r.boxes, zones: b.zones == null ? undefined : b.zones, standard: b.standard == null ? undefined : b.standard,
+    model, operator: operator || undefined
+  };
+  return { meta, image };
+}
+
+// The training set of one role: DATA/training/<role>/{images,labels,manifest.json}.
+const trainingDir = role => path.join(TRAINING, role);
+function readManifest(role) {
+  try { const m = readJson(path.join(trainingDir(role), 'manifest.json')); if (m && m.images && typeof m.images === 'object') return m; } catch (e) { /* none yet */ }
+  return { version: 1, role, classes: [], images: {} };
+}
+function trainingCounts(man) {
+  const e = Object.values(man.images);
+  return { role: man.role, images: e.length, negatives: e.filter(x => !x.labels).length };
+}
+// Put one reviewed capture into the set (or take it out, for unsure). Replaces whatever an earlier review left.
+function updateTraining(role, classes, sid, cap, verdict, boxes, reviewedAt) {
+  const man = readManifest(role), name = CaptureLib.trainingName(sid, cap.id), dir = trainingDir(role);
+  const img = path.join(dir, 'images', name + '.jpg'), lab = path.join(dir, 'labels', name + '.txt');
+  if (verdict === 'unsure') {
+    if (!man.images[name]) return trainingCounts(man);
+    for (const f of [img, lab]) { try { fs.unlinkSync(f); } catch (e) { /* not there */ } }
+    delete man.images[name];
+  } else {
+    fs.mkdirSync(path.join(dir, 'images'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'labels'), { recursive: true });
+    const tmp = img + '.tmp';
+    fs.copyFileSync(path.join(SESSIONS, sid, 'captures', cap.id + '.jpg'), tmp);
+    fs.renameSync(tmp, img);
+    const labelBoxes = verdict === 'rejected' ? [] : boxes;
+    writeFileAtomic(lab, CaptureLib.labelText(labelBoxes, classes));
+    const counts = {};
+    for (const b of labelBoxes) counts[b.cls] = (counts[b.cls] || 0) + 1;
+    man.images[name] = { session: sid, captureId: cap.id, reason: cap.reason, verdict, model: cap.model || null, standard: cap.standard == null ? null : cap.standard, t: cap.t, reviewedAt, labels: labelBoxes.length, labelCounts: counts };
+  }
+  man.role = role; man.classes = classes; man.updatedAt = reviewedAt;
+  writeJson(path.join(dir, 'manifest.json'), man);
+  return trainingCounts(man);
+}
+
+// ---------- retention ----------
+// Unreviewed captures older than reviewDays go; then, while all capture media is over mediaCapMB, the oldest unreviewed.
+// A reviewed capture (any verdict but unsure) is never swept. `now` is milliseconds, so tests can drive it.
+function sweepCaptures(now) {
+  const opts = Object.assign(LineEngine.captureDefaults(lineConfig()), { now });
+  if (!fs.existsSync(SESSIONS)) return { deleted: 0, bytes: 0 };
+  const items = [], bySession = {};
+  for (const sid of fs.readdirSync(SESSIONS).filter(n => SESSION_ID.test(n))) {
+    const caps = readCaptures(sid);
+    if (!caps.length) continue;
+    const reviews = readReviews(sid);
+    bySession[sid] = caps;
+    for (const c of caps) {
+      let st = null; try { st = fs.statSync(path.join(SESSIONS, sid, 'captures', c.id + '.jpg')); } catch (e) { /* the file is gone */ }
+      const rv = reviews.get(c.id);
+      items.push({ key: sid + '/' + c.id, sid, id: c.id, receivedAt: typeof c.receivedAt === 'number' ? c.receivedAt : st ? st.mtimeMs : c.t, bytes: st ? st.size : 0, reviewed: !!rv && rv.verdict !== 'unsure' });
+    }
+  }
+  const gone = new Set(CaptureLib.planSweep(items, opts));
+  let bytes = 0;
+  for (const sid of Object.keys(bySession)) {
+    const mine = items.filter(i => i.sid === sid && gone.has(i.key));
+    if (!mine.length) continue;
+    const drop = new Set(mine.map(i => i.id));
+    // The list is rewritten first (atomically), then the files go: a crash in between leaves orphan JPEGs, never a line without its image.
+    writeFileAtomic(path.join(SESSIONS, sid, 'captures.jsonl'), bySession[sid].filter(c => !drop.has(c.id)).map(c => JSON.stringify(c) + '\n').join(''));
+    for (const i of mine) { bytes += i.bytes; try { fs.unlinkSync(path.join(SESSIONS, sid, 'captures', i.id + '.jpg')); } catch (e) { /* already gone */ } }
+  }
+  if (gone.size) console.log(`Capture sweep: removed ${gone.size} unreviewed capture${gone.size === 1 ? '' : 's'} (${(bytes / 1048576).toFixed(1)} MB).`);
+  return { deleted: gone.size, bytes };
+}
+function startSweeper() {
+  const run = () => { try { sweepCaptures(Date.now()); } catch (e) { console.error('Capture sweep failed:', e); } };
+  run();
+  setInterval(run, 60 * 60 * 1000).unref();
+}
+
+// ---------- training routes: GET /api/training, GET /api/training/<role>/export.zip ----------
+function trainingApi(req, res, p) {
+  if (req.method !== 'GET') return fail(res, 405, 'invalid_argument', 'Method not allowed.');
+  const cfg = lineConfig() || {};
+  const pinned = readSplits();
+  if (p === '/api/training') {
+    const roles = new Set(stationIds(cfg));
+    if (fs.existsSync(TRAINING)) for (const n of fs.readdirSync(TRAINING)) if (STATION_ID.test(n) && fs.existsSync(path.join(TRAINING, n, 'manifest.json'))) roles.add(n);
+    const out = {};
+    for (const role of [...roles].sort()) {
+      const man = readManifest(role), e = Object.values(man.images), now = roleClasses(cfg, role);
+      const byClass = {}, split = { train: 0, val: 0, test: 0 };
+      for (const x of e) {
+        for (const [c, n] of Object.entries(x.labelCounts || {})) byClass[c] = (byClass[c] || 0) + n;
+        split[CaptureLib.sessionSplit(x.session, pinned)]++;
+      }
+      out[role] = { images: e.length, negatives: e.filter(x => !x.labels).length, sessions: new Set(e.map(x => x.session)).size, byClass, split, classes: man.classes.length ? man.classes : now || [], classesChanged: !!(man.classes.length && now && JSON.stringify(man.classes) !== JSON.stringify(now)) };
+    }
+    return send(res, 200, { roles: out, testSessions: Object.keys(pinned).filter(k => pinned[k] === 'test').sort() });
+  }
+  const m = /^\/api\/training\/([a-z][a-z0-9_]{0,15})\/export\.zip$/.exec(p);
+  if (!m) return fail(res, 404, 'not_found', 'Nothing here.');
+  const role = m[1], man = readManifest(role), names = Object.keys(man.images).sort();
+  if (!names.length) return fail(res, 404, 'not_found', 'No reviewed frames for ' + role + ' yet.');
+  const entries = [], exported = {};
+  for (const d of ['train', 'val', 'test']) for (const k of ['images', 'labels']) entries.push({ name: d + '/' + k + '/' });
+  for (const name of names) {
+    const x = man.images[name], split = CaptureLib.sessionSplit(x.session, pinned);
+    let img, lab;
+    try { img = fs.readFileSync(path.join(trainingDir(role), 'images', name + '.jpg')); lab = fs.readFileSync(path.join(trainingDir(role), 'labels', name + '.txt')); } catch (e) { continue; }
+    entries.push({ name: split + '/images/' + name + '.jpg', data: img }, { name: split + '/labels/' + name + '.txt', data: lab });
+    exported[name] = Object.assign({ split }, x);
+  }
+  entries.push({ name: 'data.yaml', data: CaptureLib.dataYaml(man.classes) });
+  entries.push({ name: 'manifest.json', data: JSON.stringify({ version: 1, role, classes: man.classes, exportedAt: new Date().toISOString(), images: exported }, null, 2) + '\n' });
+  let zip;
+  try { zip = Buffer.from(CaptureLib.zip(entries)); } catch (e) { return fail(res, 500, 'unavailable', String(e.message || e)); }
+  return send(res, 200, zip, 'application/zip', { 'Content-Disposition': `attachment; filename="${role}-training.zip"` });
+}
+
 async function sessionsApi(req, res, p, url) {
   if (p === '/api/sessions') {
     if (req.method === 'GET') return send(res, 200, { sessions: listSessions() });
@@ -634,6 +827,69 @@ async function sessionsApi(req, res, p, url) {
       if (list.length) fs.appendFileSync(path.join(dir, 'events.jsonl'), list.map(e => JSON.stringify(e)).join('\n') + '\n');
       return send(res, 200, { ok: true, appended: list.length });
     }
+    if (what === 'captures' && req.method === 'POST') {
+      let raw, body;
+      try { raw = await readBody(req, CAPTURE_BODY_MAX, true); } catch (e) { return fail(res, e && e.code === 'too_large' ? 413 : 400, e && e.code === 'too_large' ? 'too_large' : 'invalid_argument', e && e.code === 'too_large' ? 'A capture over 600 KB was refused.' : 'The request was cut off.'); }
+      try { body = JSON.parse(raw.toString('utf8')); } catch (e) { return fail(res, 400, 'invalid_argument', 'Body must be JSON.'); }
+      const roles = stationIds(doc.config || lineConfig());
+      const r = cleanCapture(body, ids, roles);
+      if (r.error) return fail(res, r.status || 400, r.code || 'invalid_argument', r.error);
+      const lim = LineEngine.captureDefaults(lineConfig()), have = readCaptures(id);
+      if (have.length >= lim.maxPerSession) return fail(res, 409, 'capture_limit', 'This session already has ' + have.length + ' captures (the limit is ' + lim.maxPerSession + ').');
+      if (have.filter(c => c.station === r.meta.station).length >= lim.maxPerStation) return fail(res, 409, 'capture_limit', 'Station ' + r.meta.station + ' already has its ' + lim.maxPerStation + ' captures for this session.');
+      const cid = CaptureLib.captureId(CaptureLib.nextCaptureNumber(have.map(c => c.id)));
+      const meta = Object.assign({ id: cid }, r.meta, { receivedAt: Date.now(), bytes: r.image.length });
+      fs.mkdirSync(path.join(dir, 'captures'), { recursive: true });
+      const jpg = path.join(dir, 'captures', cid + '.jpg');
+      writeFileAtomic(jpg, r.image);
+      try { fs.appendFileSync(path.join(dir, 'captures.jsonl'), JSON.stringify(meta) + '\n'); } catch (e) { try { fs.unlinkSync(jpg); } catch (e2) { /* none */ } throw e; }
+      return send(res, 200, { id: cid });
+    }
+    if (what === 'captures' && req.method === 'GET') {
+      const reviews = readReviews(id);
+      return send(res, 200, { captures: readCaptures(id).map(c => Object.assign({}, c, { review: reviews.get(c.id) || null })), split: readSplits()[id] === 'test' ? 'test' : null });
+    }
+    if (what === 'review' && req.method === 'POST') {
+      let body;
+      try { body = JSON.parse((await readBody(req, 64 * 1024)).toString('utf8')); } catch (e) { return fail(res, 400, 'invalid_argument', 'Body must be JSON.'); }
+      if (!body || typeof body !== 'object' || Array.isArray(body)) return fail(res, 400, 'invalid_argument', 'Body must be a JSON object.');
+      if (typeof body.captureId !== 'string' || !CAPTURE_ID.test(body.captureId)) return fail(res, 400, 'invalid_argument', 'captureId must look like c0001.');
+      if (!CaptureLib.VERDICTS.includes(body.verdict)) return fail(res, 400, 'invalid_argument', 'verdict must be one of ' + CaptureLib.VERDICTS.join(', ') + '.');
+      const cap = readCaptures(id).find(c => c.id === body.captureId);
+      if (!cap || !fs.existsSync(path.join(dir, 'captures', cap.id + '.jpg'))) return fail(res, 404, 'not_found', 'No such capture.');
+      const classes = roleClasses(lineConfig(), cap.role) || roleClasses(doc.config, cap.role);
+      if (!classes) return fail(res, 400, 'invalid_argument', 'Role ' + cap.role + ' has no class list in the config.');
+      if (body.note != null && typeof body.note !== 'string') return fail(res, 400, 'invalid_argument', 'note must be text.');
+      // Posted boxes are checked whenever they come; only "corrected" uses them. "confirmed" keeps the capture's own boxes.
+      let posted = [];
+      if (body.boxes != null || body.verdict === 'corrected') {
+        const r = CaptureLib.cleanBoxes(body.boxes, { classes });
+        if (r.error) return fail(res, 400, 'invalid_argument', r.error);
+        posted = r.boxes;
+      }
+      let final = [];
+      if (body.verdict === 'corrected') final = posted;
+      else if (body.verdict === 'confirmed') {
+        const r = CaptureLib.cleanBoxes(cap.boxes, { classes });
+        if (r.error) return fail(res, 400, 'invalid_argument', 'The capture\'s own boxes cannot be confirmed (' + r.error + ') Use corrected and fix them.');
+        final = r.boxes;
+      }
+      const man = readManifest(cap.role);
+      if (body.verdict !== 'unsure' && Object.keys(man.images).length && man.classes.length && JSON.stringify(man.classes) !== JSON.stringify(classes)) return fail(res, 409, 'classes_changed', 'The class list for ' + cap.role + ' changed since its training set was started. Move data/training/' + cap.role + ' aside first.');
+      const reviewedAt = new Date().toISOString();
+      const line = { captureId: cap.id, verdict: body.verdict, boxes: final, note: text(body.note, 500), reviewedAt };
+      fs.appendFileSync(path.join(dir, 'review.jsonl'), JSON.stringify(line) + '\n');
+      return send(res, 200, { ok: true, training: updateTraining(cap.role, classes, id, cap, body.verdict, final, reviewedAt) });
+    }
+    if (what === 'split' && req.method === 'POST') {
+      let body;
+      try { body = JSON.parse((await readBody(req, 4 * 1024)).toString('utf8')); } catch (e) { return fail(res, 400, 'invalid_argument', 'Body must be JSON.'); }
+      if (!body || typeof body !== 'object' || Array.isArray(body) || !(body.split === 'test' || body.split === null)) return fail(res, 400, 'invalid_argument', 'Send { "split": "test" } to hold this session out, or { "split": null } to release it.');
+      const pinned = readSplits();
+      if (body.split === 'test') pinned[id] = 'test'; else delete pinned[id];
+      writeJson(SPLITS_FILE, { version: 1, sessions: pinned });
+      return send(res, 200, { ok: true, split: body.split });
+    }
     if (what === 'end' && req.method === 'POST') {
       try { await readBody(req, 64 * 1024); } catch (e) { /* ignore the body */ }
       if (!doc.endedAt) { doc.endedAt = new Date().toISOString(); doc.endedAtMs = Date.now(); }
@@ -652,6 +908,14 @@ async function sessionsApi(req, res, p, url) {
       return send(res, 200, csv, 'text/csv; charset=utf-8', { 'Content-Disposition': `attachment; filename="${id}-${what}"` });
     }
     return fail(res, 400, 'invalid_argument', 'Bad session path.');
+  }
+  if (rest.length === 2 && rest[0] === 'captures') {
+    if (req.method !== 'GET') return fail(res, 405, 'invalid_argument', 'Method not allowed.');
+    const m = /^(c\d{4,})\.jpg$/.exec(rest[1]);
+    if (!m) return fail(res, 400, 'invalid_argument', 'Bad capture name; use c0001.jpg.');
+    const f = path.join(dir, 'captures', m[1] + '.jpg');
+    if (!fs.existsSync(f)) return fail(res, 404, 'not_found', 'No such capture.');
+    return serveFile(req, res, f, 'image/jpeg', { 'Cache-Control': 'private, max-age=3600' });
   }
   if (rest.length === 2 && rest[0] === 'video') {
     const station = rest[1];
@@ -903,6 +1167,7 @@ http.createServer((req, res) => {
   console.log(`Wire line: http://localhost:${PORT}/line`);
   console.log(`LEGO run log (archived): http://localhost:${PORT}/runs`);
   console.log(`Data folder: ${DATA}`);
+  startSweeper();
   if (!hasFfmpeg) console.log('ffmpeg not found: uploads are stored as-is, and agents cannot analyze videos until it is installed.');
   startPhone();
 });

@@ -360,6 +360,8 @@ Folder `data/sessions/<id>/` (git-ignored), id like `20261015-233956-7509`:
 |---|---|
 | `session.json` | title, crew, shift, notes, start and end, the page's switches at the start (`client`: `model`, `hands`, `score` = Score the cameras), which source each station had (`camera`, `clip`, `phone` or `none`), a copy of the config and of the zones, `layout` (the floor at the start: its id and name, and per station `id`, `name`, `role`, `x`, `y`, `order`, `input` and `operator`), `operators` (the current operator per station, kept up to date from the `operator` events), per-station recordings (start time, chunks, bytes, any gaps), and a summary at the end. `config` is the file as written; the summary and the CSVs apply the layout to it (`LineEngine.applyLayout`). Sessions from before the floor have no `layout` |
 | `events.jsonl` | one event per line, appended as they happen (sort by `t`) |
+| `captures.jsonl`, `captures/<id>.jpg` | one line per captured frame (id, station, role, time, reason, claim, boxes, model) and its JPEG; unreviewed ones are swept after `capture.reviewDays` |
+| `review.jsonl` | one line per review (`captureId`, `verdict`, final `boxes`, `note`, `reviewedAt`); the latest line per capture wins |
 | `s1.mp4`, `s2.mp4`, ... `s5.mp4` | each station's video, named by station id (`.webm` on browsers without MP4 recording). `s1-2.mp4` is a second part if the source changed or Rec was switched off and on |
 
 Exports: `/api/sessions/<id>/substeps.csv`, `/cycles.csv`, `/verdicts.csv`, `/units.csv` and `/events.jsonl`
