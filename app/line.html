@@ -332,6 +332,10 @@ details.raw[open] summary { margin-right: 6px; }
       <button class="btn sm" id="btnPair" type="button" title="Make a new pairing code for the phone cameras. Every phone link and QR code so far stops working, and connected phones are cut off.">New pairing code</button>
       <span class="muted mono" id="detNote"></span>
     </div>
+    <div class="sb-row">
+      <label class="sb-item" title="While a session records, save still frames from each station's camera for the review page: at steps, unsure moments, cycle ends, stalls and now and then at random. X saves one by hand. This laptop remembers it."><input type="checkbox" id="chkCapture"> <b>Capture frames</b><span class="muted">(for review and training)</span></label>
+      <span class="muted" id="capNote"></span>
+    </div>
   </section>
 
   <section class="panel setupbar" id="layoutBar" hidden aria-label="Edit layout">
@@ -419,7 +423,8 @@ details.raw[open] summary { margin-right: 6px; }
     config: null, base: null, standard: { roles: {} }, layout: null, layouts: [], roles: [], editMode: false, qaIds: [], setup: {}, events: [], queue: [], session: null, lastSession: null, basis: store.get('wire-line:basis') || 'auto',
     modelOn: false, handsOn: false, cameras: [], clips: [], camAllowed: false, failPick: null, sending: false, summary: null, sumAt: 0, evSeen: -1,
     qaId: null, saveTimer: null, starting: false, stopping: false, soundOn: store.get('wire-line:sound') !== false, setupMode: false,
-    score: store.get('wire-line:score') === true    // Score the cameras: the answer key shows (off by default)
+    score: store.get('wire-line:score') === true,    // Score the cameras: the answer key shows (off by default)
+    capOn: store.get('wire-line:capture'), capTotal: 0, capBusy: 0, capWarned: false    // capture switch (null: the config decides), frames this session, uploads in flight
   };
   const FLOOR = { grid: 40, cardW: 640, minZ: 0.25, maxZ: 2 };    // the same grid and card width as LineEngine.FLOOR
   const V = { x: 40, y: 60, z: 1, saveT: 0, sizeT: 0 };            // the floor view: screen = world * z + (x, y)
@@ -437,6 +442,7 @@ details.raw[open] summary { margin-right: 6px; }
     if (st && st.rec && st.rec.startedAt && e.t >= st.rec.startedAt) { e.videoT = Math.round((e.t - st.rec.startedAt) / 10) / 100; e.videoFile = st.rec.file; }
     if (G.session) { e.ts = Math.round(e.t - G.session.startedAtMs) / 1000; G.queue.push(e); }
     G.events.push(e);
+    try { capNote(e); } catch (x) { console.warn(x); }
   }
   async function sendEvents() {
     if (!G.session || G.sending || !G.queue.length) return;
@@ -582,7 +588,7 @@ details.raw[open] summary { margin-right: 6px; }
       mdl: null, dets: null, detsPrev: null, detT: 0, hands: null, handsT: 0, modelN: 0, modelFps: 0, modelT: now(),
       manualN: 0, setupOn: false, drawZone: null, drag: null, calib: null, err: '', clearArm: 0, lastCheck: '', token: 0,
       chk: LE.createChecker(cfg), mute: store.get('wire-line:mute:' + cfg.id) === true, detSeq: 0, detCapT: 0, driven: false, lastCard: '', refMsg: '', px: 1,
-      phone: null, phoneKey: '', lastChip: ''
+      phone: null, phoneKey: '', lastChip: '', cap: capFresh()
     };
     st.chk.setRef(st.setup.ref || null);
     autoStandard(st);
@@ -591,7 +597,7 @@ details.raw[open] summary { margin-right: 6px; }
     el.innerHTML = `
       <div class="st-head">
         <span class="st-badge">${esc(cfg.id.toUpperCase())}</span><h2 class="stname"></h2><span class="role"></span>
-        <span class="opslot"><button type="button" class="chip opc" title="Operator at this station: an anonymous code and a training level">Op --</button></span><span class="srcst"></span><span class="chip rdy" hidden></span><button type="button" class="chip warn needb" hidden title="Open Setup">Setup needed</button><span class="recst"></span>
+        <span class="opslot"><button type="button" class="chip opc" title="Operator at this station: an anonymous code and a training level">Op --</button></span><span class="srcst"></span><span class="chip rdy" hidden></span><button type="button" class="chip warn needb" hidden title="Open Setup">Setup needed</button><span class="recst"></span><button type="button" class="chip capb" hidden title="Save a frame from this camera for review (X saves one from every station)">Capture frame <kbd>X</kbd></button>
       </div>
       <div class="edit-panel" hidden>
         <label class="recl">Name <input class="ed-name" maxlength="40"></label>
@@ -639,7 +645,7 @@ details.raw[open] summary { margin-right: 6px; }
     const q = s => el.querySelector(s);
     Object.assign(st, {
       el, video: q('video'), canvas: q('canvas'), stage: q('.stage'), nosrc: q('.nosrc'), sel: q('.src'), recBox: q('.rec'),
-      elSrc: q('.srcst'), elRdy: q('.rdy'), needBtn: q('.needb'), elRec: q('.recst'),
+      elSrc: q('.srcst'), elRdy: q('.rdy'), needBtn: q('.needb'), elRec: q('.recst'), capBtn: q('.capb'),
       elNow: q('.nowbox'), elNowLab: q('.nowlab'), elCur: q('.cur'), elBig: q('.big'), elKv: q('.kv'), elQa: q('.qa'), elCheck: q('.check'),
       elMeta: q('.diag'), elMsg: q('.stmsg'), setupPanel: q('.setup-panel'), zbtns: q('.zbtns'), calst: q('.calst'),
       vcard: q('.vcard'), vcTitle: q('.vc-title'), vcMsg: q('.vc-msg'), refst: q('.refst'), phoneEl: q('.phonep'), pchip: q('.pchip'), qrBtn: q('.pqr'),
@@ -647,6 +653,7 @@ details.raw[open] summary { margin-right: 6px; }
       elName: q('.stname'), elRole: q('.role'), vcSt: q('.vc-st'), editPanel: q('.edit-panel'), opBtn: q('.opc'), opPop: q('.oppop')
     });
     bindEdit(st); bindOperator(st);
+    st.capBtn.onclick = () => captureManual(st);
     st.qrBtn.onclick = () => { if (st.phone) { st.phone.showQr = !st.phone.showQr; renderPhone(st, true); } };
     st.needBtn.onclick = () => openSetup(st);
     bindConnect(st);
@@ -1238,7 +1245,7 @@ details.raw[open] summary { margin-right: 6px; }
       if (f.status !== 'ready') { (bad[m.file + '|' + f.error] = bad[m.file + '|' + f.error] || { f: m.file, why: f.error, ids: [] }).ids.push(st.id.toUpperCase()); continue; }
       const chk = LE.checkModelOutput(f.dims, m.classes.length);
       if (!chk.ok) { const key = m.file + '|' + (chk.found != null ? chk.found + ' of ' + m.classes.length : 'unknown'); (bad[key] = bad[key] || { f: m.file, found: chk.found, k: m.classes.length, ids: [] }).ids.push(st.id.toUpperCase()); continue; }
-      st.mdl = { file: m.file, classes: m.classes.slice(), f };
+      st.mdl = { file: m.file, classes: m.classes.slice(), f, version: m.version };
     }
     for (const b of Object.values(bad)) probs.push(b.why != null ? esc(baseName(b.f)) + ' could not load for ' + b.ids.join(', ') + ': ' + esc(b.why)
       : esc(baseName(b.f)) + (b.found != null ? ' outputs ' + b.found + ' classes but the config lists ' + b.k + ' for ' + b.ids.join(', ') : ' has an output shape this page cannot read (for ' + b.ids.join(', ') + ')') + '. Those stations stay on zones rules.');
@@ -1612,8 +1619,129 @@ details.raw[open] summary { margin-right: 6px; }
     }
     else if (e.key === 'p' || e.key === 'P') { e.preventDefault(); manualPass(); }
     else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); openFail(); }
+    else if (key === 'x') { e.preventDefault(); captureManual(null); }
     else if (e.key === 'Escape') closeFail(true);
   });
+
+  // ---------- capture: still frames for the review page (docs/capture plan, section 1) ----------
+  // The engine decides (LE.captureWanted); this page keeps the per-station state, grabs the live video at its native size
+  // as a JPEG and posts it to the session. Nothing here may interrupt a run: every failure is swallowed (one small banner).
+  const CAP_MAX_BYTES = 380 * 1024;      // under the server's 400 KB image cap
+  const CAP_PEND_MS = 3000;              // a trigger that nothing used by then is dropped
+  function capFresh() { return { n: 0, lastAt: null, lastStallAt: null, sampleDue: null, claimed: {}, pend: {}, pendAt: 0, claimText: '', claimStep: null }; }
+  const capSettings = () => LE.captureDefaults(G.config);
+  const capEnabled = () => (G.capOn == null ? capSettings().enabled : !!G.capOn);
+  function capReset(startMs) {
+    G.capTotal = 0; G.capWarned = false; banner('capture', '');
+    const s = capSettings();
+    for (const st of LIST) { st.cap = capFresh(); st.cap.sampleDue = LE.nextSampleDue(startMs, s, Math.random); }
+  }
+  // Events the page already emits become pending triggers; capTick asks the engine whether to take a frame.
+  function capNote(e) {
+    const st = e.station && ST[e.station];
+    if (!st || !G.session || !st.cap) return;
+    const c = st.cap, label = id => (st.cfg.substeps.find(x => x.id === id) || {}).label || id;
+    if (e.type === 'substep') {
+      if (e.move === 'start') c.pend.cycleStart = true;
+      else if (e.move !== 'repeat') c.pend.claim = { step: e.substep, cycle: e.cycle };
+      c.claimText = label(e.substep) + (e.source === 'model' && e.conf != null ? ', model ' + Number(e.conf).toFixed(2) : e.source === 'zones' || !e.source ? '' : ', ' + e.source);
+      c.claimStep = e.substep;
+    } else if (e.type === 'cycle_end') { c.pend.cycleEnd = true; c.claimText = 'Cycle ' + e.cycle + ' ended'; c.claimStep = e.substep; }
+    else if (e.type === 'verdict' && (e.kind === 'review' || e.kind === 'mistake')) { c.pend.unsure = true; c.claimText = e.message || e.kind; c.claimStep = e.substep || c.claimStep; }
+    else return;
+    c.pendAt = now();
+  }
+  const capVideoOk = st => st.source.type !== 'none' && st.video.readyState >= 2 && st.video.videoWidth > 0 && !st.video.paused;
+  function capState(st, t) {
+    const c = st.cap, s = st.eng.state();
+    return { recording: !!G.session && capEnabled(), hasVideo: capVideoOk(st), total: G.capTotal, stationCount: c.n, lastAt: c.lastAt, cycleActive: !!s.inCycle,
+      stepAt: s.since, lastStallAt: c.lastStallAt, sampleDue: c.sampleDue, claimed: c.claimed, pend: c.pend };
+  }
+  // The live video as a JPEG data URL under the size cap: lower quality first, then half size.
+  function capGrab(v) {
+    const cv = capGrab.cv || (capGrab.cv = document.createElement('canvas'));
+    let scale = 1;
+    for (let tries = 0; tries < 3; tries++) {
+      cv.width = Math.round(v.videoWidth * scale); cv.height = Math.round(v.videoHeight * scale);
+      cv.getContext('2d').drawImage(v, 0, 0, cv.width, cv.height);
+      for (const q of [0.85, 0.7, 0.55, 0.4, 0.3]) {
+        const url = cv.toDataURL('image/jpeg', q);
+        if (url.length * 0.75 <= CAP_MAX_BYTES) return url;
+      }
+      scale /= 2;
+    }
+    return null;
+  }
+  function capBoxes(st, t) {
+    if (!(G.modelOn && st.mdl && st.dets && t - st.detT < 3000)) return [];
+    return st.dets.filter(d => d && d.nbox && d.cls).slice(0, 100).map(d => ({ cls: d.cls, conf: Math.round(d.conf * 1e4) / 1e4, nbox: d.nbox.map(v => Math.round(Math.min(1, Math.max(0, v)) * 1e6) / 1e6) }));
+  }
+  function capWarn(why) {
+    if (G.capWarned) return;
+    G.capWarned = true;
+    banner('capture', 'Frame capture is not saving (' + esc(why) + '). The run is not affected.');
+  }
+  function capTake(st, reason, t) {
+    const c = st.cap, url = capGrab(st.video);
+    if (!url) { capWarn('a frame was too large'); return; }
+    const m = modelOf(st), role = st.cfg.role || st.cfg.id, stdAt = G.standard.roles[role] && G.standard.roles[role].updatedAt;
+    const body = {
+      station: st.id, role, stationName: st.cfg.name, t, reason, image: url, boxes: capBoxes(st, t),
+      zones: Object.fromEntries(Object.entries(zonesOf(st) || {}).filter(([, z]) => z && typeof z === 'object')),
+      cycle: st.eng.state().cycle, substep: c.claimStep || undefined, claim: c.claimText || undefined,
+      model: m && G.modelOn && st.mdl ? Object.assign({ file: m.file }, m.version != null ? { version: m.version } : {}) : undefined,
+      standard: stdAt || undefined, operator: st.op ? { code: st.op.code, level: st.op.level } : undefined
+    };
+    if (st.rec && st.rec.startedAt && t >= st.rec.startedAt) { body.videoT = Math.round((t - st.rec.startedAt) / 10) / 100; body.videoFile = st.rec.file; }
+    // Count it now so a burst cannot pass the caps; give it back if the server did not keep it.
+    c.n++; G.capTotal++; c.lastAt = t; G.capBusy++;
+    const sid = G.session.id;
+    postJson('/api/sessions/' + sid + '/captures', body).then(async r => {
+      if (r.ok) return;
+      let j = null; try { j = await r.json(); } catch (e) { /* no body */ }
+      if (r.status === 409 && j && j.code === 'capture_limit') return;    // the server's cap is reached: nothing to tell anyone
+      if (G.session && G.session.id === sid) { c.n = Math.max(0, c.n - 1); G.capTotal = Math.max(0, G.capTotal - 1); }
+      capWarn(j && j.message || 'the server said ' + r.status);
+    }).catch(() => { if (G.session && G.session.id === sid) { c.n = Math.max(0, c.n - 1); G.capTotal = Math.max(0, G.capTotal - 1); } capWarn('the local server is not answering'); })
+      .finally(() => { G.capBusy--; });
+    if (reason === 'claim' && c.pend.claim) c.claimed[c.pend.claim.cycle + ':' + c.pend.claim.step] = true;
+    if (reason === 'stalled') c.lastStallAt = t;
+    if (reason === 'sample') c.sampleDue = LE.nextSampleDue(t, capSettings(), Math.random);
+    c.pend = {};
+  }
+  function capTick() {
+    const t = now(), s = capSettings();
+    for (const st of LIST) {
+      try {
+        const c = st.cap;
+        if (!c) continue;
+        if (c.pendAt && t - c.pendAt > CAP_PEND_MS) { c.pend = {}; c.pendAt = 0; }
+        if (!G.session || G.capBusy >= 3) continue;
+        const reason = LE.captureWanted(capState(st, t), t, Object.assign({}, s, { enabled: capEnabled() }));
+        if (reason) capTake(st, reason, t);
+      } catch (e) { console.warn(e); capWarn('an unexpected error'); }
+    }
+    for (const st of LIST) {
+      const show = !!G.session && capEnabled() && capVideoOk(st);
+      if (st.capBtn.hidden === show) st.capBtn.hidden = !show;
+    }
+  }
+  setInterval(capTick, 200);
+  // X (every station) or the card's button (one): a frame for the trainer. Needs a recording session.
+  function captureManual(st) {
+    if (!G.session) { hint('Start a session to capture frames.'); return; }
+    if (!capEnabled()) { hint('Capture frames is off. Turn it on in Setup.'); return; }
+    const list = (st ? [st] : LIST).filter(capVideoOk);
+    if (!list.length) { hint('No camera is showing video to capture.'); return; }
+    for (const x of list) x.cap.pend.manual = true, x.cap.pendAt = now();
+    capTick();
+    hint('Saved ' + (list.length === 1 ? 'a frame from ' + list[0].id.toUpperCase() : list.length + ' frames') + ' for review.');
+  }
+  function renderCapNote() {
+    $('chkCapture').checked = capEnabled();
+    const days = capSettings().reviewDays;
+    $('capNote').textContent = 'Only while a session records. Frames are full camera pictures and can show hands, arms or people near the table. Operators appear only as a code and level. They stay on this laptop, are not committed to git, and unreviewed frames are deleted after ' + days + ' day' + (days === 1 ? '' : 's') + '.';
+  }
 
   // ---------- sessions ----------
   // The title is filled in (date, time and shift), so Enter starts. It follows the shift field until someone edits it.
@@ -1707,6 +1835,7 @@ details.raw[open] summary { margin-right: 6px; }
       G.session = { id: j.id, startedAtMs: j.startedAtMs, title: info.title, crew: info.crew, shift: info.shift, parts: {} };
       G.events = []; G.queue = []; G.evSeen = -1;
       for (const st of LIST) { st.eng.restart(); st.chk.restart(); st.manualN = 0; }
+      capReset(j.startedAtMs);
       if (G.failPick) closeFail(true);
       emit({ type: 'session_start', t: j.startedAtMs, source: 'page', note: info.title || '' });
       for (const st of LIST) emit({ type: 'source_change', station: st.id, t: j.startedAtMs, input: inputOf(st), note: noteOf(st) });
@@ -1941,6 +2070,7 @@ details.raw[open] summary { margin-right: 6px; }
     bh.classList.toggle('on', G.handsOn);
     $('btnSound').textContent = 'Sound: ' + (G.soundOn ? 'on' : 'off');
     $('sbWarn').hidden = !G.session;
+    renderCapNote();
     $('detNote').textContent = (G.modelOn ? Y.backend + (GPU ? '' : ' (add ?gpu for WebGPU)') : '') + (G.handsOn ? (G.modelOn ? ' | ' : '') + 'hands: CPU worker' : '');
     document.querySelectorAll('#basisSeg button').forEach(b => b.classList.toggle('on', b.dataset.b === G.basis));
   }
@@ -2346,6 +2476,7 @@ details.raw[open] summary { margin-right: 6px; }
   $('startForm').onkeydown = e => { if (e.key === 'Escape') { e.preventDefault(); showStartForm(false); } };
   $('fShift').oninput = () => { if ($('fTitle').value === G.autoTitle) $('fTitle').value = G.autoTitle = autoTitle(G.formAt, $('fShift').value.trim()); };
   $('chkScore').onchange = () => setScore($('chkScore').checked);
+  $('chkCapture').onchange = () => { G.capOn = $('chkCapture').checked; store.set('wire-line:capture', G.capOn); renderCapNote(); };
   $('startForm').onsubmit = e => {
     e.preventDefault();
     const nd = noDataText();
