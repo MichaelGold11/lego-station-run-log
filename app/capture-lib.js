@@ -9,7 +9,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  const REASONS = ['claim', 'unsure', 'cycle_end', 'cycle_start', 'stalled', 'sample', 'manual'];
+  const REASONS = ['claim', 'unsure', 'cycle_end', 'cycle_start', 'stalled', 'sample', 'manual', 'home'];
   const VERDICTS = ['confirmed', 'corrected', 'rejected', 'unsure'];
   const MAX_BOXES = 100;
   const DAY_MS = 86400000;
