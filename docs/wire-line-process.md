@@ -360,13 +360,15 @@ Folder `data/sessions/<id>/` (git-ignored), id like `20261015-233956-7509`:
 |---|---|
 | `session.json` | title, crew, shift, notes, start and end, the page's switches at the start (`client`: `model`, `hands`, `score` = Score the cameras), which source each station had (`camera`, `clip`, `phone` or `none`), a copy of the config and of the zones, `layout` (the floor at the start: its id and name, and per station `id`, `name`, `role`, `x`, `y`, `order`, `input` and `operator`), `operators` (the current operator per station, kept up to date from the `operator` events), per-station recordings (start time, chunks, bytes, any gaps), and a summary at the end. `config` is the file as written; the summary and the CSVs apply the layout to it (`LineEngine.applyLayout`). Sessions from before the floor have no `layout` |
 | `events.jsonl` | one event per line, appended as they happen (sort by `t`) |
-| `captures.jsonl`, `captures/<id>.jpg` | one line per captured frame (id, station, role, time, reason, claim, boxes, model) and its JPEG; unreviewed ones are swept after `capture.reviewDays` |
-| `review.jsonl` | one line per review (`captureId`, `verdict`, final `boxes`, `note`, `reviewedAt`); the latest line per capture wins |
+| `captures.jsonl`, `captures/<id>.jpg` | one line per captured frame and its full-frame JPEG (at most 400 KB). A line holds `id` (`c0001`...), `station`, `role`, `stationName`, `t` (ms), `videoT` and `videoFile` (where in the recording), `reason`, `substep`, `cycle`, `claim` (what the system believed, as text), `boxes` (`cls`, `conf`, normalized box), `zones`, `standard`, `model` (`file` and `version`), `operator` (code and level only), and the server's `receivedAt` and `bytes`. Unreviewed frames are swept after `capture.reviewDays` |
+| `review.jsonl` | one line per review (`captureId`, `verdict`, final `boxes`, `note`, `reviewedAt`); append-only, the latest line per capture wins |
+| `clips/<id>.mp4` | a 7 second clip cut on demand around a capture (3 s before `videoT`, 4 s after, 480 px high, no sound) and cached; needs ffmpeg |
 | `s1.mp4`, `s2.mp4`, ... `s5.mp4` | each station's video, named by station id (`.webm` on browsers without MP4 recording). `s1-2.mp4` is a second part if the source changed or Rec was switched off and on |
 
 Exports: `/api/sessions/<id>/substeps.csv`, `/cycles.csv`, `/verdicts.csv`, `/units.csv` and `/events.jsonl`
 (also linked from **Sessions**, which updates by itself every 10 seconds while open;
-the last two under **raw**).
+the last two under **raw**). The whole run in one file is `/api/sessions/<id>/export.zip`
+(see "Capture, review and the shared pool" below).
 
 ### Event fields
 
@@ -421,6 +423,149 @@ cycle_seconds, video_file, video_t`
 The columns of live_check.py's session log, plus the session, the station, `ts` and the video
 position. `time` is UTC, `step` is the substep's number at its station, `event` is the verdict
 kind. A verdict from a check between cycles counts toward the next cycle.
+
+## Capture, review and the shared pool
+
+The model loop: the page saves still frames while a session records, a person says right or wrong
+at `/review`, the reviewed frames become a YOLO training set, and a new model is scored against
+the current one before anyone promotes it. This replaces the Phase 2 model loop of the dashboard plan
+(`docs/dashboard-plan.md`, dashboard branch). Retraining stays a Colab step (`training/`); the app
+prepares the set and scores the result. Plan and decisions: `docs/canvas-plan.md`.
+
+### Capture on the page
+
+The page saves a full-frame JPEG (native camera size, no crop) of a station's live video, while a
+session records and that station has video. Each frame carries a reason:
+
+| Reason | When |
+|---|---|
+| `claim` | a substep transition (model or zones); at most one per step per cycle |
+| `unsure` | a `review` or `mistake` verdict |
+| `cycle_end`, `cycle_start` | the frame at a cycle's end and at its start (where `connector_closed` should show) |
+| `stalled` | a cycle has run `capture.stallSec` with no step change, then one frame every 10 s |
+| `sample` | one random frame per `capture.sampleSec` window per station: the baseline of "nothing happening" and false positives |
+| `manual` | the **X** key (every station) or the **Capture frame** button on a card |
+| `home` | frames from `scripts/ingest-footage.mjs` (intake path A) |
+
+Priority when several are due: manual, unsure, cycle_end, cycle_start, claim, stalled, sample
+(`LineEngine.captureWanted`, a pure function with tests). A station gets no second frame within 1.5 s,
+except a manual one. Caps per session: `capture.maxPerSession` in total and `capture.maxPerStation`
+per station; the server refuses over the cap with `capture_limit`.
+
+**Setup switch and privacy.** Setup has a **Capture frames** checkbox. This laptop remembers it
+(`wire-line:capture` in the browser); until someone touches it, `capture.enabled` in the config
+decides (default on). Capture only happens while a session records. Frames are full camera pictures
+and can show hands, arms or people near the table. Rules: operators appear only as a code and level
+(never a name), no face-targeting, frames stay on the laptop and are git-ignored, and unreviewed frames are deleted
+after `capture.reviewDays`. The note next to the switch says this. A failed upload shows a banner and never stops the run.
+
+### Config: `capture`, `pool`, `classConf`, `version`
+
+All in `data/meta/wire-line.json`. The `capture` block is optional; each missing or invalid key falls back to its default.
+`checkConfig` validates it (booleans and numbers above 0; the two caps must be whole numbers).
+
+    "capture": { "enabled": true, "stallSec": 12, "sampleSec": 25, "maxPerSession": 120, "maxPerStation": 40, "reviewDays": 7, "mediaCapMB": 1024 }
+
+| Key | Meaning |
+|---|---|
+| `enabled` | the default for the Setup switch |
+| `stallSec` | seconds without a step change before a `stalled` frame |
+| `sampleSec` | the random `sample` window per station |
+| `maxPerSession`, `maxPerStation` | caps, enforced by the page and by the server |
+| `reviewDays` | unreviewed captures older than this are deleted |
+| `mediaCapMB` | while all capture media is over this, the oldest unreviewed go first |
+
+The sweeper runs at server start and hourly. A reviewed frame (any verdict but `unsure`) is never swept.
+
+- `models.<role>.version` (optional, a short text or a number such as `"2026-11-02"` or `3`) names the trained model. The page stamps it into every capture (`model.version`) so each reviewed frame knows which model made it.
+- `models.<role>.classConf` (optional, `{ "<class>": 0.3 }`) is a per-class confidence threshold. Only `scripts/eval-model.mjs` reads it; it falls back to `defaults.class`, then 0.4. The live page does not use it and `checkConfig` does not validate it yet.
+- `pool` (optional) is `{ "dir": "<folder>" }`. The default is `data/pool` (git-ignored). Point `dir` at a synced shared Drive folder (`~` is expanded). Any other key is refused.
+
+### Review page (`/review`)
+
+Lists sessions with a coverage line and a hit rate per class, opens one as a grid by station and
+step. Each card shows the frame with the model's boxes, the claim, the reason, a **Play** link to
+the recording at `videoT`, and an inline 7 second clip. Keys: **C** right, **W** wrong, **U** not sure,
+**F** fix boxes (accept or reject a box, change its class from the role's class list, draw a missing box),
+**N** next unreviewed. Verdicts:
+
+| Verdict | Meaning | In the training set |
+|---|---|---|
+| `confirmed` | the model's boxes are right | the capture's own boxes |
+| `corrected` | boxes were edited | the edited boxes |
+| `rejected` | nothing valid on this frame | a negative image with an empty label file |
+| `unsure` | skip | removed (deleted at export) |
+
+**Hold out as test** pins a whole session to `test`; it is never used for training. The review
+page also has **Download run**, **Copy for Claude** and **Publish to pool** (below).
+A class list that changed since a role's training set began makes a review fail with `classes_changed`: move `data/training/<role>` aside first.
+
+### Training set and split
+
+Reviewed frames are copied into `data/training/<role>/` (git-ignored): `images/*.jpg`, `labels/*.txt`
+(YOLO: class index from `models.<role>.classes`, else `suggestedClasses`; normalized `cx cy w h`), and `manifest.json`
+(per image: session, capture, reason, verdict, model, standard, label counts). The split is by
+session, never by frame: a stable hash puts about 20% of sessions in `val`, sessions pinned in
+`data/training/splits.json` go to `test`. `export.zip` has `train/`, `val/` and `test/` folders (each with `images/` and `labels/`),
+`data.yaml` and `manifest.json`.
+
+### Endpoints
+
+All on the localhost server, with the same Host and Origin checks as the rest of `/api`.
+
+| Endpoint | What |
+|---|---|
+| `POST /api/sessions/<id>/captures` | one capture: JSON with the metadata and `image` as a `data:image/jpeg;base64,` string (body up to 600 KB, JPEG up to 400 KB). Returns `{ id }` |
+| `GET /api/sessions/<id>/captures` | all captures, each with its latest `review`, and the session's `split` |
+| `GET /api/sessions/<id>/captures/<cid>.jpg` | the frame |
+| `GET /api/sessions/<id>/captures/<cid>.mp4` | the 7 s clip (cut with ffmpeg and cached in `clips/`; 404 `no_video` with no recording, 503 without ffmpeg) |
+| `POST /api/sessions/<id>/review` | `{ captureId, verdict, boxes?, note? }`; updates the training set and returns its counts |
+| `POST /api/sessions/<id>/split` | `{ "split": "test" }` holds the session out, `{ "split": null }` releases it |
+| `GET /api/training` | per role: images, negatives, sessions, boxes per class, split counts, classes |
+| `GET /api/training/<role>/export.zip` | the role's YOLO set for the Colab notebooks |
+| `GET /api/sessions/<id>/export.zip` | the whole run (below); add `?video=1` for the recordings |
+| `GET /api/sessions/<id>/digest.txt` | a short plain-text summary of the run |
+| `POST /api/sessions/<id>/pool` | publish reviewed frames to the shared pool |
+| `GET /api/pool` | counts per station, class, contributor and mode |
+| `GET /api/pool/<role>/snapshot.zip` | the trainer's YOLO set from the pool; `?holdout=<code>` |
+
+### One export per run
+
+`export.zip` holds `run.json` (all text: session, config, summary, events, cycles, substeps, verdicts, units, and
+every capture with its review), the four CSVs, `captures/*.jpg`, and `video/*` only with `?video=1`.
+`digest.txt` is under about 6000 characters: duration, stations and models, cycles per station, verdicts, and capture
+and review counts per class. The review page's **Copy for Claude** copies it so it can be pasted into a chat.
+
+### Shared pool: two intake paths, one pool
+
+Two ways of collecting feed one shared pool, which one person trains from.
+
+- **Path A, home collection.** Varied footage filmed at home. `node scripts/ingest-footage.mjs --role s2 --video clip.mp4 [--contributor Mg-07] [--frames 150] [--data-dir <dir>]`
+  samples the video at 2 fps, pre-labels with the role's current model, picks about 150 frames (balanced across classes, with a fixed
+  share of low-confidence and empty frames), and writes a pseudo-session (`reason: "home"`, `mode: "home"`) that opens in `/review`. Needs ffmpeg, ffprobe and the role's model.
+  Shot list for a home video (each about a minute): different lighting (bright, dim, a lamp from the side); different angles and heights; the connector open and the connector closed, slowly, more than once; a hand covering the part; an empty table.
+- **Path B, group run-throughs.** Ordinary sessions with capture on, reviewed at `/review`.
+
+Both end the same way: review, then **Publish to pool** on the review page (or `POST /api/sessions/<id>/pool`
+with `{ contributor, mode: "home"|"group", station? }`). Publishing writes one folder per role that
+has reviewed frames (`unsure` does not count): `<pool.dir>/<role>/<contributor>-<sessionId>/` with `captures/`,
+`captures.jsonl`, `review.jsonl` and `session.json` (role, mode, contributor, session id, times, classes; no title,
+crew, notes or operator codes). A published folder is never changed or replaced (`exists` if it is already there); the
+write goes to a temporary folder and is renamed into place. A **contributor code** is letters, a dash and digits
+(`^[A-Za-z]{1,4}-\d{1,3}$`, for example `Mg-07`), never a name.
+
+`/pool` shows counts per station, class and contributor. **Snapshot** builds the YOLO set from every contribution of
+a role. The split is by contribution (a whole published folder), never by frame. **Hold-out by contributor**
+(`?holdout=Mg-07`, the dropdown on `/pool`) puts everything that person published in `test`, for a fair check on
+footage the model never saw. Frames whose class is not in the role's list are dropped from the labels and counted in `droppedBoxes`.
+
+### Scoring a candidate model
+
+`node scripts/eval-model.mjs <role> <candidate.onnx> [--baseline current] [--split val|test|both] [--data-dir <dir>]`
+runs both models over the `val` and `test` images of `data/training/<role>` and prints per-class precision, recall (IoU 0.5) and F1, and the
+change against the baseline (default: the file in `models.<role>.file`). It needs ffmpeg and refuses a set whose classes differ from the config.
+It never changes the config. To promote: copy the `.onnx` to `app/models/`, set `models.<role>.file` and a new `version`.
+Tests: `npm run test:eval`, `npm run test:ingest`, and `npm run test:line`.
 
 ## For the model team
 
@@ -487,6 +632,7 @@ with a class number beyond your list drops that station back to zones with the s
 
 ## Known limits
 
+- **Capture, export and pool.** The run `export.zip` and the training and snapshot zips are built in memory, and a zip over 4 GB is refused; a run export with `?video=1` is refused above 1.5 GB of recordings (download without video and copy the files from the session folder). A pool publish is not atomic across roles: each role's folder is renamed into place on its own, so a failure partway can leave some roles published and others not (publish again for the rest; a folder that exists is never replaced). Immutability of a published contribution is by convention, not enforced: the server never rewrites it, but anyone with the shared folder can. Clips need ffmpeg. Hold-out by contributor only helps once at least two people have published.
 - **Performance with more stations.** Each 30 ms tick works through every station that is due, up to
   8 ms of work, so a station keeps its rate however many there are (about 6.7 frames a second: 125 ms
   rounded up to the tick). Measured with Chrome's fake cameras on an Apple M5 Pro: 4 stations 6.7

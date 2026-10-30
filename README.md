@@ -64,6 +64,8 @@ the screen looks the way it does: [docs/lean-plan.md](docs/lean-plan.md) and
 |---|---|
 | http://localhost:4173/line | The wire line: the run-day page (`/` opens it) |
 | `https://<laptop>.local:4174/phone` | A station's phone or tablet camera page; its QR code on `/line` opens it |
+| http://localhost:4173/review | Check the frames a run captured (right, wrong, fix boxes), play clips, download the run, publish to the shared pool |
+| http://localhost:4173/pool | The shared pool: counts per station, class and contributor, and the trainer's snapshot |
 | http://localhost:4173/runs | Archived: the LEGO run log ([docs/lego-run-log.md](docs/lego-run-log.md)) |
 | http://localhost:4173/live | Archived: the LEGO single-station live prototype |
 
@@ -75,7 +77,9 @@ the screen looks the way it does: [docs/lean-plan.md](docs/lean-plan.md) and
 | `server.mjs` | Local server (`npm start`). |
 | `app/live-detect.js`, `app/models/` | YOLO pre and post processing (shared by `/line` and `/live`) and the models (see `app/models/README.md`). |
 | `app/phone.html`, `scripts/phone-cert.mjs` | Phone and tablet camera page (HTTPS, port 4174) and its local certificate. The certificate and pairing secret live in `data/phone-cert/` (not committed). |
-| `data/sessions/` | Wire line sessions: events, CSVs and one video per station. Not committed (about 1 GB per hour). |
+| `data/sessions/` | Wire line sessions: events, CSVs, one video per station, and the captured frames with their reviews (`captures/`, `captures.jsonl`, `review.jsonl`, `clips/`). Not committed (about 1 GB per hour). |
+| `app/review.html`, `app/pool.html`, `app/capture-lib.js` | The review and pool pages and the code they share with the server. Reviewed frames become YOLO sets in `data/training/<role>/`; the pool is a folder (`pool.dir` in `data/meta/wire-line.json`, default `data/pool`). Both git-ignored. |
+| `scripts/ingest-footage.mjs`, `scripts/eval-model.mjs` | Home footage into a reviewable session; score a candidate model against the current one. See [docs/wire-line-process.md](docs/wire-line-process.md) and the team guide (sections 6a and 6b). |
 | `app/lego-station-run-log.html`, `app/live-mock.html` | Archived LEGO pages (`/runs`, `/live`). The run log is the same page that runs as a claude.ai artifact. |
 | `scripts/runlog.mjs`, `data/runs/`, `data/assets/` | The LEGO run log's helper (`npm run runlog -- help`), its runs and its videos (also the demo clips on `/line`). |
 | `AGENTS.md`, `CLAUDE.md` | Instructions for coding agents. |

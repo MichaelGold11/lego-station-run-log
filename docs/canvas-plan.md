@@ -202,3 +202,13 @@ Built as planned, with these calls made along the way:
 
 Tests: `npm run test:line` 190 engine checks and 113 server checks. Browser walk: 47 checks in Chrome with fake cameras
 (scratchpad script, not in the repo), screenshots at 1280x800 and 1920x1080.
+
+## 9. Capture, review and the shared pool (2026-10-30)
+
+Added on this branch after the floor: capture frames while a session records, a `/review` page, YOLO training sets, a
+single run export with a "Copy for Claude" digest, 7 second clips, a shared pool fed by two intake paths (A home footage,
+B group run-throughs, one contributor code per person, hold-out by contributor), and `scripts/eval-model.mjs`. This
+replaces the Phase 2 model loop in `docs/dashboard-plan.md` (dashboard branch): do not build that loop there. The
+reference is [wire-line-process.md](wire-line-process.md) ("Capture, review and the shared pool"), the steps for
+people are in the team guide (6a and 6b). Known limits: exports are built in memory (a zip over 4 GB is refused), a pool
+publish is not atomic across roles, and a published folder is immutable by convention only.

@@ -227,6 +227,59 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions**),
   added station films its role's work: `session.json` (under **raw**) lists each station's role, so
   `s5.mp4` from a second QA station is QA footage.
 
+## 6a. Review your run
+
+While a run records, the page quietly saves still pictures from each camera: at steps, when it is
+unsure, at the start and end of a cycle, when a cycle drags, and now and then at random. You can save
+one yourself by pressing **X**. Then you tell the platform which ones it got right. This is how the
+models get better.
+
+Privacy first. The pictures are the full camera view, so they can show hands, arms or people near the
+table. People appear only as a code and level, never a name. The pictures stay on this laptop, are not
+put in git, and ones nobody checks are deleted after 7 days. **Setup** has a **Capture frames** box to
+turn it off.
+
+1. Finish the run (**End session**).
+2. Open **Sessions** and press **Review frames** (or go to http://localhost:4173/review), then pick the run.
+3. Click a card. You see the picture, the boxes the model drew, and a short question such as "Is the connector open here?". Press **Play** for a 7 second clip of the moment.
+4. Press **C** if the boxes are right, **W** if the picture is wrong or has nothing to find, **U** if you cannot tell.
+5. If the boxes are almost right, press **F**. Click a box to keep or reject it, change its name, or drag on the picture to draw one the model missed. Then **Save fix**.
+6. Press **N** to jump to the next picture you have not checked. Ten minutes is enough for a run.
+7. To save the whole run, press **Download run** (one zip with the data, the CSVs and the pictures). To ask Claude about it, press **Copy for Claude** and paste.
+
+Tip: if you want a session kept only to test a new model, press **Hold out as test**. It will never be used for training.
+
+## 6b. Add to the shared pool
+
+The team trains each station's model from one shared pile of checked pictures, the pool. You add to
+it in one of two ways, then press one button.
+
+**A. Film at home.** Film about a minute of your station's work on your phone, a few times. Change something each time:
+- the light (bright, dim, a lamp from the side)
+- the camera angle and height
+- the connector open, then closed
+- a hand covering part of the table
+- an empty table
+
+Copy the video to the laptop, then in a terminal:
+
+    node scripts/ingest-footage.mjs --role s2 --video myclip.mp4
+
+(use your station's `s1` to `s4`). It picks about 150 useful pictures and opens them as a new session in **Review**.
+
+**B. Group run-throughs.** Do a normal recorded run with capture on.
+
+Then for either:
+1. Open **Review frames** and check your pictures (section 6a). Pictures marked **Not sure** are left out.
+2. Type your code in **Your code** (like `Mg-07`: your letters, a dash, two digits; never your name) and pick **home** or **group**.
+3. Press **Publish to pool**. You see "Published N frames".
+4. To see what the pool holds, go to http://localhost:4173/pool: pictures per station, per class and per person.
+
+Good to know: publishing cannot be undone and a published batch is never changed, so check first. If the pool
+folder is the shared Drive folder, it appears for the others when Drive syncs. The person who trains
+the model presses **Download snapshot** on the Pool page. To test on someone's footage the model has not
+seen, they pick that code in **Hold out** before downloading.
+
 ## 7. Train your station's model
 
 1. **Use your station's classes.** Label states and tools you can see in one still frame, never
@@ -328,7 +381,7 @@ Score is off.
 
 ## 11. Still open
 
-- Which shared Drive folder the footage goes in.
+- Which shared Drive folder the footage goes in, and so which folder `pool.dir` points to.
 - Who owns the run-day laptop.
 - The wire length in cm: S1 only sees that the wire went to the ruler, it does not measure it yet.
 - The QA process beyond the pull test.

@@ -53,6 +53,8 @@ CSV columns, model export contract) is [docs/wire-line-process.md](docs/wire-lin
 | `app/phone.html` | Phone and tablet camera page (iPhone, iPad, Android, a laptop browser), served over HTTPS on port 4174 (`PHONE_PORT`) by `server.mjs`; streams to `/line` over WebRTC |
 | `scripts/phone-cert.mjs` | Local name-constrained CA and HTTPS certificate for the phone page (`node scripts/phone-cert.mjs` checks them) |
 | `app/review.html`, `app/pool.html` | `/review`: check captured frames, clips, Download run and Copy for Claude (`export.zip`, `digest.txt`), Publish to pool. `/pool`: counts per station, class and contributor, and the trainer snapshot (`pool` in `data/meta/wire-line.json` is `{ "dir": "<folder>" }`, default `data/pool`; contributors are codes like `Mg-07`, never names; a published folder is never replaced) |
+| `data/sessions/<id>/captures/`, `captures.jsonl`, `review.jsonl`, `clips/` | Frames the page saved while recording (reasons: claim, unsure, cycle_end, cycle_start, stalled, sample, manual, home), what people said about them (append-only, latest line wins) and cached 7 s clips. Config: the `capture` block, `models.<role>.version`, `models.<role>.classConf` (read only by `eval-model.mjs`), `pool`. Reviewed frames become `data/training/<role>/` (YOLO; split by session, never by frame). Endpoints and rules: [docs/wire-line-process.md](docs/wire-line-process.md), "Capture, review and the shared pool" |
+| `scripts/ingest-footage.mjs`, `scripts/eval-model.mjs` | Intake path A (a home video becomes a session that opens in `/review`) and scoring a candidate `.onnx` against the current model on the val and test images. Neither changes the config; promotion is a human edit |
 | `data/phone-cert/` | This laptop's CA key, certificate and phone pairing secret. Git-ignored |
 
 Rules for the wire line:
@@ -69,6 +71,8 @@ Rules for the wire line:
 - The floor layout is not the process: Class test is built from the config's stations
   (`LineEngine.classTestLayout`), saved layouts only place stations and pick their role. A session
   records its layout in `session.json`; apply it with `LineEngine.applyLayout` to read its stations.
+- Capture privacy: frames are full camera pictures and can show hands, arms or people. Operators appear only as a code and level. Never commit `data/sessions/`, `data/training/` or the pool folder, and never put a name in a contributor code (`Mg-07`: letters, a dash, digits). A published pool folder is never modified or replaced.
+- Two intake paths feed one shared pool: A (home footage, `ingest-footage.mjs`) and B (group run-throughs). Split by session or contribution, never by frame; hold a whole contributor out as test with `?holdout=<code>` on the snapshot.
 - The phone port serves only the phone page, `/ca.crt` and `/phone/*`. Keep everything else
   (data, sessions, models, `/api/*`) on the localhost server.
 - Run `npm run test:line` before committing; it must pass. Share changes on a branch with a pull
