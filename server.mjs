@@ -14,7 +14,7 @@ import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { ensurePhoneCert, lanAddresses, localNames } from './scripts/phone-cert.mjs';
 
@@ -746,6 +746,60 @@ function trainingApi(req, res, p) {
   return send(res, 200, zip, 'application/zip', { 'Content-Disposition': `attachment; filename="${role}-training.zip"` });
 }
 
+// ---------- clips: GET /api/sessions/<id>/captures/<capId>.mp4 ----------
+// A 7 second clip (videoT - 3 to videoT + 4, the start clamped to 0) cut by ffmpeg from the station's recording and cached
+// in <session>/clips/. While the session still records, a cached clip older than the recording file is cut again.
+const CLIP_BEFORE_S = 3, CLIP_LEN_S = 7;
+const CLIPS_BUSY = new Map();
+function runFfmpeg(args, bin) {
+  return new Promise(resolve => {
+    let err = '', outText = '', p;
+    try { p = spawn(bin || 'ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] }); } catch (e) { return resolve({ code: -1, err: String(e.message || e) }); }
+    p.stdout.on('data', d => { if (outText.length < 4000) outText += d; });
+    p.stderr.on('data', d => { if (err.length < 4000) err += d; });
+    p.on('error', e => resolve({ code: -1, err: String(e.message || e) }));
+    p.on('close', code => resolve({ code, err, out: outText }));
+  });
+}
+async function clipApi(req, res, id, doc, dir, capId) {
+  const cap = readCaptures(id).find(c => c.id === capId);
+  if (!cap) return fail(res, 404, 'not_found', 'No such capture.');
+  if (cap.videoT == null) return fail(res, 404, 'no_video', 'This capture has no video position (it was not taken from a recording).');
+  const parts = (doc.recordings && doc.recordings[cap.station]) || [];
+  const rec = parts.find(r => r.file === cap.videoFile) || (cap.videoFile ? null : parts[0]);
+  const src = rec && path.join(dir, rec.file);
+  if (!rec || !fs.existsSync(src)) return fail(res, 404, 'no_video', 'The recording for this capture is missing, so there is no clip.');
+  if (!hasFfmpeg) return fail(res, 503, 'unavailable', 'ffmpeg is not installed on this computer, so clips cannot be cut. Install ffmpeg or use the Play link.');
+  const out = path.join(dir, 'clips', capId + '.mp4');
+  let fresh = false;
+  try { const st = fs.statSync(out); fresh = st.size > 0 && (!!doc.endedAt || st.mtimeMs >= fs.statSync(src).mtimeMs); } catch (e) { /* not cut yet */ }
+  if (!fresh) {
+    const key = id + '/' + capId;
+    if (!CLIPS_BUSY.has(key)) {
+      const job = (async () => {
+        fs.mkdirSync(path.dirname(out), { recursive: true });
+        const tmp = out + '.tmp.mp4';
+        try { fs.unlinkSync(tmp); } catch (e) { /* none */ }
+        const r = await runFfmpeg(['-nostdin', '-v', 'error', '-y', '-ss', String(Math.max(0, cap.videoT - CLIP_BEFORE_S)), '-i', src, '-t', String(CLIP_LEN_S), '-an',
+          '-vf', "scale=-2:'min(480,ih)'", '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '28', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', tmp]);
+        let size = 0; try { size = fs.statSync(tmp).size; } catch (e) { /* no output */ }
+        // Seeking past the end still writes a valid file with no pictures in it: count them.
+        if (r.code === 0 && size) {
+          const pr = await runFfmpeg(['-v', 'error', '-count_packets', '-select_streams', 'v:0', '-show_entries', 'stream=nb_read_packets', '-of', 'csv=p=0', tmp], 'ffprobe');
+          if (pr.code === 0 && Number(String(pr.out).trim()) === 0) size = 0;
+        }
+        if (r.code !== 0 || !size) { try { fs.unlinkSync(tmp); } catch (e) { /* none */ } return { error: r.code !== 0 ? 'ffmpeg could not cut the clip. ' + r.err.trim().split('\n').pop() : 'The recording ends before this moment, so there is no clip.' }; }
+        fs.renameSync(tmp, out);
+        return {};
+      })().finally(() => CLIPS_BUSY.delete(key));
+      CLIPS_BUSY.set(key, job);
+    }
+    const r = await CLIPS_BUSY.get(key);
+    if (r.error) return fail(res, 500, 'unavailable', r.error);
+  }
+  return serveFile(req, res, out, 'video/mp4', { 'Cache-Control': 'private, max-age=60' });
+}
+
 async function sessionsApi(req, res, p, url) {
   if (p === '/api/sessions') {
     if (req.method === 'GET') return send(res, 200, { sessions: listSessions() });
@@ -912,8 +966,9 @@ async function sessionsApi(req, res, p, url) {
   }
   if (rest.length === 2 && rest[0] === 'captures') {
     if (req.method !== 'GET') return fail(res, 405, 'invalid_argument', 'Method not allowed.');
-    const m = /^(c\d{4,})\.jpg$/.exec(rest[1]);
-    if (!m) return fail(res, 400, 'invalid_argument', 'Bad capture name; use c0001.jpg.');
+    const m = /^(c\d{4,})\.(jpg|mp4)$/.exec(rest[1]);
+    if (!m) return fail(res, 400, 'invalid_argument', 'Bad capture name; use c0001.jpg or c0001.mp4.');
+    if (m[2] === 'mp4') return clipApi(req, res, id, doc, dir, m[1]);
     const f = path.join(dir, 'captures', m[1] + '.jpg');
     if (!fs.existsSync(f)) return fail(res, 404, 'not_found', 'No such capture.');
     return serveFile(req, res, f, 'image/jpeg', { 'Cache-Control': 'private, max-age=3600' });

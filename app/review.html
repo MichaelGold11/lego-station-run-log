@@ -92,6 +92,8 @@ main { max-width: 1180px; margin: 0 auto; padding: 14px 16px 80px; display: grid
 .shot svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .claim { font-size: 14px; font-weight: 500; }
 .meta { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; font-size: 12px; color: var(--ink-2); }
+.clipbar { display: flex; gap: 6px; align-items: center; }
+.clip { width: 100%; max-height: 360px; border-radius: 6px; background: #000; display: block; }
 .acts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .acts .btn { min-height: 42px; }
 .acts2 { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -297,6 +299,7 @@ main { max-width: 1180px; margin: 0 auto; padding: 14px 16px 80px; display: grid
       const id = el.dataset.id;
       el.addEventListener('pointerdown', () => setCur(id, false));
       el.querySelectorAll('[data-a]').forEach(b => { b.onclick = () => act(id, b.dataset.a); });
+      el.querySelectorAll('[data-clip]').forEach(b => { b.onclick = () => playClip(el, b); });
     });
     markCur();
   }
@@ -306,6 +309,7 @@ main { max-width: 1180px; margin: 0 auto; padding: 14px 16px 80px; display: grid
     const v = rv ? rv.verdict : '';
     return `<article class="panel card ${rv ? 'v-' + v : ''}" data-id="${esc(c.id)}" tabindex="0">
       <div class="shot"><img src="/api/sessions/${encodeURIComponent(S.id)}/captures/${encodeURIComponent(c.id)}.jpg" alt="Frame ${esc(c.id)}" loading="lazy">${boxesSvg(shown)}</div>
+      ${url ? `<div class="clipbar"><button class="btn sm" data-clip="${esc(c.id)}" type="button">Play clip</button></div>` : ''}
       ${legend(shown)}
       <div class="claim">${esc(claimText(c))}</div>
       <div class="meta"><span class="chip">${esc(REASON[c.reason] || c.reason)}</span>${c.cycle != null ? `<span class="mono">cycle ${esc(c.cycle)}</span>` : ''}
@@ -318,6 +322,22 @@ main { max-width: 1180px; margin: 0 auto; padding: 14px 16px 80px; display: grid
       </div>
       <div class="acts2"><button class="btn sm" data-a="F" type="button">Fix boxes <kbd>F</kbd></button></div>
     </article>`;
+  }
+
+  // The clip (about 7 seconds around the moment) plays in the card. If it cannot be cut (no ffmpeg, no recording), say why
+  // and leave the Play link, which opens the whole recording at that second.
+  function playClip(card, btn) {
+    const bar = btn.parentElement, src = '/api/sessions/' + encodeURIComponent(S.id) + '/captures/' + encodeURIComponent(btn.dataset.clip) + '.mp4';
+    btn.disabled = true; btn.textContent = 'Cutting clip...';
+    const v = document.createElement('video');
+    v.className = 'clip'; v.controls = true; v.muted = true; v.loop = true; v.autoplay = true; v.playsInline = true; v.preload = 'auto';
+    v.addEventListener('loadeddata', () => { bar.replaceWith(v); v.play().catch(() => {}); }, { once: true });
+    v.addEventListener('error', async () => {
+      let why = 'The clip could not be played.';
+      try { const r = await fetch(src, { headers: { Range: 'bytes=0-0' } }); if (!r.ok) { const j = await r.json().catch(() => null); why = (j && j.error && j.error.message) || (j && j.message) || why; } } catch (e) { /* offline */ }
+      btn.disabled = false; btn.textContent = 'Play clip'; toast(why + ' Use the Play link instead.', true);
+    }, { once: true });
+    v.src = src;
   }
 
   function wireHead() {

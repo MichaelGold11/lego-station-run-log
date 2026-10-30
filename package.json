@@ -14,7 +14,7 @@
     "test:live": "node scripts/test-live-engine.mjs && node scripts/test-live-detect.mjs",
     "test:eval": "node scripts/test-eval-model.mjs",
     "test:ingest": "node scripts/test-ingest-footage.mjs",
-    "test:line": "node scripts/test-line-engine.mjs && node scripts/test-capture-lib.mjs && node scripts/test-line-server.mjs"
+    "test:line": "node scripts/test-line-engine.mjs && node scripts/test-capture-lib.mjs && node scripts/test-line-server.mjs && node scripts/test-pool.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "0.10.35",
