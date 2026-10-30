@@ -155,6 +155,37 @@
     return out;
   }
 
+  // ---------- capture triggers (the page calls this for each station a few times a second) ----------
+  const CAPTURE_DEDUPE_MS = 1500;     // no second frame from one station inside this
+  const CAPTURE_STALL_EVERY_MS = 10000;   // once a cycle has stalled, one frame this often
+  // When the next random "nothing happening" frame is due: one per sampleSec window, at a random point in it. rng is
+  // injected (Math.random in the page) so tests are exact.
+  function nextSampleDue(from, settings, rng) {
+    const s = settings || CAPTURE_DEFAULTS, ms = (isNum(s.sampleSec) && s.sampleSec > 0 ? s.sampleSec : CAPTURE_DEFAULTS.sampleSec) * 1000;
+    const r = typeof rng === 'function' ? rng() : 0.5;
+    return from + ms * Math.min(1, Math.max(0, isNum(r) ? r : 0.5));
+  }
+  // Which reason to capture one station's frame for right now, or null. Pure: the page keeps the state and updates it
+  // after a capture (lastAt, total, stationCount, lastStallAt, sampleDue = nextSampleDue(...), claimed[cycle + ':' + step]).
+  // state: { recording (a session records), hasVideo, total, stationCount (captures so far), lastAt (ms of this station's
+  //   last capture, or null), cycleActive, stepAt (ms the current step began), lastStallAt, sampleDue (ms or null),
+  //   claimed ({ "<cycle>:<step>": true }), pend: { manual, unsure, cycleEnd, cycleStart, claim: { step, cycle } } }
+  // Priority: manual, unsure, cycle_end, cycle_start, claim, stalled, sample. A manual frame skips the 1.5 s dedupe.
+  function captureWanted(state, now, settings) {
+    const s = Object.assign({}, CAPTURE_DEFAULTS, settings || {}), st = state || {}, p = st.pend || {};
+    if (s.enabled === false || !st.recording || !st.hasVideo) return null;
+    if ((st.total || 0) >= s.maxPerSession || (st.stationCount || 0) >= s.maxPerStation) return null;
+    if (p.manual) return 'manual';
+    if (isNum(st.lastAt) && now - st.lastAt < CAPTURE_DEDUPE_MS) return null;
+    if (p.unsure) return 'unsure';
+    if (p.cycleEnd) return 'cycle_end';
+    if (p.cycleStart) return 'cycle_start';
+    if (p.claim && !(st.claimed && st.claimed[p.claim.cycle + ':' + p.claim.step])) return 'claim';
+    if (st.cycleActive && isNum(st.stepAt) && now - st.stepAt >= s.stallSec * 1000 && !(isNum(st.lastStallAt) && now - st.lastStallAt < CAPTURE_STALL_EVERY_MS)) return 'stalled';
+    if (isNum(st.sampleDue) && now >= st.sampleDue) return 'sample';
+    return null;
+  }
+
   // One model entry: { file: "/models/<name>.onnx", classes: [unique strings], imgsz }.
   function modelShapeErrors(name, m) {
     const e = [], ex = name + ' must look like { "file": "/models/<name>.onnx", "classes": [...], "imgsz": 640 }.';
@@ -1103,7 +1134,7 @@
 
   return {
     DEFAULTS, MOTION, MISMATCH_NOTE, EVENT_TYPES, CYCLE_ACTIONS, SUBSTEP_COLS, CYCLE_COLS, VERDICT_COLS, CHECK, LEVELS, OPERATOR_CODE, FLOOR, CLASS_TEST,
-    members, activeRule, evalRule, missingOf, ruleText, checkConfig, captureDefaults, CAPTURE_DEFAULTS, modelFor, checkModelOutput, e2eBadClass, qaDecide, createStation,
+    members, activeRule, evalRule, missingOf, ruleText, checkConfig, captureDefaults, CAPTURE_DEFAULTS, captureWanted, nextSampleDue, modelFor, checkModelOutput, e2eBadClass, qaDecide, createStation,
     operatorCode, defaultName, shortName, classTestLayout, setupKey, nextStationId, freeSpot, saveScheduler, applyLayout,
     zoneSignals, calibrationFrom, classSignals, handPresence, steadyClasses, mergeSignals, createChecker,
     sortEvents, ruleZones, unobserved, NO_DATA, detectedCycles, manualCycles, summarize, substepsCsv, cyclesCsv, verdictsCsv, linkUnits, unitCols, unitsCsv, csvCell

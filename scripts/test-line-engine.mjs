@@ -879,5 +879,51 @@ console.log('regressions: new station placement and per-layout saves (ea1dcf3, d
   check('a second edit on the same layout replaces its pending save', live.size === 1);
 }
 
+console.log('capture triggers: captureWanted');
+{
+  const S = LE.captureDefaults(CFG), T0 = 1_000_000;
+  const base = () => ({ recording: true, hasVideo: true, total: 0, stationCount: 0, lastAt: null, cycleActive: false, stepAt: T0, lastStallAt: null, sampleDue: null, claimed: {}, pend: {} });
+  const w = (over, now) => LE.captureWanted(Object.assign(base(), over), now == null ? T0 : now, S);
+  check('nothing pending, nothing wanted', w({}) === null);
+  check('manual, unsure, cycle_end, cycle_start and claim each name their reason',
+    w({ pend: { manual: true } }) === 'manual' && w({ pend: { unsure: true } }) === 'unsure' && w({ pend: { cycleEnd: true } }) === 'cycle_end'
+    && w({ pend: { cycleStart: true } }) === 'cycle_start' && w({ pend: { claim: { step: 'a', cycle: 1 } } }) === 'claim');
+  check('priority: manual over unsure over cycle_end over cycle_start over claim',
+    w({ pend: { manual: true, unsure: true, cycleEnd: true } }) === 'manual' && w({ pend: { unsure: true, cycleEnd: true, claim: { step: 'a', cycle: 1 } } }) === 'unsure'
+    && w({ pend: { cycleEnd: true, cycleStart: true } }) === 'cycle_end' && w({ pend: { cycleStart: true, claim: { step: 'a', cycle: 1 } } }) === 'cycle_start');
+  check('no capture without video or when no session records or when capture is off',
+    w({ hasVideo: false, pend: { manual: true } }) === null && w({ recording: false, pend: { unsure: true } }) === null
+    && LE.captureWanted(Object.assign(base(), { pend: { unsure: true } }), T0, Object.assign({}, S, { enabled: false })) === null);
+  check('dedupe: a second frame within 1.5 s of the last is refused, at 1.5 s it is allowed',
+    w({ lastAt: T0 - 1499, pend: { unsure: true } }) === null && w({ lastAt: T0 - 1500, pend: { unsure: true } }) === 'unsure');
+  check('a manual frame skips the dedupe', w({ lastAt: T0 - 100, pend: { manual: true } }) === 'manual');
+  check('cap per session: at maxPerSession nothing, one under it is fine',
+    w({ total: S.maxPerSession, pend: { unsure: true } }) === null && w({ total: S.maxPerSession - 1, pend: { unsure: true } }) === 'unsure');
+  check('cap per station: at maxPerStation nothing, even a manual frame',
+    w({ stationCount: S.maxPerStation, pend: { manual: true } }) === null && w({ stationCount: S.maxPerStation - 1, pend: { manual: true } }) === 'manual');
+  check('one claim per step per cycle: a step already claimed this cycle is not taken again, the next cycle is',
+    w({ claimed: { '1:pick': true }, pend: { claim: { step: 'pick', cycle: 1 } } }) === null
+    && w({ claimed: { '1:pick': true }, pend: { claim: { step: 'pick', cycle: 2 } } }) === 'claim'
+    && w({ claimed: { '1:pick': true }, pend: { claim: { step: 'crimp', cycle: 1 } } }) === 'claim');
+  const stall = (now, over) => w(Object.assign({ cycleActive: true, stepAt: T0 }, over || {}), now);
+  check('stalled: not before stallSec, yes at stallSec',
+    stall(T0 + S.stallSec * 1000 - 1) === null && stall(T0 + S.stallSec * 1000) === 'stalled');
+  check('stalled: not outside a cycle', w({ cycleActive: false, stepAt: T0 }, T0 + 60000) === null);
+  const first = T0 + S.stallSec * 1000;
+  check('stalled: then one frame every 10 s, not before',
+    stall(first + 9999, { lastStallAt: first }) === null && stall(first + 10000, { lastStallAt: first }) === 'stalled');
+  check('stalled: a step change restarts the stall clock', stall(first + 5000, { stepAt: first + 4000 }) === null);
+  const win = S.sampleSec * 1000;
+  check('nextSampleDue: from + rng * sampleSec (rng 0, 0.5, 1)',
+    LE.nextSampleDue(T0, S, () => 0) === T0 && LE.nextSampleDue(T0, S, () => 0.5) === T0 + win / 2 && LE.nextSampleDue(T0, S, () => 1) === T0 + win);
+  check('nextSampleDue: a wild rng is clamped inside the window', LE.nextSampleDue(T0, S, () => 7) === T0 + win && LE.nextSampleDue(T0, S, () => -3) === T0);
+  check('sample: wanted at sampleDue, not a moment before, and not with no due time',
+    w({ sampleDue: T0 + 500 }, T0 + 499) === null && w({ sampleDue: T0 + 500 }, T0 + 500) === 'sample' && w({}, T0 + 10 * win) === null);
+  check('sample: once the page moves sampleDue a window on, it is quiet again',
+    w({ sampleDue: LE.nextSampleDue(T0, S, () => 0.5) }, T0 + win / 2 + 1) === 'sample' && w({ sampleDue: LE.nextSampleDue(T0 + win / 2, S, () => 0.5) }, T0 + win / 2 + 1) === null);
+  check('sample is behind everything else (an unsure frame wins the same tick)', w({ sampleDue: T0, pend: { unsure: true } }) === 'unsure');
+  check('a pending claim already taken falls through to a stall', w({ claimed: { '1:pick': true }, cycleActive: true, stepAt: T0 - 20000, pend: { claim: { step: 'pick', cycle: 1 } } }) === 'stalled');
+}
+
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);
