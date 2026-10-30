@@ -180,7 +180,7 @@ async function main() {
   if (!/^s[1-4]$/.test(a.role || '') || !a.video) { console.error(USAGE); process.exit(1); }
   const frames = a.frames == null ? DEFAULTS.frames : Number(a.frames);
   if (!Number.isInteger(frames) || frames < 1 || frames > 120 * 4) { console.error('--frames must be a whole number from 1 to 480.'); process.exit(1); }
-  if (a.contributor && !/^[A-Za-z0-9_-]{1,20}$/.test(a.contributor)) { console.error('--contributor is a short code (letters, digits, - and _), never a name.'); process.exit(1); }
+  if (a.contributor && !/^[A-Za-z]{1,4}-\d{1,3}$/.test(a.contributor)) { console.error('--contributor is a short code like Mg-07 (1 to 4 letters, a dash, 1 to 3 digits), never a name.'); process.exit(1); }
   if (!fs.existsSync(a.video)) { console.error('Video not found: ' + a.video); process.exit(1); }
   need('ffmpeg'); need('ffprobe');
 
