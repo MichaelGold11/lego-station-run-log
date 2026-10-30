@@ -176,12 +176,12 @@ select, input[type=text] { padding: 4px 8px; border: 1px solid var(--line-2); bo
         <div><div class="eyebrow">Boxes per class</div>${classes(st.byClass)}</div>
         <div><div class="eyebrow">Per contributor</div>
           <table class="tbl"><thead><tr><th>Code</th><th>Contributions</th><th>Frames</th><th>Boxes per class</th></tr></thead><tbody>
-          ${codes.map(c => { const x = st.byContributor[c]; return `<tr><td class="mono">${esc(c)}</td><td>${x.contributions}</td><td>${x.images}</td><td>${classes(x.byClass)}</td></tr>`; }).join('')}
+          ${codes.map(c => { const x = st.byContributor[c]; return `<tr><td class="mono" style="white-space:nowrap">${esc(c)}</td><td>${x.contributions}</td><td>${x.images}</td><td>${classes(x.byClass)}</td></tr>`; }).join('')}
           </tbody></table></div>
         <div class="muted">By way in: ${Object.keys(st.byMode).map(m => `${esc(m)} ${st.byMode[m].images} frames`).join(', ')}</div>
         <details><summary class="muted">Contributions (${contribs.length})</summary>
           <table class="tbl"><thead><tr><th>Folder</th><th>Way in</th><th>Frames</th><th>Published</th></tr></thead><tbody>
-          ${contribs.map(c => `<tr><td class="mono">${esc(c.folder)}</td><td>${esc(c.mode)}</td><td>${c.images}</td><td class="muted">${esc((c.publishedAt || '').replace('T', ' ').slice(0, 16))}</td></tr>`).join('')}
+          ${contribs.map(c => `<tr><td class="mono" style="white-space:nowrap">${esc(c.folder)}</td><td>${esc(c.mode)}</td><td>${c.images}</td><td class="muted">${esc((c.publishedAt || '').replace('T', ' ').slice(0, 16))}</td></tr>`).join('')}
           </tbody></table></details>
         <div class="row">
           <label class="muted">Hold out as test

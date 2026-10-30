@@ -1003,7 +1003,7 @@ async function clipApi(req, res, id, doc, dir, capId) {
           const pr = await runFfmpeg(['-v', 'error', '-count_packets', '-select_streams', 'v:0', '-show_entries', 'stream=nb_read_packets', '-of', 'csv=p=0', tmp], 'ffprobe');
           if (pr.code === 0 && Number(String(pr.out).trim()) === 0) size = 0;
         }
-        if (r.code !== 0 || !size) { try { fs.unlinkSync(tmp); } catch (e) { /* none */ } return { error: r.code !== 0 ? 'ffmpeg could not cut the clip. ' + r.err.trim().split('\n').pop() : 'The recording ends before this moment, so there is no clip.' }; }
+        if (r.code !== 0 || !size) { try { fs.unlinkSync(tmp); } catch (e) { /* none */ } if (r.code !== 0) console.error('clip ' + id + '/' + capId + ': ffmpeg failed: ' + r.err.trim().split('\n').pop()); return { error: r.code !== 0 ? 'The clip could not be cut from this recording.' : 'The recording ends before this moment, so there is no clip.' }; }
         fs.renameSync(tmp, out);
         return {};
       })().finally(() => CLIPS_BUSY.delete(key));

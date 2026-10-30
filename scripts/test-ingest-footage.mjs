@@ -1,6 +1,6 @@
 // Tests for scripts/ingest-footage.mjs: frame selection and the captures.jsonl line shape. Run: npm run test:ingest
 import fs from 'node:fs';
-import { selectFrames, captureLine, claimText, sessionId } from './ingest-footage.mjs';
+import { selectFrames, captureLine, claimText, sessionId, dedupeBoxes, iou } from './ingest-footage.mjs';
 const load = f => { const mod = { exports: {} }; new Function('module', fs.readFileSync(new URL('../app/' + f, import.meta.url), 'utf8'))(mod); return mod.exports; };
 const CL = load('capture-lib.js');
 
@@ -59,6 +59,18 @@ console.log('captures.jsonl line');
   check('empty claim', claimText([]) === 'Home footage, pre-label: nothing found');
   check('a bad box is rejected by the validator', !!CL.cleanBoxes([{ cls: 'red_wire', nbox: [0.5, 0.5, 0.4, 0.6] }], {}).error);
   if (!CL.REASONS.includes('home')) console.log('  NOTE  app/capture-lib.js REASONS does not list "home" yet, so POST /captures would refuse it; /review reads the files directly');
+}
+console.log('duplicate suppression');
+{
+  const a = { cls: 'white_wire', conf: 0.6, nbox: [0.2, 0.2, 0.5, 0.5] }, b = { cls: 'white_wire', conf: 0.8, nbox: [0.21, 0.2, 0.5, 0.51] };
+  const r = dedupeBoxes([a, b]);
+  check('near-identical same-class boxes keep the higher confidence', r.length === 1 && r[0] === b);
+  const o = { cls: 'red_wire', conf: 0.5, nbox: [0.21, 0.2, 0.5, 0.5] };
+  check('different classes are kept', dedupeBoxes([a, o]).length === 2);
+  const far = { cls: 'white_wire', conf: 0.7, nbox: [0.6, 0.6, 0.9, 0.9] };
+  check('same class, no overlap, kept, order preserved', JSON.stringify(dedupeBoxes([a, far])) === JSON.stringify([a, far]));
+  check('iou of identical boxes is 1, disjoint is 0', iou(a.nbox, a.nbox) === 1 && iou(a.nbox, far.nbox) === 0);
+  check('empty list', dedupeBoxes([]).length === 0);
 }
 console.log('session id');
 check('format', /^\d{8}-\d{6}-[0-9a-f]{4}$/.test(sessionId(Date.now(), 'ab12')));

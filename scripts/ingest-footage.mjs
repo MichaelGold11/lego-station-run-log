@@ -79,6 +79,21 @@ export function selectFrames(frames, o) {
   return [...chosen].sort((a, b) => a - b).slice(0, n);
 }
 
+// ---------- pure duplicate suppression ----------
+export function iou(a, b) {
+  const w = Math.min(a[2], b[2]) - Math.max(a[0], b[0]), h = Math.min(a[3], b[3]) - Math.max(a[1], b[1]);
+  if (w <= 0 || h <= 0) return 0;
+  const inter = w * h, u = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter;
+  return u > 0 ? inter / u : 0;
+}
+// Drops a same-class box that overlaps a more confident one by IoU > thr. Keeps the original order of what is left.
+export function dedupeBoxes(boxes, thr = 0.5) {
+  const order = boxes.map((b, i) => i).sort((x, y) => (boxes[y].conf || 0) - (boxes[x].conf || 0) || x - y);
+  const kept = [];
+  for (const i of order) if (!kept.some(j => boxes[j].cls === boxes[i].cls && iou(boxes[j].nbox, boxes[i].nbox) > thr)) kept.push(i);
+  return kept.sort((x, y) => x - y).map(i => boxes[i]);
+}
+
 // ---------- pure capture line ----------
 export function claimText(boxes) {
   if (!boxes.length) return 'Home footage, pre-label: nothing found';
@@ -205,7 +220,7 @@ async function main() {
     const bytes = grabFrame(a.video, c.t, path.join(capDir, id + '.jpg'), DEFAULTS.maxJpegBytes);
     const cleaned = CaptureLib.cleanBoxes(c.dets.map(d => ({ cls: d.cls, conf: d.conf, nbox: d.nbox.map(v => Math.min(1, Math.max(0, v))) })).filter(d => d.nbox[2] > d.nbox[0] && d.nbox[3] > d.nbox[1]), { conf: true, classes: model.classes });
     if (cleaned.error) throw new Error('Pre-label for frame ' + idx + ' is not valid: ' + cleaned.error);
-    lines.push(captureLine({ id, role: a.role, stationName: station && station.name, t: now + k, videoT: Math.round(c.t * 1000) / 1000, contributor: a.contributor, boxes: cleaned.boxes, model: { file: model.file, version: model.version == null ? undefined : model.version }, receivedAt: now, bytes }));
+    lines.push(captureLine({ id, role: a.role, stationName: station && station.name, t: now + k, videoT: Math.round(c.t * 1000) / 1000, contributor: a.contributor, boxes: dedupeBoxes(cleaned.boxes), model: { file: model.file, version: model.version == null ? undefined : model.version }, receivedAt: now, bytes }));
   });
   fs.writeFileSync(path.join(dir, 'captures.jsonl'), lines.map(l => JSON.stringify(l) + '\n').join(''));
   fs.writeFileSync(path.join(dir, 'session.json'), JSON.stringify({

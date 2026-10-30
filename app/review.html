@@ -81,6 +81,8 @@ main { max-width: 1180px; margin: 0 auto; padding: 14px 16px 80px; display: grid
 .grp h2 { font-size: 15px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .grp h3 { font-size: 12.5px; color: var(--ink-2); font-weight: 600; margin-top: 4px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+html { scroll-padding-top: 64px; }
+.prog { scroll-margin-top: 64px; }
 .card { display: grid; gap: 8px; padding: 10px; align-content: start; scroll-margin-top: 70px; }
 .card.cur { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-wash); }
 .card.v-confirmed { border-left: 4px solid var(--good); }
@@ -102,8 +104,8 @@ main { max-width: 1180px; margin: 0 auto; padding: 14px 16px 80px; display: grid
 
 .modal { position: fixed; inset: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 88%, transparent); overflow: auto; padding: 12px; }
 .modal .box { max-width: 900px; margin: 0 auto; display: grid; gap: 10px; }
-.editor { position: relative; background: var(--sunk); border-radius: 6px; overflow: hidden; line-height: 0; touch-action: none; user-select: none; cursor: crosshair; }
-.editor img { width: 100%; height: auto; display: block; pointer-events: none; }
+.editor { position: relative; background: var(--sunk); border-radius: 6px; overflow: hidden; line-height: 0; touch-action: none; user-select: none; cursor: crosshair; width: fit-content; max-width: 100%; margin: 0 auto; }
+.editor img { width: auto; height: auto; max-width: 100%; max-height: 70vh; display: block; pointer-events: none; }
 .editor svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .blist { display: grid; gap: 6px; }
 .brow { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
@@ -116,7 +118,10 @@ main { max-width: 1180px; margin: 0 auto; padding: 14px 16px 80px; display: grid
 @media (max-width: 560px) {
   main { padding: 10px 10px 80px; }
   .grid { grid-template-columns: 1fr; }
-  .top { padding: 8px 10px; }
+  .top { padding: 6px 10px; flex-wrap: nowrap; gap: 6px; }
+  .top h1 { display: none; }
+  .top .btn { padding: 4px 8px; }
+  html { scroll-padding-top: 52px; }
   .kbdhint { display: none; }
 }
 </style>
@@ -251,7 +256,7 @@ main { max-width: 1180px; margin: 0 auto; padding: 14px 16px 80px; display: grid
     } catch (e) { main.innerHTML = '<div class="banner bad">Could not open this session. ' + esc(e.message) + '</div>'; return; }
     S.cur = null;
     render();
-    nextUnreviewed(true);
+    nextUnreviewed(true, true);
   }
 
   function visible() {
@@ -293,8 +298,8 @@ main { max-width: 1180px; margin: 0 auto; padding: 14px 16px 80px; display: grid
     const f = [['all', 'All'], ['todo', 'To review'], ['confirmed', 'Right'], ['corrected', 'Fixed'], ['rejected', 'Wrong'], ['unsure', 'Not sure']];
     $('filters').innerHTML = f.map(([k, l]) => `<button class="btn sm ${S.filter === k ? 'on' : ''}" data-f="${k}" type="button">${l}</button>`).join('') +
       (stations.length > 1 ? '<select id="stSel" aria-label="Station" style="padding:3px 6px;border:1px solid var(--line-2);border-radius:6px;background:var(--surface);min-height:28px"><option value="all">All stations</option>' + stations.map(s => `<option value="${esc(s)}" ${S.station === s ? 'selected' : ''}>${esc(stationName(s))}</option>`).join('') + '</select>' : '');
-    $('filters').querySelectorAll('[data-f]').forEach(b => { b.onclick = () => { S.filter = b.dataset.f; renderFilters(stations); renderGroups(); }; });
-    const sel = $('stSel'); if (sel) sel.onchange = () => { S.station = sel.value; renderGroups(); };
+    $('filters').querySelectorAll('[data-f]').forEach(b => { b.onclick = () => { S.filter = b.dataset.f; renderFilters(stations); renderGroups(); resetCur(); }; });
+    const sel = $('stSel'); if (sel) sel.onchange = () => { S.station = sel.value; renderGroups(); resetCur(); };
   }
   function stationName(id) { const c = S.caps.find(x => x.station === id); return (c && c.stationName) || id; }
 
@@ -326,7 +331,7 @@ main { max-width: 1180px; margin: 0 auto; padding: 14px 16px 80px; display: grid
       ${legend(shown)}
       <div class="claim">${esc(claimText(c))}</div>
       <div class="meta"><span class="chip">${esc(REASON[c.reason] || c.reason)}</span>${c.cycle != null ? `<span class="mono">cycle ${esc(c.cycle)}</span>` : ''}
-        ${url ? `<a href="${url}" target="_blank" rel="noopener">Play at ${mmss(c.videoT)}</a>` : '<span class="muted">no video</span>'}
+        ${url ? `<a href="${url}" target="_blank" rel="noopener">Play at ${mmss(c.videoT)}</a>` : '<span class="muted">No recording for this frame (home footage has none).</span>'}
         ${rv ? `<span class="chip ${v === 'confirmed' ? 'good' : v === 'rejected' ? 'bad' : v === 'unsure' ? 'warn' : ''}">${esc(VERDICT_LABEL[v])}</span>` : ''}</div>
       <div class="acts">
         <button class="btn pass ${v === 'confirmed' ? 'on' : ''}" data-a="C" type="button">Right <kbd>C</kbd></button>
@@ -344,13 +349,14 @@ main { max-width: 1180px; margin: 0 auto; padding: 14px 16px 80px; display: grid
     btn.disabled = true; btn.textContent = 'Cutting clip...';
     const v = document.createElement('video');
     v.className = 'clip'; v.controls = true; v.muted = true; v.loop = true; v.autoplay = true; v.playsInline = true; v.preload = 'auto';
+    const fail = why => { btn.disabled = false; btn.textContent = 'Play clip'; toast(why.replace(/\s+$/, '').replace(/[^.!?]$/, '$&.') + ' Use the Play link instead.', true); };
     v.addEventListener('loadeddata', () => { bar.replaceWith(v); v.play().catch(() => {}); }, { once: true });
-    v.addEventListener('error', async () => {
-      let why = 'The clip could not be played.';
-      try { const r = await fetch(src, { headers: { Range: 'bytes=0-0' } }); if (!r.ok) { const j = await r.json().catch(() => null); why = (j && j.error && j.error.message) || (j && j.message) || why; } } catch (e) { /* offline */ }
-      btn.disabled = false; btn.textContent = 'Play clip'; toast(why + ' Use the Play link instead.', true);
-    }, { once: true });
-    v.src = src;
+    v.addEventListener('error', () => fail('The clip could not be played.'), { once: true });
+    // One request: fetch the clip, then play it from memory, so a failure is reported once and the browser does not retry it.
+    fetch(src).then(async r => {
+      if (!r.ok) { const j = await r.json().catch(() => null); fail((j && j.error && j.error.message) || (j && j.message) || 'The clip could not be played.'); return; }
+      v.src = URL.createObjectURL(await r.blob());
+    }).catch(() => fail('The clip could not be loaded.'));
   }
 
   // Puts text on the clipboard; if the browser refuses (not a secure page), shows it selected so a person can copy it.
@@ -401,14 +407,17 @@ main { max-width: 1180px; margin: 0 auto; padding: 14px 16px 80px; display: grid
     S.cur = id; markCur();
     if (scroll) { const el = document.querySelector('.card[data-id="' + id + '"]'); if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
   }
-  function nextUnreviewed(quiet) {
+  function nextUnreviewed(quiet, noScroll) {
     const list = visible(); if (!list.length) return;
-    const i = Math.max(0, list.findIndex(c => c.id === S.cur));
-    const order = list.slice(i + 1).concat(list.slice(0, i + 1));
+    const i = list.findIndex(c => c.id === S.cur);
+    // Not in this view (first load, or a filter change): start from the first card, so the first unreviewed one is picked.
+    const order = i < 0 ? list : list.slice(i + 1).concat(list.slice(0, i + 1));
     const pick = order.find(c => !c.review);
     if (!pick) { if (!quiet) toast('Every frame in this view is reviewed.'); return; }
-    setCur(pick.id, true);
+    setCur(pick.id, !noScroll);
   }
+  // After a filter or station change the current card is the first unreviewed card in the new view.
+  function resetCur() { S.cur = null; nextUnreviewed(true, true); }
   function step(d) {
     const list = visible(); if (!list.length) return;
     const i = list.findIndex(c => c.id === S.cur);
