@@ -126,7 +126,33 @@
         if (cfg.models[id]) errs.push(...modelShapeErrors('models.' + id, cfg.models[id]));
       }
     }
+    if (cfg.capture != null) errs.push(...captureErrors(cfg.capture));
     return errs;
+  }
+
+  // The capture block: { enabled, stallSec, sampleSec, maxPerSession, maxPerStation, reviewDays, mediaCapMB }. Optional;
+  // every key falls back to CAPTURE_DEFAULTS.
+  const CAPTURE_DEFAULTS = { enabled: true, stallSec: 12, sampleSec: 25, maxPerSession: 120, maxPerStation: 40, reviewDays: 7, mediaCapMB: 1024 };
+  const CAPTURE_WHOLE = ['maxPerSession', 'maxPerStation'];
+  function captureErrors(c) {
+    if (typeof c !== 'object' || Array.isArray(c)) return ['capture must look like { "enabled": true, "stallSec": 12, "sampleSec": 25, "maxPerSession": 120, "maxPerStation": 40, "reviewDays": 7, "mediaCapMB": 1024 }.'];
+    const e = [];
+    if (c.enabled != null && typeof c.enabled !== 'boolean') e.push('capture.enabled must be true or false.');
+    for (const k of Object.keys(CAPTURE_DEFAULTS)) {
+      if (k === 'enabled' || c[k] == null) continue;
+      if (!(isNum(c[k]) && c[k] > 0)) e.push('capture.' + k + ' must be a number above 0.');
+      else if (CAPTURE_WHOLE.includes(k) && !Number.isInteger(c[k])) e.push('capture.' + k + ' must be a whole number.');
+    }
+    return e;
+  }
+  // The capture settings with every missing or invalid key replaced by its default.
+  function captureDefaults(cfg) {
+    const c = cfg && cfg.capture && typeof cfg.capture === 'object' && !Array.isArray(cfg.capture) ? cfg.capture : {}, out = {};
+    for (const [k, d] of Object.entries(CAPTURE_DEFAULTS)) {
+      if (k === 'enabled') out[k] = typeof c[k] === 'boolean' ? c[k] : d;
+      else out[k] = isNum(c[k]) && c[k] > 0 && (!CAPTURE_WHOLE.includes(k) || Number.isInteger(c[k])) ? c[k] : d;
+    }
+    return out;
   }
 
   // One model entry: { file: "/models/<name>.onnx", classes: [unique strings], imgsz }.
@@ -135,6 +161,8 @@
     if (typeof m !== 'object' || Array.isArray(m) || typeof m.file !== 'string' || !/^\/models\/[A-Za-z0-9_.-]+\.onnx$/.test(m.file) || !Array.isArray(m.classes)) return [ex];
     if (!m.classes.length || m.classes.some(c => typeof c !== 'string' || !c)) e.push(name + ': classes must be a non-empty list of names.');
     else if (new Set(m.classes).size !== m.classes.length) e.push(name + ': classes must not repeat a name.');
+    // version is optional: it names the trained model (a string or number) and is stamped on every capture.
+    if (m.version != null && !((typeof m.version === 'string' && m.version.trim() && m.version.length <= 40) || (isNum(m.version) && m.version >= 0))) e.push(name + ': version must be a short text or a number (for example "2026-11-02" or 3).');
     return e;
   }
   // The model a station runs: its own entry in cfg.models, else the shared cfg.model, else null.
@@ -1075,7 +1103,7 @@
 
   return {
     DEFAULTS, MOTION, MISMATCH_NOTE, EVENT_TYPES, CYCLE_ACTIONS, SUBSTEP_COLS, CYCLE_COLS, VERDICT_COLS, CHECK, LEVELS, OPERATOR_CODE, FLOOR, CLASS_TEST,
-    members, activeRule, evalRule, missingOf, ruleText, checkConfig, modelFor, checkModelOutput, e2eBadClass, qaDecide, createStation,
+    members, activeRule, evalRule, missingOf, ruleText, checkConfig, captureDefaults, CAPTURE_DEFAULTS, modelFor, checkModelOutput, e2eBadClass, qaDecide, createStation,
     operatorCode, defaultName, shortName, classTestLayout, setupKey, nextStationId, freeSpot, saveScheduler, applyLayout,
     zoneSignals, calibrationFrom, classSignals, handPresence, steadyClasses, mergeSignals, createChecker,
     sortEvents, ruleZones, unobserved, NO_DATA, detectedCycles, manualCycles, summarize, substepsCsv, cyclesCsv, verdictsCsv, linkUnits, unitCols, unitsCsv, csvCell

@@ -7,6 +7,8 @@ data/assets/*.upload.*
 Thumbs.db
 # Wire line sessions: raw video from every camera (about 1 GB per hour for 4 cameras). Never commit.
 data/sessions/
+# Reviewed frames turned into YOLO training sets (data/training/<role>/), and which sessions are pinned as held-out test. Built from the sessions, so equally local.
+data/training/
 # Zones and calibration belong to this laptop and its camera mounts.
 data/meta/wire-line-setup.json
 # iPhone cameras: this laptop's CA and HTTPS certificate (scripts/phone-cert.mjs). The CA key must never leave the laptop.
