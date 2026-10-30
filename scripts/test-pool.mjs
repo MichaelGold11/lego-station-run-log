@@ -181,6 +181,113 @@ try {
     check('the digest of an unknown session is 404', (await req('GET', '/api/sessions/20261015-120000-abcd/digest.txt')).status === 404);
   }
 
+  console.log('shared pool');
+  {
+    const POOLDIR = path.join(TMP, 'drive', 'pool');
+    const setPool = pool => { const c = Object.assign({}, JSON.parse(fs.readFileSync(CFGF, 'utf8'))); if (pool === undefined) delete c.pool; else c.pool = pool; fs.writeFileSync(CFGF, JSON.stringify(c)); };
+    const pub = (id, o) => req('POST', `/api/sessions/${id}/pool`, o, jsonHdr);
+    const lines = f => fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l));
+
+    const emptyDef = await req('GET', '/api/pool');
+    check('with no pool setting the pool is data/pool and empty', emptyDef.status === 200 && emptyDef.json.dir === path.join(DATA, 'pool') && Object.keys(emptyDef.json.stations).length === 0 && emptyDef.json.contributions.length === 0, emptyDef.text);
+    setPool({ dir: POOLDIR });
+    check('GET /api/pool reports the configured folder (read from the config on every call)', (await req('GET', '/api/pool')).json.dir === POOLDIR);
+    setPool({ dir: 5 });
+    check('an invalid pool setting is a clear 500 naming the setting, and publishing refuses too', (await req('GET', '/api/pool')).status === 500 && /pool/.test((await req('GET', '/api/pool')).text) && (await pub(RUN.id, { contributor: 'Ab-01', mode: 'home' })).status === 500);
+    setPool({ dir: POOLDIR, extra: 1 });
+    check('an unknown pool key is refused too', (await req('GET', '/api/pool')).status === 500);
+    setPool({ dir: POOLDIR });
+
+    const bad = async (id, o, st, what) => { const r = await pub(id, o); check('publish refused: ' + what, r.status === st, r.status + ' ' + r.text.slice(0, 120)); };
+    await bad(RUN.id, { contributor: 'Michael', mode: 'home' }, 400, 'a name instead of a code');
+    await bad(RUN.id, { contributor: 'Ab-01', mode: 'both' }, 400, 'a mode that is not home or group');
+    await bad(RUN.id, { contributor: 'Ab-01' }, 400, 'no mode');
+    await bad(RUN.id, { contributor: 'Ab-01', mode: 'home', station: '../x' }, 400, 'a bad station');
+    await bad('20261015-120000-abcd', { contributor: 'Ab-01', mode: 'home' }, 404, 'an unknown session');
+    const forO = await req('POST', `/api/sessions/${RUN.id}/pool`, { contributor: 'Ab-01', mode: 'home' }, Object.assign({ Origin: 'http://evil.example' }, jsonHdr));
+    check('publish refused: a foreign Origin', forO.status === 403);
+    const NOREV = await makeRun('unreviewed', false);
+    await bad(NOREV.id, { contributor: 'Ab-01', mode: 'home' }, 409, 'a session with nothing reviewed');
+    check('none of the refusals created anything in the pool', !fs.existsSync(POOLDIR) || fs.readdirSync(POOLDIR).length === 0);
+
+    const p1 = await pub(RUN.id, { contributor: 'Ab-01', mode: 'group' });
+    check('publish writes one folder per station that has reviewed frames', p1.status === 200 && p1.json.published.map(x => x.station).sort().join() === 's2,s3', p1.text);
+    const F = 'Ab-01-' + RUN.id, f2 = path.join(POOLDIR, 's2', F), f3 = path.join(POOLDIR, 's3', F);
+    check('the folder holds captures, captures.jsonl, review.jsonl and session.json', ['captures.jsonl', 'review.jsonl', 'session.json', 'captures'].every(n => fs.existsSync(path.join(f2, n))));
+    check('only reviewed frames (not "not sure", not unreviewed) of that station are in it', fs.readdirSync(path.join(f2, 'captures')).sort().join() === [RUN.a, RUN.b, RUN.c3].map(i => i + '.jpg').join() && lines(path.join(f2, 'captures.jsonl')).length === 3 && lines(path.join(f2, 'review.jsonl')).length === 3 && lines(path.join(f3, 'captures.jsonl')).length === 1, fs.readdirSync(path.join(f2, 'captures')).join());
+    const sj = JSON.parse(fs.readFileSync(path.join(f2, 'session.json'), 'utf8'));
+    check('session.json tags the station, mode and contributor code, and holds no title, crew or notes', sj.station === 's2' && sj.mode === 'group' && sj.contributor === 'Ab-01' && sj.sessionId === RUN.id && sj.classes.join() === shipped.models.s2.classes.join() && !/Export run|Group B|Morning/.test(JSON.stringify(sj)), JSON.stringify(sj));
+    check('the copied JPEG is the stored one and the leftover temp folders are gone', fs.readFileSync(path.join(f2, 'captures', RUN.a + '.jpg')).equals(jpegBuf(300)) && !fs.readdirSync(path.join(POOLDIR, 's2')).some(n => n.startsWith('.')));
+    const before = fs.readFileSync(path.join(f2, 'review.jsonl'), 'utf8');
+    await review(RUN.id, { captureId: RUN.a, verdict: 'rejected' });
+    const p2 = await pub(RUN.id, { contributor: 'Ab-01', mode: 'group' });
+    check('publishing the same session again as the same contributor is refused (409 exists) and changes nothing', p2.status === 409 && p2.json.code === 'exists' && fs.readFileSync(path.join(f2, 'review.jsonl'), 'utf8') === before, p2.text);
+    const p3 = await pub(RUN.id, { contributor: 'Cd-02', mode: 'home', station: 's2' });
+    check('another contributor can publish the same session; station limits it to one folder', p3.status === 200 && p3.json.published.length === 1 && fs.existsSync(path.join(POOLDIR, 's2', 'Cd-02-' + RUN.id)) && !fs.existsSync(path.join(POOLDIR, 's3', 'Cd-02-' + RUN.id)));
+    // Make the review state of Cd-02 different from Ab-01: the first published copy keeps "confirmed" for RUN.a, Cd-02's has "rejected".
+    const R2 = await makeRun('second run', true), R3 = await makeRun('third run', true);
+    await pub(R2.id, { contributor: 'Ab-01', mode: 'home' });
+    await pub(R3.id, { contributor: 'Ef-03', mode: 'group', station: 's2' });
+
+    const pj = (await req('GET', '/api/pool')).json;
+    check('GET /api/pool lists every contribution with counts', pj.contributions.length === 6 && pj.contributions.every(c => c.station && c.folder && c.contributor && c.mode && c.sessionId && c.publishedAt && typeof c.images === 'number'), String(pj.contributions.length));
+    const s2 = pj.stations.s2;
+    check('station s2 has four contributions and s3 two', s2.contributions === 4 && pj.stations.s3.contributions === 2);
+    check('per station counts are consistent with the contributions listed', s2.images === pj.contributions.filter(c => c.station === 's2').reduce((a, c) => a + c.images, 0) && s2.contributions === pj.contributions.filter(c => c.station === 's2').length && s2.negatives >= 1);
+    check('per class counts use the final boxes (confirmed: the model\'s, corrected: the person\'s, rejected: none)', s2.byClass.connector_open >= 1 && s2.byClass.red_wire >= 1 && !s2.byClass.connector_closed, JSON.stringify(s2.byClass));
+    check('per contributor counts add up to the station\'s', Object.keys(s2.byContributor).sort().join() === 'Ab-01,Cd-02,Ef-03' && Object.values(s2.byContributor).reduce((a, c) => a + c.images, 0) === s2.images && s2.byContributor['Ab-01'].contributions === 2, JSON.stringify(Object.keys(s2.byContributor)));
+    check('per way in (home, group) counts are given', s2.byMode.home && s2.byMode.group && s2.byMode.home.contributions === 2 && s2.byMode.group.contributions === 2);
+    check('the pool listing says nothing about a person (no title, crew)', !/Export run|Group B|second run/.test(JSON.stringify(pj)));
+    check('a stray folder, a temp folder or a folder with a bad session.json is ignored', (() => { fs.mkdirSync(path.join(POOLDIR, 's2', '.tmp-x')); fs.mkdirSync(path.join(POOLDIR, 's2', 'junk')); fs.mkdirSync(path.join(POOLDIR, 's2', 'Zz-09-x')); fs.writeFileSync(path.join(POOLDIR, 's2', 'Zz-09-x', 'session.json'), '{nope'); return true; })());
+    check('...and the count did not change', (await req('GET', '/api/pool')).json.contributions.length === 6);
+
+    // ---- the snapshot ----
+    const sn = await req('GET', '/api/pool/s2/snapshot.zip');
+    check('snapshot.zip is a zip with a download name', sn.status === 200 && sn.headers['content-type'] === 'application/zip' && /s2-pool-snapshot\.zip/.test(sn.headers['content-disposition']), sn.status + sn.text.slice(0, 100));
+    const z = readZip(sn.raw), names = z.files.map(f => f.name), man = JSON.parse(z.files.find(f => f.name === 'manifest.json').data);
+    check('it has data.yaml, manifest.json and the train, val and test folders', ['data.yaml', 'manifest.json', 'train/images/', 'val/labels/', 'test/images/'].every(n => names.includes(n)) && man.source === 'pool' && man.role === 's2' && man.holdout === null);
+    const expSplit = folder => parseInt(crypto.createHash('sha1').update(folder).digest('hex').slice(0, 8), 16) % 5 === 0 ? 'val' : 'train';
+    const bySession = {};
+    for (const [name, x] of Object.entries(man.images)) (bySession[x.contribution] = bySession[x.contribution] || new Set()).add(x.split);
+    check('every contribution is on one side only (split by session, never by frame)', Object.values(bySession).every(sp => sp.size === 1) && Object.keys(bySession).length === 4, JSON.stringify(Object.fromEntries(Object.entries(bySession).map(([k, v]) => [k, [...v]]))));
+    check('the side is the stable hash of the contribution folder', Object.values(man.images).every(x => x.split === expSplit(x.contribution)));
+    const total = pj.stations.s2.images;
+    check('every reviewed frame is in the zip once, as image plus label', Object.keys(man.images).length === total && names.filter(n => /^(train|val|test)\/images\/.+\.jpg$/.test(n)).length === total && names.filter(n => /^(train|val|test)\/labels\/.+\.txt$/.test(n)).length === total);
+    const nm = Object.keys(man.images).find(n => man.images[n].contribution === 'Ab-01-' + RUN.id && man.images[n].captureId === RUN.b), sp = man.images[nm].split;
+    check('labels use the class index of the role list: the corrected frame has connector_open (3)', z.files.find(f => f.name === sp + '/labels/' + nm + '.txt').data.toString() === '3 0.400000 0.400000 0.400000 0.400000\n', z.files.find(f => f.name === sp + '/labels/' + nm + '.txt').data.toString());
+    const rej = Object.keys(man.images).find(n => man.images[n].verdict === 'rejected');
+    check('a rejected frame is a negative: its label file is empty', z.files.find(f => f.name === man.images[rej].split + '/labels/' + rej + '.txt').data.length === 0);
+    check('data.yaml has nc 5 and the names in class order', /^nc: 5$/m.test(z.files.find(f => f.name === 'data.yaml').data.toString()) && /0: red_wire/.test(z.files.find(f => f.name === 'data.yaml').data.toString()));
+
+    const ho = await req('GET', '/api/pool/s2/snapshot.zip?holdout=Cd-02');
+    const hz = readZip(ho.raw), hm = JSON.parse(hz.files.find(f => f.name === 'manifest.json').data);
+    const mine = Object.values(hm.images).filter(x => x.contributor === 'Cd-02'), others = Object.values(hm.images).filter(x => x.contributor !== 'Cd-02');
+    check('?holdout=Cd-02 puts all of that contributor\'s frames in test, and none of anyone else\'s there', ho.status === 200 && hm.holdout === 'Cd-02' && mine.length === 3 && mine.every(x => x.split === 'test') && others.every(x => x.split !== 'test'), ho.status + ' ' + mine.length);
+    check('...while the others keep the same sides as before (split by session, not shuffled)', others.every(x => x.split === expSplit(x.contribution)));
+    check('holdout matches the code without caring about case', (await req('GET', '/api/pool/s2/snapshot.zip?holdout=cd-02')).status === 200);
+    check('holdout of a code with no frames is 400; a name is 400', (await req('GET', '/api/pool/s2/snapshot.zip?holdout=Zz-99')).status === 400 && (await req('GET', '/api/pool/s2/snapshot.zip?holdout=Michael')).status === 400);
+    const s3zip = await req('GET', '/api/pool/s3/snapshot.zip');
+    check('station s3 has its own snapshot with its own class list (nc 4)', s3zip.status === 200 && /^nc: 4$/m.test(readZip(s3zip.raw).files.find(f => f.name === 'data.yaml').data.toString()));
+    check('holding out the only contributor of a station is 409 (nothing left to train on)', (await req('GET', '/api/pool/s3/snapshot.zip?holdout=Ab-01')).status === 409);
+    check('a station with nothing in the pool is 404; a bad role is 404; POST is 405', (await req('GET', '/api/pool/s1/snapshot.zip')).status === 404 && (await req('GET', '/api/pool/..%2Fx/snapshot.zip')).status === 404 && (await req('POST', '/api/pool/s2/snapshot.zip', {}, jsonHdr)).status === 405);
+    check('GET /pool serves the pool page', (await req('GET', '/pool')).status === 200 && /<title>Shared pool<\/title>/.test((await req('GET', '/pool')).text));
+
+    // A class list that changed since publishing: boxes with a class the list no longer has are dropped, and counted.
+    const cfgNow = JSON.parse(fs.readFileSync(CFGF, 'utf8')); cfgNow.models.s2.classes = cfgNow.models.s2.classes.filter(c => c !== 'red_wire');
+    fs.writeFileSync(CFGF, JSON.stringify(cfgNow));
+    const dz = await req('GET', '/api/pool/s2/snapshot.zip'), dm = JSON.parse(readZip(dz.raw).files.find(f => f.name === 'manifest.json').data);
+    check('boxes of a class the role no longer has are dropped (not written as a shifted index) and counted in the manifest', dz.status === 200 && dm.droppedBoxes >= 1 && dm.classes.join() === cfgNow.models.s2.classes.join(), String(dm.droppedBoxes));
+    fs.writeFileSync(CFGF, JSON.stringify(Object.assign({}, shipped, { capture: { maxPerSession: 100, maxPerStation: 100, reviewDays: 7, mediaCapMB: 1024 }, pool: { dir: POOLDIR } })));
+
+    // The default location: no pool key means data/pool.
+    setPool(undefined);
+    const RUN4 = await makeRun('default pool', true);
+    const pd = await pub(RUN4.id, { contributor: 'Gh-04', mode: 'home', station: 's3' });
+    check('with no pool setting, publish goes to data/pool/<station>/<contributor>-<sessionId>', pd.status === 200 && fs.existsSync(path.join(DATA, 'pool', 's3', 'Gh-04-' + RUN4.id, 'session.json')), pd.text);
+    setPool('nope');
+    check('a pool setting that is not an object is refused with a clear message', (await req('GET', '/api/pool')).status === 500);
+  }
+
   if (hasFfmpeg && !fs.existsSync('/usr/bin/ffmpeg') && fs.existsSync('/usr/bin/openssl')) {
     await stopServer();
     startServer({ PATH: '/usr/bin:/bin' });

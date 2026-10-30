@@ -125,6 +125,7 @@ main { max-width: 1180px; margin: 0 auto; padding: 14px 16px 80px; display: grid
 <header class="top">
   <h1>Review frames</h1>
   <a class="btn sm" href="/line" id="backLine">Back to the line</a>
+  <a class="btn sm" href="/pool">Pool</a>
   <a class="btn sm" href="#" id="backList" hidden>All sessions</a>
   <span class="sp"></span>
   <span class="muted kbdhint"><kbd>C</kbd> right <kbd>W</kbd> wrong <kbd>U</kbd> not sure <kbd>F</kbd> fix boxes <kbd>N</kbd> next unreviewed</span>
@@ -273,6 +274,13 @@ main { max-width: 1180px; margin: 0 auto; padding: 14px 16px 80px; display: grid
         <a class="btn sm" id="btnDlV" href="/api/sessions/${encodeURIComponent(S.id)}/export.zip?video=1" download title="The same zip with the recordings inside (large)">Download run with video</a>
         <button class="btn sm" id="btnCopy" type="button" title="A short plain-text summary of this run, ready to paste to Claude">Copy for Claude</button>
       </div>
+      <div class="row" id="poolTools">
+        <span class="eyebrow">Share with the team</span>
+        <input type="text" id="poolCode" size="7" maxlength="8" placeholder="Your code" aria-label="Your contributor code, like Mg-07 (never a name)" value="${esc(lsGet('poolCode'))}">
+        <select id="poolMode" aria-label="How these frames were collected"><option value="group">Group run-through</option><option value="home">Home collection</option></select>
+        <button class="btn sm" id="btnPool" type="button" title="Copies your reviewed frames into the shared pool folder. A published contribution is never changed.">Publish to pool</button>
+        <a class="btn sm" href="/pool">Open the pool</a>
+      </div>
     </section>`;
     if (!caps.length) { main.innerHTML = head + '<div class="banner">This session has no captured frames. Capture runs while a session records; the manual capture key is X.</div>'; wireHead(); return; }
     main.innerHTML = head + '<div id="groups"></div>';
@@ -354,7 +362,21 @@ main { max-width: 1180px; margin: 0 auto; padding: 14px 16px 80px; display: grid
     ta.remove();
     return ok;
   }
+  function lsGet(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* private window */ } }
   function wireHead() {
+    $('poolMode').value = lsGet('poolMode') === 'home' ? 'home' : 'group';
+    $('btnPool').onclick = async () => {
+      const code = $('poolCode').value.trim(), mode = $('poolMode').value;
+      if (!/^[A-Za-z]{1,4}-\d{1,3}$/.test(code)) { toast('Use a short code like Mg-07 (letters, a dash, digits), never a name.', true); return; }
+      lsSet('poolCode', code); lsSet('poolMode', mode);
+      const b = $('btnPool'); b.disabled = true;
+      try {
+        const j = await postJson('/api/sessions/' + encodeURIComponent(S.id) + '/pool', { contributor: code, mode });
+        toast('Published ' + j.published.map(x => x.captures + ' frames to ' + x.station).join(', ') + '.');
+      } catch (e) { toast(e.message, true); }
+      b.disabled = false;
+    };
     $('btnCopy').onclick = async () => {
       const b = $('btnCopy'); b.disabled = true;
       try {

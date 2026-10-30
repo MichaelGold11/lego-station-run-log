@@ -189,5 +189,21 @@
     return items.filter(it => del.has(it.key)).map(it => it.key);
   }
 
-  return { REASONS, VERDICTS, MAX_BOXES, captureId, nextCaptureNumber, trainingName, classIndex, yoloLine, labelText, cleanBoxes, isJpeg, sha1, sessionSplit, crc32, zip, dataYaml, planSweep };
+  // ---------- shared pool ----------
+  // A contributor is a short code like "Mg-07" (letters, a dash, digits). Never a name.
+  const CONTRIBUTOR = /^[A-Za-z]{1,4}-\d{1,3}$/;
+  const POOL_MODES = ['home', 'group'];
+  const isContributor = v => typeof v === 'string' && CONTRIBUTOR.test(v);
+  // The pool block of data/meta/wire-line.json: { "dir": "<folder>" }. Optional; dir defaults to data/pool. Returns
+  // { pool: { dir } } (dir '' means the default) or { error } in plain words.
+  function cleanPool(p) {
+    if (p == null) return { pool: { dir: '' } };
+    if (typeof p !== 'object' || Array.isArray(p)) return { error: 'pool must look like { "dir": "data/pool" }.' };
+    for (const k of Object.keys(p)) if (k !== 'dir') return { error: 'pool has an unknown key "' + k.slice(0, 40) + '"; only dir is used.' };
+    if (p.dir == null || p.dir === '') return { pool: { dir: '' } };
+    if (typeof p.dir !== 'string' || p.dir.length > 500 || p.dir.includes('\0') || !p.dir.trim()) return { error: 'pool.dir must be a folder path (text).' };
+    return { pool: { dir: p.dir.trim() } };
+  }
+
+  return { REASONS, VERDICTS, isContributor, cleanPool, POOL_MODES, MAX_BOXES, captureId, nextCaptureNumber, trainingName, classIndex, yoloLine, labelText, cleanBoxes, isJpeg, sha1, sessionSplit, crc32, zip, dataYaml, planSweep };
 });

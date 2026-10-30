@@ -13,6 +13,7 @@ import http from 'node:http';
 import https from 'node:https';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawnSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -176,6 +177,7 @@ async function handle(req, res) {
     return fail(res, 404, 'not_found', 'No such model file.');
   }
   if (p === '/line') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'line.html')), 'text/html; charset=utf-8', ISOLATE);
+  if (p === '/pool') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'pool.html')), 'text/html; charset=utf-8', ISOLATE);
   if (p === '/review') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'review.html')), 'text/html; charset=utf-8', ISOLATE);
   if (p === '/line-engine.js') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'line-engine.js')), 'text/javascript; charset=utf-8', ISOLATE);
   if (p === '/line-hands-worker.js') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'line-hands-worker.js')), 'text/javascript; charset=utf-8', ISOLATE);
@@ -184,6 +186,7 @@ async function handle(req, res) {
   if (p.startsWith('/api/phone/')) return phoneApi(req, res, p);
   if (p === '/api/sessions' || p.startsWith('/api/sessions/')) return sessionsApi(req, res, p, url);
   if (p === '/api/training' || p.startsWith('/api/training/')) return trainingApi(req, res, p);
+  if (p === '/api/pool' || p.startsWith('/api/pool/')) return poolApi(req, res, p, url);
   if (p === '/local-runtime.js') return send(res, 200, fs.readFileSync(RUNTIME_FILE), 'text/javascript; charset=utf-8');
   if (p === '/api/info') return send(res, 200, { ffmpeg: hasFfmpeg, root: ROOT });
 
@@ -730,20 +733,176 @@ function trainingApi(req, res, p) {
   if (!m) return fail(res, 404, 'not_found', 'Nothing here.');
   const role = m[1], man = readManifest(role), names = Object.keys(man.images).sort();
   if (!names.length) return fail(res, 404, 'not_found', 'No reviewed frames for ' + role + ' yet.');
+  const items = [];
+  for (const name of names) {
+    const x = man.images[name];
+    try { items.push({ name, split: CaptureLib.sessionSplit(x.session, pinned), img: fs.readFileSync(path.join(trainingDir(role), 'images', name + '.jpg')), lab: fs.readFileSync(path.join(trainingDir(role), 'labels', name + '.txt')), info: x }); } catch (e) { /* a file is gone */ }
+  }
+  let zip;
+  try { zip = yoloZip(role, man.classes, items, {}); } catch (e) { return fail(res, 500, 'unavailable', String(e.message || e)); }
+  return send(res, 200, zip, 'application/zip', { 'Content-Disposition': `attachment; filename="${role}-training.zip"` });
+}
+// The YOLO set as one zip: train, val and test folders (images and labels), data.yaml and a manifest. items: [{ name, split,
+// img, lab, info }]. Both the local training set and the pool snapshot are built here.
+function yoloZip(role, classes, items, extra) {
   const entries = [], exported = {};
   for (const d of ['train', 'val', 'test']) for (const k of ['images', 'labels']) entries.push({ name: d + '/' + k + '/' });
-  for (const name of names) {
-    const x = man.images[name], split = CaptureLib.sessionSplit(x.session, pinned);
-    let img, lab;
-    try { img = fs.readFileSync(path.join(trainingDir(role), 'images', name + '.jpg')); lab = fs.readFileSync(path.join(trainingDir(role), 'labels', name + '.txt')); } catch (e) { continue; }
-    entries.push({ name: split + '/images/' + name + '.jpg', data: img }, { name: split + '/labels/' + name + '.txt', data: lab });
-    exported[name] = Object.assign({ split }, x);
+  for (const it of items) {
+    entries.push({ name: it.split + '/images/' + it.name + '.jpg', data: it.img }, { name: it.split + '/labels/' + it.name + '.txt', data: it.lab });
+    exported[it.name] = Object.assign({ split: it.split }, it.info);
   }
-  entries.push({ name: 'data.yaml', data: CaptureLib.dataYaml(man.classes) });
-  entries.push({ name: 'manifest.json', data: JSON.stringify({ version: 1, role, classes: man.classes, exportedAt: new Date().toISOString(), images: exported }, null, 2) + '\n' });
+  entries.push({ name: 'data.yaml', data: CaptureLib.dataYaml(classes) });
+  entries.push({ name: 'manifest.json', data: JSON.stringify(Object.assign({ version: 1, role, classes, exportedAt: new Date().toISOString() }, extra, { images: exported }), null, 2) + '\n' });
+  return Buffer.from(CaptureLib.zip(entries));
+}
+
+// ---------- shared pool ----------
+// People publish reviewed frames into one shared folder (a synced Drive folder): <dir>/<station>/<contributor>-<sessionId>/
+// with captures/, captures.jsonl, review.jsonl and session.json. A published folder is never changed or replaced. The
+// trainer's snapshot builds a YOLO set from all of it, split by contribution (a whole session), never by frame.
+// Config: "pool": { "dir": "<folder>" } in data/meta/wire-line.json; default data/pool.
+function poolDir() {
+  const r = CaptureLib.cleanPool((lineConfig() || {}).pool);
+  if (r.error) return { error: r.error };
+  let d = r.pool.dir;
+  if (!d || d === 'data/pool') return { dir: path.join(DATA, 'pool') };
+  if (d === '~' || d.startsWith('~/')) d = path.join(os.homedir(), d.slice(1));
+  return { dir: path.resolve(ROOT, d) };
+}
+// Every contribution: { station, folder, dirPath, meta (session.json), items: reviewed frames with their final boxes }.
+function readPool(dir) {
+  const out = [];
+  if (!fs.existsSync(dir)) return out;
+  for (const station of fs.readdirSync(dir).sort()) {
+    const sdirp = path.join(dir, station);
+    if (!STATION_ID.test(station) || !fs.statSync(sdirp).isDirectory()) continue;
+    for (const folder of fs.readdirSync(sdirp).sort()) {
+      const dirPath = path.join(sdirp, folder);
+      if (folder.startsWith('.') || !fs.statSync(dirPath).isDirectory()) continue;
+      let meta;
+      try { meta = readJson(path.join(dirPath, 'session.json')); } catch (e) { continue; }
+      if (!meta || meta.station !== station || !CaptureLib.isContributor(meta.contributor) || !CaptureLib.POOL_MODES.includes(meta.mode)) continue;
+      const rv = new Map();
+      for (const r of readLines(path.join(dirPath, 'review.jsonl'))) if (r && typeof r.captureId === 'string') rv.set(r.captureId, r);
+      const items = [];
+      for (const cap of readLines(path.join(dirPath, 'captures.jsonl'))) {
+        const r = rv.get(cap.id), jpg = path.join(dirPath, 'captures', cap.id + '.jpg');
+        if (!r || r.verdict === 'unsure' || !CAPTURE_ID.test(String(cap.id)) || !fs.existsSync(jpg)) continue;
+        items.push({ cap, review: r, jpg, boxes: r.verdict === 'rejected' ? [] : r.verdict === 'corrected' ? (r.boxes || []) : (cap.boxes || []) });
+      }
+      out.push({ station, folder, dirPath, meta, items });
+    }
+  }
+  return out;
+}
+function poolCounts(list) {
+  const byClass = {};
+  let images = 0, negatives = 0;
+  for (const c of list) for (const it of c.items) {
+    images++;
+    if (!it.boxes.length) negatives++;
+    for (const b of it.boxes) byClass[b.cls] = (byClass[b.cls] || 0) + 1;
+  }
+  return { images, negatives, byClass };
+}
+function poolSummary(all, dir) {
+  const stations = {};
+  for (const c of all) {
+    const st = stations[c.station] = stations[c.station] || { contributions: 0, byContributor: {}, byMode: {} };
+    st.contributions++;
+  }
+  for (const station of Object.keys(stations)) {
+    const mine = all.filter(c => c.station === station), st = stations[station];
+    Object.assign(st, poolCounts(mine));
+    for (const code of [...new Set(mine.map(c => c.meta.contributor))].sort()) {
+      const theirs = mine.filter(c => c.meta.contributor === code);
+      st.byContributor[code] = Object.assign({ contributions: theirs.length }, poolCounts(theirs));
+    }
+    for (const mode of CaptureLib.POOL_MODES) { const ms = mine.filter(c => c.meta.mode === mode); if (ms.length) st.byMode[mode] = Object.assign({ contributions: ms.length }, poolCounts(ms)); }
+  }
+  return {
+    dir, stations,
+    contributions: all.map(c => Object.assign({ station: c.station, folder: c.folder, contributor: c.meta.contributor, mode: c.meta.mode, sessionId: c.meta.sessionId, publishedAt: c.meta.publishedAt }, poolCounts([c])))
+  };
+}
+
+// POST /api/sessions/<id>/pool { contributor, mode, station? }: one immutable folder per station (role) that has reviewed frames.
+async function publishToPool(req, res, id, doc, dir) {
+  let body;
+  try { body = JSON.parse((await readBody(req, 4 * 1024)).toString('utf8') || '{}'); } catch (e) { return fail(res, 400, 'invalid_argument', 'Body must be JSON.'); }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return fail(res, 400, 'invalid_argument', 'Body must be a JSON object.');
+  if (!CaptureLib.isContributor(body.contributor)) return fail(res, 400, 'invalid_argument', 'contributor must be a short code like Mg-07 (letters, a dash, digits). Never a name.');
+  if (!CaptureLib.POOL_MODES.includes(body.mode)) return fail(res, 400, 'invalid_argument', 'mode must be "home" or "group".');
+  if (body.station != null && !(typeof body.station === 'string' && STATION_ID.test(body.station))) return fail(res, 400, 'invalid_argument', 'station must be a station role like s2.');
+  const pd = poolDir();
+  if (pd.error) return fail(res, 500, 'unavailable', 'The pool setting in data/meta/wire-line.json is not valid: ' + pd.error);
+  const reviews = readReviews(id), cfg = sessionConfig(doc), byRole = {};
+  for (const c of readCaptures(id)) {
+    const r = reviews.get(c.id);
+    if (!r || r.verdict === 'unsure' || !fs.existsSync(path.join(dir, 'captures', c.id + '.jpg'))) continue;
+    if (body.station && c.role !== body.station) continue;
+    (byRole[c.role] = byRole[c.role] || []).push(c);
+  }
+  const roles = Object.keys(byRole).sort();
+  if (!roles.length) return fail(res, 409, 'nothing_to_share', 'This session has no reviewed frames' + (body.station ? ' for ' + body.station : '') + ' yet. Review some first (Not sure does not count).');
+  const folder = body.contributor + '-' + id, targets = roles.map(r => path.join(pd.dir, r, folder));
+  const taken = roles.filter((r, i) => fs.existsSync(targets[i]));
+  if (taken.length) return fail(res, 409, 'exists', 'Already published as ' + taken.map(r => r + '/' + folder).join(', ') + '. A published contribution is never replaced.');
+  const published = [], publishedAt = new Date().toISOString();
+  for (let i = 0; i < roles.length; i++) {
+    const role = roles[i], caps = byRole[role], parent = path.join(pd.dir, role), tmp = path.join(parent, '.tmp-' + crypto.randomBytes(4).toString('hex'));
+    try {
+      fs.mkdirSync(path.join(tmp, 'captures'), { recursive: true });
+      for (const c of caps) fs.copyFileSync(path.join(dir, 'captures', c.id + '.jpg'), path.join(tmp, 'captures', c.id + '.jpg'));
+      fs.writeFileSync(path.join(tmp, 'captures.jsonl'), caps.map(c => JSON.stringify(c) + '\n').join(''));
+      fs.writeFileSync(path.join(tmp, 'review.jsonl'), caps.map(c => JSON.stringify(reviews.get(c.id)) + '\n').join(''));
+      // Nothing that names a person: no title, crew, notes or operator codes ride along in session.json.
+      fs.writeFileSync(path.join(tmp, 'session.json'), JSON.stringify({ version: 1, station: role, mode: body.mode, contributor: body.contributor, sessionId: id, publishedAt, startedAt: doc.startedAt, endedAt: doc.endedAt || null, classes: roleClasses(cfg, role) || [], captures: caps.length }, null, 2) + '\n');
+      fs.renameSync(tmp, targets[i]);
+    } catch (e) {
+      try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (e2) { /* none */ }
+      if (e && (e.code === 'EEXIST' || e.code === 'ENOTEMPTY')) return fail(res, 409, 'exists', 'Already published as ' + role + '/' + folder + '. A published contribution is never replaced.');
+      return fail(res, 500, 'unavailable', 'Could not write the pool folder ' + parent + ': ' + String(e.message || e));
+    }
+    published.push({ station: role, folder, captures: caps.length, path: targets[i] });
+  }
+  return send(res, 200, { ok: true, published });
+}
+
+function poolApi(req, res, p, url) {
+  if (req.method !== 'GET') return fail(res, 405, 'invalid_argument', 'Method not allowed.');
+  const pd = poolDir();
+  if (pd.error) return fail(res, 500, 'unavailable', 'The pool setting in data/meta/wire-line.json is not valid: ' + pd.error);
+  if (p === '/api/pool') return send(res, 200, poolSummary(readPool(pd.dir), pd.dir));
+  const m = /^\/api\/pool\/([a-z][a-z0-9_]{0,15})\/snapshot\.zip$/.exec(p);
+  if (!m) return fail(res, 404, 'not_found', 'Nothing here.');
+  const role = m[1], holdout = url.searchParams.get('holdout');
+  if (holdout != null && !CaptureLib.isContributor(holdout)) return fail(res, 400, 'invalid_argument', 'holdout must be a contributor code like Mg-07.');
+  const mine = readPool(pd.dir).filter(c => c.station === role);
+  if (!mine.some(c => c.items.length)) return fail(res, 404, 'not_found', 'No reviewed frames for ' + role + ' in the pool yet.');
+  const hold = holdout && holdout.toLowerCase();
+  if (hold && !mine.some(c => c.meta.contributor.toLowerCase() === hold)) return fail(res, 400, 'invalid_argument', 'Nobody with code ' + holdout + ' has published ' + role + ' frames.');
+  if (hold && mine.every(c => c.meta.contributor.toLowerCase() === hold)) return fail(res, 409, 'nothing_left', 'Holding out ' + holdout + ' leaves nothing to train on.');
+  const classes = roleClasses(lineConfig() || {}, role) || (mine.find(c => Array.isArray(c.meta.classes) && c.meta.classes.length) || { meta: {} }).meta.classes;
+  if (!classes || !classes.length) return fail(res, 409, 'no_classes', 'No class list for ' + role + ' (set models.' + role + '.classes or suggestedClasses in wire-line.json).');
+  const pinned = readSplits(), items = [], units = {};
+  let dropped = 0;
+  for (const c of mine) {
+    const isHold = hold && c.meta.contributor.toLowerCase() === hold;
+    const split = isHold || pinned[c.meta.sessionId] === 'test' ? 'test' : CaptureLib.sessionSplit(c.folder, {});
+    for (const it of c.items) {
+      const usable = it.boxes.filter(b => classes.includes(b.cls));
+      dropped += it.boxes.length - usable.length;
+      const counts = {};
+      for (const b of usable) counts[b.cls] = (counts[b.cls] || 0) + 1;
+      items.push({ name: c.folder + '_' + it.cap.id, split, img: fs.readFileSync(it.jpg), lab: CaptureLib.labelText(it.review.verdict === 'rejected' ? [] : usable, classes),
+        info: { contribution: c.folder, contributor: c.meta.contributor, mode: c.meta.mode, session: c.meta.sessionId, captureId: it.cap.id, reason: it.cap.reason, verdict: it.review.verdict, labels: usable.length, labelCounts: counts } });
+    }
+    (units[split] = units[split] || []).push(c.folder);
+  }
   let zip;
-  try { zip = Buffer.from(CaptureLib.zip(entries)); } catch (e) { return fail(res, 500, 'unavailable', String(e.message || e)); }
-  return send(res, 200, zip, 'application/zip', { 'Content-Disposition': `attachment; filename="${role}-training.zip"` });
+  try { zip = yoloZip(role, classes, items, { source: 'pool', holdout: holdout || null, contributions: units, droppedBoxes: dropped }); } catch (e) { return fail(res, 500, 'unavailable', String(e.message || e)); }
+  return send(res, 200, zip, 'application/zip', { 'Content-Disposition': `attachment; filename="${role}-pool-snapshot.zip"` });
 }
 
 // ---------- clips: GET /api/sessions/<id>/captures/<capId>.mp4 ----------
@@ -1072,6 +1231,7 @@ async function sessionsApi(req, res, p, url) {
       saveSession(id, true);
       return send(res, 200, Object.assign({}, doc, { videos: videoList(doc) }));
     }
+    if (what === 'pool' && req.method === 'POST') return publishToPool(req, res, id, doc, dir);
     if (what === 'export.zip' && req.method === 'GET') {
       let z;
       try { z = runExportZip(id, doc, dir, url.searchParams.get('video') === '1'); } catch (e) { return fail(res, e.status || 500, e.code || 'unavailable', String(e.message || e)); }

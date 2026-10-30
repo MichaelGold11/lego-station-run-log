@@ -9,6 +9,8 @@ Thumbs.db
 data/sessions/
 # Reviewed frames turned into YOLO training sets (data/training/<role>/), and which sessions are pinned as held-out test. Built from the sessions, so equally local.
 data/training/
+# The shared pool's default folder (data/pool). Point wire-line.json's pool.dir at a synced Drive folder to share it.
+data/pool/
 # Zones and calibration belong to this laptop and its camera mounts.
 data/meta/wire-line-setup.json
 # iPhone cameras: this laptop's CA and HTTPS certificate (scripts/phone-cert.mjs). The CA key must never leave the laptop.

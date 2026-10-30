@@ -52,6 +52,7 @@ CSV columns, model export contract) is [docs/wire-line-process.md](docs/wire-lin
 | `data/sessions/<id>/` | Recorded sessions (video per station, `events.jsonl`). Git-ignored, about 1 GB per hour |
 | `app/phone.html` | Phone and tablet camera page (iPhone, iPad, Android, a laptop browser), served over HTTPS on port 4174 (`PHONE_PORT`) by `server.mjs`; streams to `/line` over WebRTC |
 | `scripts/phone-cert.mjs` | Local name-constrained CA and HTTPS certificate for the phone page (`node scripts/phone-cert.mjs` checks them) |
+| `app/review.html`, `app/pool.html` | `/review`: check captured frames, clips, Download run and Copy for Claude (`export.zip`, `digest.txt`), Publish to pool. `/pool`: counts per station, class and contributor, and the trainer snapshot (`pool` in `data/meta/wire-line.json` is `{ "dir": "<folder>" }`, default `data/pool`; contributors are codes like `Mg-07`, never names; a published folder is never replaced) |
 | `data/phone-cert/` | This laptop's CA key, certificate and phone pairing secret. Git-ignored |
 
 Rules for the wire line:
