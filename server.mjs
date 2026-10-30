@@ -800,6 +800,126 @@ async function clipApi(req, res, id, doc, dir, capId) {
   return serveFile(req, res, out, 'video/mp4', { 'Cache-Control': 'private, max-age=60' });
 }
 
+// ---------- single run export: export.zip and digest.txt ----------
+// One zip per run: run.json (every text: session, config snapshot, events, cycles, verdicts, units, substeps, captures with
+// their reviews), the CSVs, captures/*.jpg, and the recordings only with ?video=1. digest.txt is a short plain-text
+// summary to paste to Claude.
+function parseCsv(t) {
+  const rows = [];
+  let row = [], cell = '', q = false;
+  for (let i = 0; i < t.length; i++) {
+    const ch = t[i];
+    if (q) { if (ch === '"') { if (t[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += ch; }
+    else if (ch === '"') q = true;
+    else if (ch === ',') { row.push(cell); cell = ''; }
+    else if (ch === '\n' || ch === '\r') { if (ch === '\r' && t[i + 1] === '\n') i++; row.push(cell); cell = ''; if (row.length > 1 || row[0] !== '') rows.push(row); row = []; }
+    else cell += ch;
+  }
+  if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+  if (!rows.length) return [];
+  const head = rows[0];
+  return rows.slice(1).map(r => { const o = {}; head.forEach((h, i) => { o[h] = r[i] == null ? '' : r[i]; }); return o; });
+}
+const RUN_CSVS = { 'substeps.csv': 'substepsCsv', 'cycles.csv': 'cyclesCsv', 'verdicts.csv': 'verdictsCsv', 'units.csv': 'unitsCsv' };
+function runTables(id, doc, events) {
+  const meta = { id, crew: doc.crew, shift: doc.shift, startedAtMs: doc.startedAtMs }, cfg = sessionConfig(doc), csv = {}, rows = {};
+  for (const [name, fn] of Object.entries(RUN_CSVS)) {
+    try { csv[name] = LineEngine[fn](events, cfg, meta); } catch (e) { csv[name] = ''; }
+    rows[name] = parseCsv(csv[name]);
+  }
+  return { cfg, csv, rows };
+}
+function capturesWithReviews(id) {
+  const reviews = readReviews(id), dir = path.join(SESSIONS, id, 'captures');
+  return readCaptures(id).map(c => Object.assign({}, c, { image: fs.existsSync(path.join(dir, c.id + '.jpg')) ? 'captures/' + c.id + '.jpg' : null, review: reviews.get(c.id) || null }));
+}
+function runJson(id, doc, events, tables) {
+  const session = Object.assign({}, doc); delete session.config; delete session.summary;
+  let summary = doc.summary || null;
+  if (!summary) { try { summary = LineEngine.summarize(events, tables.cfg, { now: doc.endedAtMs || events.length && events[events.length - 1].t || Date.now() }); } catch (e) { summary = null; } }
+  return {
+    version: 1, exportedAt: new Date().toISOString(), sessionId: id,
+    session, config: tables.cfg, summary, events,
+    cycles: tables.rows['cycles.csv'], substeps: tables.rows['substeps.csv'], verdicts: tables.rows['verdicts.csv'], units: tables.rows['units.csv'],
+    captures: capturesWithReviews(id)
+  };
+}
+function runExportZip(id, doc, dir, withVideo) {
+  const events = readEvents(id), tables = runTables(id, doc, events);
+  const entries = [{ name: 'run.json', data: JSON.stringify(runJson(id, doc, events, tables), null, 2) + '\n' }];
+  for (const [name, text] of Object.entries(tables.csv)) entries.push({ name, data: text });
+  for (const c of readCaptures(id)) { try { entries.push({ name: 'captures/' + c.id + '.jpg', data: fs.readFileSync(path.join(dir, 'captures', c.id + '.jpg')) }); } catch (e) { /* swept */ } }
+  if (withVideo) {
+    const vids = [];
+    for (const parts of Object.values(doc.recordings || {})) for (const r of parts) { const f = path.join(dir, r.file); if (fs.existsSync(f)) vids.push({ name: 'video/' + r.file, f, size: fs.statSync(f).size }); }
+    if (vids.reduce((a, v) => a + v.size, 0) > 1.5 * 1024 * 1024 * 1024) throw Object.assign(new Error('The recordings are over 1.5 GB: too big for one zip. Download the run without video and copy the videos from the session folder.'), { status: 413, code: 'too_large' });
+    for (const v of vids) entries.push({ name: v.name, data: fs.readFileSync(v.f) });
+  }
+  return Buffer.from(CaptureLib.zip(entries));
+}
+
+const DIGEST_MAX = 6000;
+const fmtS = v => (Math.round(v * 10) / 10) + 's';
+const stampOf = ms => ms ? new Date(ms).toISOString().replace('T', ' ').slice(0, 19) + ' UTC' : '-';
+function digestText(id, doc) {
+  const events = readEvents(id), tables = runTables(id, doc, events), cfg = tables.cfg, L = [];
+  L.push('WIRE LINE RUN ' + id + (doc.title ? ' "' + doc.title + '"' : ''));
+  const dur = doc.startedAtMs && (doc.endedAtMs || (events.length && events[events.length - 1].t)) ? ((doc.endedAtMs || events[events.length - 1].t) - doc.startedAtMs) / 1000 : null;
+  L.push('Started ' + stampOf(doc.startedAtMs) + (doc.endedAt ? ', ended, ' : ', not ended, ') + (dur == null ? 'duration unknown' : Math.round(dur / 60 * 10) / 10 + ' min') + (doc.crew ? '. Crew ' + doc.crew : '') + (doc.shift ? ', shift ' + doc.shift : '') + '.');
+  L.push('Process: ' + (cfg.name || '?') + (cfg.draft ? ' (' + cfg.draft + ')' : '') + '; ' + events.length + ' events.');
+  const roles = layoutRoles(doc), sids = sessionIds(doc);
+  L.push('Stations: ' + sids.map(sid => sid + (roles[sid] && roles[sid] !== sid ? ' (' + roles[sid] + ')' : '') + (doc.recordings && doc.recordings[sid] && doc.recordings[sid].length ? ' video' : '')).join(', '));
+  const models = Object.entries(cfg.models || {}).map(([r, m]) => r + ': ' + String(m.file || '').split('/').pop() + (m.version != null ? ' v' + m.version : ''));
+  if (models.length) L.push('Models: ' + models.join('; '));
+  const byType = {};
+  for (const e of events) byType[e.type] = (byType[e.type] || 0) + 1;
+  L.push('Events by type: ' + (Object.entries(byType).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, v]) => k + ' ' + v).join(', ') || 'none'));
+  L.push('');
+  L.push('CYCLES');
+  const cyc = tables.rows['cycles.csv'], per = {};
+  for (const r of cyc) (per[r.station] = per[r.station] || []).push(r);
+  if (!cyc.length) L.push('none');
+  for (const [st, rs] of Object.entries(per)) {
+    const t = rs.map(r => Number(r.cycle_s)).filter(v => isFinite(v) && v > 0), res = {};
+    for (const r of rs) if (r.result) res[r.result] = (res[r.result] || 0) + 1;
+    const rsn = {}; for (const r of rs) if (r.reason) rsn[r.reason] = (rsn[r.reason] || 0) + 1;
+    L.push(st + ': ' + rs.length + ' cycles' + (t.length ? ', mean ' + fmtS(t.reduce((a, b) => a + b, 0) / t.length) + ' (min ' + fmtS(Math.min(...t)) + ', max ' + fmtS(Math.max(...t)) + ')' : '')
+      + (Object.keys(res).length ? '; results ' + Object.entries(res).map(([k, v]) => k + ' ' + v).join(', ') : '')
+      + (Object.keys(rsn).length ? '; reasons ' + Object.entries(rsn).map(([k, v]) => k + ' ' + v).join(', ') : '')
+      + (rs.some(r => r.flags && r.flags !== '0') ? '; with flags ' + rs.filter(r => r.flags && r.flags !== '0').length : ''));
+  }
+  const ver = tables.rows['verdicts.csv'];
+  L.push(''); L.push('VERDICTS (' + ver.length + ')');
+  const vc = {}; for (const v of ver) vc[v.event] = (vc[v.event] || 0) + 1;
+  if (ver.length) L.push('By kind: ' + Object.entries(vc).map(([k, v]) => k + ' ' + v).join(', '));
+  for (const v of ver.slice(0, 12)) L.push('- ' + v.time + ' ' + v.station + ' c' + v.cycle + ' ' + v.step + ' ' + v.event + (v.message ? ': ' + String(v.message).slice(0, 110) : ''));
+  if (ver.length > 12) L.push('- ... ' + (ver.length - 12) + ' more in verdicts.csv');
+  const units = tables.rows['units.csv'];
+  if (units.length) L.push('Units: ' + units.length);
+  const caps = capturesWithReviews(id);
+  L.push(''); L.push('CAPTURES (' + caps.length + ')');
+  if (caps.length) {
+    const rc = {}, vd = { confirmed: 0, corrected: 0, rejected: 0, unsure: 0, todo: 0 }, cl = {};
+    for (const c of caps) {
+      rc[c.reason] = (rc[c.reason] || 0) + 1;
+      vd[c.review ? c.review.verdict : 'todo']++;
+      if (c.review && c.review.verdict !== 'unsure') for (const b of c.boxes || []) { const e = cl[b.cls] = cl[b.cls] || { kept: 0, wrongFrame: 0, fixedFrame: 0 }; if (c.review.verdict === 'confirmed') e.kept++; else if (c.review.verdict === 'rejected') e.wrongFrame++; else e.fixedFrame++; }
+    }
+    L.push('By reason: ' + Object.entries(rc).map(([k, v]) => k + ' ' + v).join(', '));
+    L.push('Reviews: right ' + vd.confirmed + ', fixed ' + vd.corrected + ', wrong ' + vd.rejected + ', not sure ' + vd.unsure + ', not reviewed ' + vd.todo);
+    for (const [k, e] of Object.entries(cl).sort()) L.push('- model boxes ' + k + ': on right frames ' + e.kept + ', on wrong frames ' + e.wrongFrame + ', on fixed frames ' + e.fixedFrame);
+    const notes = caps.filter(c => c.review && c.review.note).slice(0, 8);
+    for (const c of notes) L.push('- note ' + c.id + ' (' + c.station + ', ' + c.review.verdict + '): ' + c.review.note.slice(0, 120));
+  }
+  let out = L.join('\n') + '\n';
+  if (Buffer.byteLength(out) > DIGEST_MAX) {
+    let cut = out.slice(0, DIGEST_MAX - 60);
+    while (Buffer.byteLength(cut) > DIGEST_MAX - 60) cut = cut.slice(0, -50);
+    out = cut.replace(/\n[^\n]*$/, '') + '\n[digest cut at 6 KB; the full data is in the run export]\n';
+  }
+  return out;
+}
+
 async function sessionsApi(req, res, p, url) {
   if (p === '/api/sessions') {
     if (req.method === 'GET') return send(res, 200, { sessions: listSessions() });
@@ -951,6 +1071,14 @@ async function sessionsApi(req, res, p, url) {
       try { doc.summary = LineEngine.summarize(readEvents(id), sessionConfig(doc), { now: doc.endedAtMs }); } catch (e) { doc.summary = null; console.error(e); }
       saveSession(id, true);
       return send(res, 200, Object.assign({}, doc, { videos: videoList(doc) }));
+    }
+    if (what === 'export.zip' && req.method === 'GET') {
+      let z;
+      try { z = runExportZip(id, doc, dir, url.searchParams.get('video') === '1'); } catch (e) { return fail(res, e.status || 500, e.code || 'unavailable', String(e.message || e)); }
+      return send(res, 200, z, 'application/zip', { 'Content-Disposition': `attachment; filename="${id}-run.zip"` });
+    }
+    if (what === 'digest.txt' && req.method === 'GET') {
+      return send(res, 200, digestText(id, doc), 'text/plain; charset=utf-8');
     }
     if (what === 'events.jsonl' && req.method === 'GET') {
       return send(res, 200, fs.readFileSync(path.join(dir, 'events.jsonl')), 'application/x-ndjson; charset=utf-8', { 'Content-Disposition': `attachment; filename="${id}-events.jsonl"` });

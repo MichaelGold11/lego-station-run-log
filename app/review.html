@@ -268,6 +268,11 @@ main { max-width: 1180px; margin: 0 auto; padding: 14px 16px 80px; display: grid
       <div class="rates">${ratesHtml(hitRates(caps))}</div>
       <div class="row"><button class="btn primary" id="btnNext" type="button">Next unreviewed <kbd>N</kbd></button>
         <div class="filters" id="filters"></div></div>
+      <div class="row" id="runTools">
+        <a class="btn sm" id="btnDl" href="/api/sessions/${encodeURIComponent(S.id)}/export.zip" download title="One zip: run.json with all the text, the CSVs and the captured frames">Download run</a>
+        <a class="btn sm" id="btnDlV" href="/api/sessions/${encodeURIComponent(S.id)}/export.zip?video=1" download title="The same zip with the recordings inside (large)">Download run with video</a>
+        <button class="btn sm" id="btnCopy" type="button" title="A short plain-text summary of this run, ready to paste to Claude">Copy for Claude</button>
+      </div>
     </section>`;
     if (!caps.length) { main.innerHTML = head + '<div class="banner">This session has no captured frames. Capture runs while a session records; the manual capture key is X.</div>'; wireHead(); return; }
     main.innerHTML = head + '<div id="groups"></div>';
@@ -340,7 +345,27 @@ main { max-width: 1180px; margin: 0 auto; padding: 14px 16px 80px; display: grid
     v.src = src;
   }
 
+  // Puts text on the clipboard; if the browser refuses (not a secure page), shows it selected so a person can copy it.
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* fall through */ }
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.cssText = 'position:fixed;left:-9999px;top:0'; document.body.appendChild(ta); ta.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch (e) { /* no */ }
+    ta.remove();
+    return ok;
+  }
   function wireHead() {
+    $('btnCopy').onclick = async () => {
+      const b = $('btnCopy'); b.disabled = true;
+      try {
+        const r = await fetch('/api/sessions/' + encodeURIComponent(S.id) + '/digest.txt', { cache: 'no-store' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const t = await r.text();
+        if (await copyText(t)) toast('Copied (' + Math.round(t.length / 100) / 10 + ' KB). Paste it into Claude.');
+        else { $('modal').innerHTML = '<div class="box panel pad"><b>Copy this text</b><textarea readonly style="width:100%;min-height:50vh;font-family:var(--f-mono);font-size:12px">' + esc(t) + '</textarea><div><button class="btn" id="dgClose" type="button">Close</button></div></div>'; $('modal').hidden = false; $('dgClose').onclick = () => { $('modal').hidden = true; $('modal').innerHTML = ''; }; }
+      } catch (e) { toast('Could not make the summary. ' + e.message, true); }
+      b.disabled = false;
+    };
     $('btnNext').onclick = () => nextUnreviewed(false);
     $('btnPin').onclick = async () => {
       const to = S.split === 'test' ? null : 'test';
