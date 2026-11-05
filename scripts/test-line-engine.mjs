@@ -442,7 +442,7 @@ function crig(station, opts) {
   if (o.model) for (const z of Object.keys(cur)) for (const c of o.model) cur[z]['class:' + c] = 0;
   let t = 0, fid = 0, frame = null, lastF = -1e9, dets = [];
   const r = {
-    eng, chk, rects, verdicts: [], events: [], hands: o.hands == null ? null : o.hands, motion: null,
+    eng, chk, rects, verdicts: [], events: [], hands: o.hands == null ? null : o.hands, motion: null, idle: false,
     set(patch) { for (const z of Object.keys(patch || {})) Object.assign(cur[z], patch[z]); return r; },
     calm() { for (const z of Object.keys(cur)) for (const k of Object.keys(cur[z])) cur[z][k] = 0; return r; },
     see(list) { dets = list; return r; },
@@ -453,10 +453,11 @@ function crig(station, opts) {
       const end = t + ms;
       while (t < end) {
         if (o.model && every !== Infinity && t - lastF >= every) { frame = { id: ++fid, t, dets }; lastF = t; }
-        const evs = eng.update(JSON.parse(JSON.stringify(cur)), t);
+        const sig = JSON.parse(JSON.stringify(cur)), evs = r.idle ? [] : eng.update(sig, t);
+        if (r.idle) eng.idle(sig, t);
         r.events.push(...evs);
         const motion = r.motion != null ? r.motion : Math.max(...Object.values(cur).map(z => z.activity));
-        r.verdicts.push(...chk.update({ t, events: evs, state: eng.state(), modelOn: !!o.model, frame, zones: rects, hands: r.hands, motion }));
+        r.verdicts.push(...chk.update({ t, events: evs, state: eng.state(), modelOn: !!o.model, frame, zones: rects, hands: r.hands, motion, idle: r.idle }));
         t += FRAME;
       }
       return r;
@@ -976,6 +977,44 @@ console.log('capture triggers: captureWanted');
   const bad = JSON.parse(JSON.stringify(SHIPPED));
   bad.stations.find(s => s.id === 's2').substeps.find(s => s.id === 's2_open').after = 's2_close';
   check('after must name an earlier substep', LE.checkConfig(bad).some(m => /s2_open: after/.test(m)));
+}
+
+// Outside a session the page calls idle() and passes idle to the checker: the camera shows, nothing is tracked or judged.
+{
+  console.log('\nidle: nothing is tracked before Start');
+  const st = SHIPPED.stations.find(s => s.id === 's2'), classes = SHIPPED.models.s2.classes, zones = ['connectors', 'wires', 'work'];
+  const rig = () => {
+    const eng = LE.createStation(st, { holdFrames: SHIPPED.holdFrames, defaults: SHIPPED.defaults, qaGraceSec: SHIPPED.qaGraceSec, modelClasses: classes });
+    let t = 0;
+    const sig = zone => { const o = {}; for (const z of zones) { o[z] = { activity: 0, bright: 0 }; for (const c of classes) o[z]['class:' + c] = 0; } if (zone) o[zone]['class:red_wire'] = 0.9; return o; };
+    return { eng, idle: zone => { for (let i = 0; i < 30; i++) eng.idle(sig(zone), t += FRAME); }, run: zone => { const out = []; for (let i = 0; i < 6; i++) out.push(...eng.update(sig(zone), t += FRAME)); return out; } };
+  };
+  const a = rig();
+  check('a new station has no frame, so its rules are not ready', a.eng.rules().every(r => !r.ready));
+  a.idle('wires');
+  check('a part in view before Start starts nothing', !a.eng.state().inCycle && a.eng.state().cycle === 0 && a.eng.state().occ.length === 0);
+  check('the card can still say Ready: the rules see the frames', a.eng.rules().filter(r => r.kind).every(r => r.ready));
+  const b = rig();
+  b.idle(null);
+  check('empty idle frames do not count as "off": a part on the first tracked frames starts no cycle', b.run('wires').length === 0 && !b.eng.state().inCycle);
+  b.run(null);
+  b.run('wires');
+  check('once that part has left, the next one starts the cycle', b.eng.state().inCycle && b.eng.state().cycle === 1);
+  const c = rig();
+  c.eng.restart();
+  c.run('wires');
+  check('Start with a part in view: no cycle until it leaves', !c.eng.state().inCycle);
+
+  const r = crig(posStation(), { model: S2_CLASSES });
+  r.chk.setRef(REF);
+  r.idle = true;
+  r.see([r.det('splice', 'crimp', 0.8, { cx: 0.9 })]).play(3000);
+  check('in Setup a part out of position raises nothing, so nothing sounds', r.verdicts.length === 0, r.kinds());
+  check('...and Save correct state still gets its model results', r.chk.frames >= 3 && !!r.chk.saveRef(r.t).ref, JSON.stringify(r.chk.saveRef(r.t)));
+  r.chk.setRef(REF);    // saveRef keeps what it saved: back to the real correct state
+  r.idle = false;
+  r.busy(500).play(3000);
+  check('the same part in a session is a mistake (the rig really can raise one)', r.verdicts.some(v => v.kind === 'mistake'), r.kinds());
 }
 
 console.log('\n' + passes + ' passed, ' + fails + ' failed');

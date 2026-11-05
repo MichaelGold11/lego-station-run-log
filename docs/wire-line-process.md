@@ -248,7 +248,7 @@ bin has no reason, and the yield tile says "Turn on Score the cameras to log rea
    them apart, cover one lens and see which card goes dark. The page asks for 640x480 at 15 fps. The
    choice is saved per laptop; **Setup** has each station's full Camera list to change it.
 3. Press **Setup** (top right, or a station's **Setup needed**). Setup opens every station at once,
-   plus a bar with the line's switches (Models, Hand tracking, Count by, Reset counts, New pairing
+   plus a bar with the line's switches (Models, Hand tracking, Count by, New pairing
    code). Pick a zone and drag a box on the video around that parts pile, ruler or work area. The next zone
    is picked for you. Zones save to the laptop (`data/meta/wire-line-setup.json`) and come back after
    a reload. During a session, Setup warns that changes count from then on.
@@ -267,7 +267,12 @@ bin has no reason, and the yield tile says "Turn on Score the cameras to log rea
    from 5:00, Afternoon from 12:00, Evening from 17:00, Night from 22:00), and it follows the Shift
    field until someone edits it. **More details** holds the crew / training group, the shift and
    notes. The line under the title lists what is not ready (no camera, Setup needed, nothing
-   recording). Counts start from zero.
+   recording). Counts start from zero. **Start session is what turns the line on.** Before it a
+   connected camera only shows its video and boxes, with "Not tracking: press Start session": no
+   model runs, no step fires, keys do not count, nothing sounds. Setup runs the model and the zone
+   readouts so boxes can be checked, Calibrate can sample and **Save correct state** has results, but
+   it still tracks no step. After Start a station with a model waits for its first model result
+   before it tracks, so a part already in view has to leave before it can open a cycle.
 6. A normal run needs nothing pressed: the cameras log cycles, substeps, QA arrivals and
    mistakes. **Score the cameras** is on by default (Setup turns it off, saved per laptop). Then a
    bar at the bottom holds the answer key and one person keys it: a station's number (its place in

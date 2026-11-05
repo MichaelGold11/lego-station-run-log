@@ -317,14 +317,13 @@ button.chip:hover { border-color: var(--warn-ink); }
   </section>
 
   <section class="panel setupbar" id="setupBar" hidden aria-label="Setup">
-    <div class="sb-head"><div><span class="eyebrow">Setup</span>Each station: pick its camera, draw its boxes, calibrate. This laptop remembers it all.</div><button class="btn primary" id="btnDone" type="button">Done</button></div>
+    <div class="sb-head"><div><span class="eyebrow">Setup</span>Each station: pick its camera, draw its boxes, calibrate. This laptop remembers it all. The model runs here so you can check what it sees; steps and counts wait for Start session.</div><button class="btn primary" id="btnDone" type="button">Done</button></div>
     <div class="sb-warn" id="sbWarn" hidden>A session is recording: boxes and calibration change the counts from now on.</div>
     <div class="sb-row">
       <label class="sb-item" title="Shows the answer key: one person keys every unit (1, 2, 3 as units leave, P or F at QA with the reason), so the cameras can be scored against it. This laptop remembers it."><input type="checkbox" id="chkScore"> <b>Score the cameras</b><span class="muted">(answer key)</span></label>
       <span class="sb-item"><button class="btn sm" id="btnModel" type="button">Models: off</button><span class="muted" id="mdlNote"></span></span>
       <span class="sb-item"><button class="btn sm" id="btnHands" type="button" title="Hand tracking: a hand resting in a zone counts as activity, and model checks wait for a clear view. Slows each station's model results to every 4 to 5 seconds.">Hand tracking: off</button></span>
       <span class="sb-item" id="countItem" hidden>Count by<span class="seg" id="basisSeg"><button type="button" data-b="auto">Auto</button><button type="button" data-b="detected">Detected</button><button type="button" data-b="manual">Manual</button></span></span>
-      <button class="btn sm" id="btnReset" type="button">Reset counts</button>
       <button class="btn sm" id="btnPair" type="button" title="Make a new pairing code for the phone cameras. Every phone link and QR code so far stops working, and connected phones are cut off.">New pairing code</button>
       <span class="muted mono" id="detNote"></span>
     </div>
@@ -431,6 +430,12 @@ button.chip:hover { border-color: var(--warn-ink); }
   const H = { status: 'off', worker: null, wait: null, seq: 0, ms: 0, error: '', loading: null };
   const ST = {};
   let LIST = [];
+  // The line runs only in a session. Before Start the cameras show, but no model runs and nothing is tracked, counted or heard.
+  // Setup is the exception for the model and the zone readouts, so boxes can be checked and Save correct state has results.
+  const watching = () => !!G.session || G.setupMode;
+  // In a session, a station with a model waits for its first result: frames before it look empty, count as "off" and would
+  // let a part already in view at Start open a cycle. A failed model clears st.mdl or G.modelOn, so this cannot wait forever.
+  const tracking = st => !!G.session && (!G.modelOn || !st.mdl || !!st.dets);
 
   // ---------- events ----------
   function emit(e) {
@@ -915,8 +920,8 @@ button.chip:hover { border-color: var(--warn-ink); }
     }
     if (G.handsOn && H.status === 'ready') hp = LE.handPresence(st.hands && t - st.handsT < 2000 ? st.hands : [], zones);
     st.sig = LE.mergeSignals(r.signals, cls, hp);
-    const evs = st.eng.update(st.sig, t);
-    evs.forEach(emit);
+    let evs = [];
+    if (tracking(st)) { evs = st.eng.update(st.sig, t); evs.forEach(emit); } else st.eng.idle(st.sig, t);
     runChecker(st, evs, zoneMotion(r.signals), t);
     st.fpsN++;
     if (t - st.fpsT >= 1000) { st.fps = st.fpsN * 1000 / (t - st.fpsT); st.fpsN = 0; st.fpsT = t; }
@@ -951,7 +956,7 @@ button.chip:hover { border-color: var(--warn-ink); }
     const hands = 'hands' in o ? o.hands : G.handsOn && H.status === 'ready' && st.hands && t - st.handsT < HANDS_FRESH ? st.hands.length > 0 : null;
     const modelOn = 'modelOn' in o ? o.modelOn : !!(G.modelOn && st.mdl);
     const frame = 'frame' in o ? o.frame : modelOn && st.dets ? { id: st.detSeq, t: st.detCapT, dets: st.dets } : null;
-    for (const v of st.chk.update({ t, events: evs, state: st.eng.state(), modelOn, frame, zones: zonesOf(st), hands, motion })) { emit(v); playVerdict(st, v.kind); }
+    for (const v of st.chk.update({ t, events: evs, state: st.eng.state(), modelOn, frame, zones: zonesOf(st), hands, motion, idle: !G.session })) { emit(v); playVerdict(st, v.kind); }
   }
   // live_check.py beep(): mistake 3 x 880 Hz for 220 ms, review 600 Hz for 300 ms, verified 1320 Hz for 120 ms. One per new verdict.
   const TONES = { mistake: [880, 220, 3], review: [600, 300, 1], verified: [1320, 120, 1] };
@@ -1295,12 +1300,13 @@ button.chip:hover { border-color: var(--warn-ink); }
     let k = 0;
     try {
       while (G.modelOn || G.handsOn) {
-        const live = LIST.filter(s => s.source.type !== 'none' && s.video.readyState >= 2 && s.video.videoWidth && !s.video.paused && ((G.modelOn && s.mdl) || G.handsOn));
+        const live = !watching() ? [] : LIST.filter(s => s.source.type !== 'none' && s.video.readyState >= 2 && s.video.videoWidth && !s.video.paused && ((G.modelOn && s.mdl) || G.handsOn));
         if (!live.length) { await sleep(250); continue; }
         const st = live[k++ % live.length];
         if (G.modelOn && st.mdl) {
           try {
             const t0 = now(), d = await infer(st.video, st.mdl);
+            if (!watching()) continue;    // Stop or Done came while this ran: the line is off, drop the result
             st.detsPrev = st.dets; st.dets = d; st.detT = now(); st.detCapT = t0; st.detSeq++; st.modelN++; Y.errs = 0;
           } catch (e) {
             console.error(e);
@@ -1360,6 +1366,7 @@ button.chip:hover { border-color: var(--warn-ink); }
       st.stage.classList.toggle('setup', G.setupMode);
       if (G.setupMode && !st.drawZone) st.drawZone = (st.cfg.zones.find(z => !st.setup.zones[z.id]) || st.cfg.zones[0]).id;
       if (!G.setupMode && st.phone && st.phone.showQr) { st.phone.showQr = false; renderPhone(st, true); }
+      if (!watching()) st.dets = st.detsPrev = st.hands = null;
       renderSetup(st); drawOverlay(st);
     }
     if (G.setupMode && G.editMode) setEditMode(false);    // one mode at a time
@@ -1483,7 +1490,7 @@ button.chip:hover { border-color: var(--warn-ink); }
     st.cfg.zones.forEach((z, i) => {
       const r = zones[z.id];
       if (!r) return;
-      const col = ZONE_COLORS[i % ZONE_COLORS.length], s = st.sig && st.sig[z.id];
+      const col = ZONE_COLORS[i % ZONE_COLORS.length], s = watching() && st.sig && st.sig[z.id];
       const x = cr.x + r.x * cr.w, y = cr.y + r.y * cr.h, w = r.w * cr.w, h = r.h * cr.h;
       if (s && s.activity >= thr) { ctx.fillStyle = col + '33'; ctx.fillRect(x, y, w, h); }
       ctx.lineWidth = Math.max(1.5, 2 * k); ctx.strokeStyle = col; ctx.strokeRect(x, y, w, h);
@@ -1497,7 +1504,7 @@ button.chip:hover { border-color: var(--warn-ink); }
       ctx.fillStyle = col; ctx.fillRect(x, ly, 3 * k, th);
       ctx.fillStyle = '#fff'; ctx.fillText(label, x + 5 * k, ly + 2 * k);
     });
-    if (G.modelOn && st.dets) {
+    if (watching() && G.modelOn && st.dets) {
       ctx.font = `600 ${Math.max(10, 11 * k)}px Saira, sans-serif`;
       for (const d of st.dets) {
         if (d.conf < (G.config.defaults.class || 0.4)) continue;
@@ -1506,15 +1513,16 @@ button.chip:hover { border-color: var(--warn-ink); }
         ctx.fillStyle = '#f0b429'; ctx.fillText(d.cls + ' ' + Math.round(d.conf * 100), x + 3, y + 3);
       }
     }
-    if (G.handsOn && st.hands) {
+    if (watching() && G.handsOn && st.hands) {
       ctx.fillStyle = 'rgba(240,180,41,.9)';
       for (const hand of st.hands) for (const p of hand) { ctx.beginPath(); ctx.arc(cr.x + p.x * cr.w, cr.y + p.y * cr.h, Math.max(2, 2 * k), 0, 6.283); ctx.fill(); }
     }
     drawVerdict(st, cr);
-    if (st.calib) {
+    const note = st.calib ? (st.calib.kind === 'on' ? 'Recording the lit bulb...' : 'Calibrating: keep the area empty and the bulb dark') : watching() ? '' : 'Not tracking: press Start session';
+    if (note) {
       ctx.fillStyle = 'rgba(15,17,19,.7)'; ctx.fillRect(cr.x, cr.y, cr.w, 22 * k);
       ctx.fillStyle = '#fff'; ctx.font = `600 ${Math.max(11, 12 * k)}px Saira, sans-serif`;
-      ctx.fillText(st.calib.kind === 'on' ? 'Recording the lit bulb...' : 'Calibrating: keep the area empty and the bulb dark', cr.x + 8 * k, cr.y + 4 * k);
+      ctx.fillText(note, cr.x + 8 * k, cr.y + 4 * k);
     }
   }
 
@@ -1558,7 +1566,10 @@ button.chip:hover { border-color: var(--warn-ink); }
     $('akBar').hidden = !G.score; $('countItem').hidden = !G.score; $('chkScore').checked = G.score;
     G.evSeen = -1;
   }
+  // A press before Start would only be wiped by Start, so it says so instead of counting.
+  function needSession() { if (G.session) return false; hint('Press Start session first: nothing counts until then.'); return true; }
   function manualCycle(st) {
+    if (needSession()) return;
     emit({ type: 'manual', station: st.id, action: 'cycle_done', source: 'manual', t: now(), cycle: ++st.manualN });
     flashKey(st.id, st);
     G.evSeen = -1;
@@ -1566,7 +1577,7 @@ button.chip:hover { border-color: var(--warn-ink); }
   function qaSt() { return G.qaIds.length ? ST[G.qaIds[0]] : null; }
   function manualPass(which) {
     const st = which || qaSt();
-    if (!st) return;
+    if (!st || needSession()) return;
     closeFail(false);
     const t = now();
     emit({ type: 'manual', station: st.id, action: 'pass', source: 'manual', t, cycle: ++st.manualN });
@@ -1576,7 +1587,7 @@ button.chip:hover { border-color: var(--warn-ink); }
   }
   function openFail(which) {
     const st = which || qaSt();
-    if (!st) return;
+    if (!st || needSession()) return;
     if (G.failPick) { closeFail(true); return; }
     const t = now();
     G.failPick = { st, t, timer: setTimeout(() => pickReason(null), 20000) };
@@ -1814,6 +1825,8 @@ button.chip:hover { border-color: var(--warn-ink); }
       line.appendChild(span);
     }
   }
+  // Back to a clean start: tracker, checker, key count and the model's last look (tracking() waits for a new one).
+  function clearStation(st) { st.eng.restart(); st.chk.restart(); st.manualN = 0; st.dets = st.detsPrev = st.hands = null; }
   async function startSession(info) {
     if (G.session || G.starting) return;
     if (!LIST.length) { banner('session', 'There is no station on the floor yet: press + to add one.', 'crit'); return; }
@@ -1830,7 +1843,7 @@ button.chip:hover { border-color: var(--warn-ink); }
       for (const st of LIST) if (st.rec) await stopRecording(st);
       G.session = { id: j.id, startedAtMs: j.startedAtMs, title: info.title, crew: info.crew, shift: info.shift, parts: {} };
       G.events = []; G.queue = []; G.evSeen = -1;
-      for (const st of LIST) { st.eng.restart(); st.chk.restart(); st.manualN = 0; }
+      LIST.forEach(clearStation);
       capReset(j.startedAtMs);
       if (G.failPick) closeFail(true);
       emit({ type: 'session_start', t: j.startedAtMs, source: 'page', note: info.title || '' });
@@ -1872,7 +1885,7 @@ button.chip:hover { border-color: var(--warn-ink); }
       G.session = null; G.queue = []; G.stopping = false;
       // Live counting starts over; the finished session lives on the server.
       G.events = []; G.evSeen = -1;
-      for (const st of LIST) { st.eng.restart(); st.chk.restart(); st.manualN = 0; }
+      LIST.forEach(clearStation);
       const t = now();
       for (const st of LIST) emit({ type: 'source_change', station: st.id, t, input: inputOf(st), note: noteOf(st) });
       renderSession(); loadClips(); if (!$('sessionsPanel').hidden) loadSessions();
@@ -2052,12 +2065,13 @@ button.chip:hover { border-color: var(--warn-ink); }
     if (on) $('sessTitle').textContent = G.session.title || 'Session';
     $('sbWarn').hidden = !on;
     renderLayoutUi();
+    LIST.forEach(drawOverlay);    // the Not tracking note comes and goes with the session, even on a paused clip
   }
   function renderSetupBar() {
     const m = LIST.some(modelOf);
     const bm = $('btnModel');
     bm.disabled = !m;
-    bm.title = m ? 'Each station with a model runs it by itself. Turn them off on a slow laptop; this laptop remembers it.' : 'No model yet: add one under "models" in data/meta/wire-line.json when the model team delivers it';
+    bm.title = m ? 'Each station with a model runs it by itself, during a session and while Setup is open. Turn them off on a slow laptop; this laptop remembers it.' : 'No model yet: add one under "models" in data/meta/wire-line.json when the model team delivers it';
     bm.textContent = 'Models: ' + (!m ? 'none yet' : Y.status === 'loading' ? 'loading...' : G.modelOn ? 'on' : 'off');
     bm.classList.toggle('on', G.modelOn);
     $('mdlNote').textContent = m ? LIST.map(st => { const x = modelOf(st); return st.id.toUpperCase() + ' ' + (x ? baseName(x.file) : 'zones'); }).join(', ') : 'every station on zones';
@@ -2086,7 +2100,7 @@ button.chip:hover { border-color: var(--warn-ink); }
       $('sessClock').textContent = fmtClock(t - G.session.startedAtMs);
       const bytes = LIST.reduce((a, s) => a + (s.rec ? s.rec.bytes : 0), 0);
       $('sessInfo').textContent = G.events.length + ' events | ' + fmtMB(bytes) + ' video' + (G.queue.length > 20 ? ' | ' + G.queue.length + ' waiting to send' : '');
-    } else $('sessInfo').textContent = G.events.length ? 'Not recording | ' + G.events.length + ' live events' : 'Not recording';
+    } else $('sessInfo').textContent = 'Not running';
   }
   setInterval(render, 250);
 
@@ -2556,12 +2570,6 @@ button.chip:hover { border-color: var(--warn-ink); }
     } catch (e) { banner('layout', 'Not deleted: ' + esc(e.message), 'crit'); }
   };
   $('basisSeg').onclick = e => { const b = e.target.closest('button'); if (!b) return; G.basis = b.dataset.b; store.set('wire-line:basis', G.basis); G.evSeen = -1; renderSetupBar(); };
-  $('btnReset').onclick = () => {
-    if (G.session) { banner('reset', 'Counts cannot be reset while a session records. Stop the session first.', ''); setTimeout(() => banner('reset', ''), 4000); return; }
-    G.events = []; G.evSeen = -1;
-    const t = now();
-    for (const st of LIST) { st.eng.restart(); st.chk.restart(); st.manualN = 0; emit({ type: 'source_change', station: st.id, t, input: inputOf(st), note: noteOf(st) }); }
-  };
 
   async function restoreSources(camsOnly, only) {
     for (const st of only || LIST) {

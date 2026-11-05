@@ -94,7 +94,11 @@ before it (from the previous station finishing to the arrival), its mistakes, an
 5. **Recording is on.** Every camera and phone records its video during a session (Setup has
    **Record video** per station, on by default). Each recording station shows **REC** and its size
    in its head. Without video there is nothing to train on.
-6. **Start.** Clear the work areas (counts start from zero), press **Start session**, then **Enter**.
+6. **Start.** Nothing is tracked until this step: with a camera connected, each station shows its
+   video and boxes and says **Not tracking: press Start session**. No model runs, no step lights up,
+   nothing counts and nothing sounds. Clear the work areas (counts start from zero), press **Start
+   session**, then **Enter**. That turns everything on at once: recording, the models, the steps and
+   the counts. A part left in view at Start does not open a cycle; it has to leave first.
    The title is filled in with the date, time and shift. **More details** holds the crew or
    training group, the shift and notes. The line under the title says what is not ready yet.
 7. **Run.** Nothing to press. The cameras log every cycle, step, QA arrival and every mistake. **Score the cameras** is on by default (Setup turns it off; the
@@ -367,6 +371,7 @@ Score is off.
 | The page is slow | Keep it in the front tab; export your model at 416 or 320. **Models: off** in Setup stops every model on this laptop (it remembers that) |
 | A `.webm` video will not seek | `ffmpeg -i s1.webm -c copy s1-fixed.webm` |
 | Unit counts go negative | Units were already in the work areas when the session started |
+| Nothing lights up or counts | That is normal before **Start session**. Setup shows the model's boxes, so use it to check what the model sees |
 | No alert sounds | Click anywhere on the page once, check that **Sound** is on (top of the page) and the station's **Mute sounds** is off (Setup) |
 | A MISTAKE at the start of many units | The first step's zone missed the hand: make that zone cover where the hand goes |
 | A MISTAKE card never clears | Take your hands fully out of view, and check that nothing moves in the zones (a fan, a screen, a shadow) |

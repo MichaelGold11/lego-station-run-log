@@ -34,8 +34,8 @@ Open http://localhost:4173 in **Chrome**. It opens the wire line (`/line`):
 1. Each station shows **Connect a camera**. Pick **Phone or tablet** and scan the QR code with that
    station's phone, or pick a **USB camera** or a **Recorded clip**. The laptop remembers it.
 2. Once per laptop, press **Setup**: the boxes come from the committed standard setup (`data/meta/wire-line-standard.json`; draw them and press **Save as standard** if a role has none), press **Calibrate**, then **Done**.
-3. Press **Start session**, then **Enter**. Press **Stop session** at the end: the banner links the
-   CSVs.
+3. Press **Start session**, then **Enter**. Nothing is tracked before this. Press **Stop session** at
+   the end: the banner has **Download run**.
 
 The floor pans (drag it, or scroll with two fingers) and zooms (pinch, or the buttons at the bottom
 right; **Fit** shows every station). **+ Station** adds a station; **Edit layout** moves, renames,

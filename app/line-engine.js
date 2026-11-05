@@ -475,6 +475,9 @@
     }
 
     function tick(t) { const out = []; S.t = t; duePending(t, out); return out; }
+    // Outside a session: keep the frame so rules() can say what is ready, and track nothing. No hold counts and no "off"
+    // marks, so a part already in view when tracking starts still has to leave before it can start a cycle.
+    function idle(signals, t) { S.sig = signals || {}; S.t = t; }
 
     // Manual Pass or Fail from the page. It sets the result of the cycle that is waiting for one (ended within the
     // grace time, or a reason is being picked), else of the open cycle. Returns new events (a qa_result, maybe a flag).
@@ -523,7 +526,7 @@
         };
       });
     }
-    return { update, tick, manualQa, setQaHold, abandon, flush, restart, setModel, state, rules, station, get modelClasses() { return modelClasses; } };
+    return { update, tick, idle, manualQa, setQaHold, abandon, flush, restart, setModel, state, rules, station, get modelClasses() { return modelClasses; } };
   }
 
   // ---------- zone signals from pixels ----------
@@ -785,6 +788,7 @@
         C.lastFrame = frame.id;
         if (C.clear && !(isNum(frame.t) && frame.t < C.clearSince + o.clearSec * 1000)) { C.frames.push(frame); if (C.frames.length > o.refFrames) C.frames.shift(); C.newFrame = true; }
       }
+      if (inp.idle) return out;    // outside a session: Save correct state keeps its frames, but nothing is judged and nothing sounds
       // 4) check once per clear spell, again when the tracker brings a model step, and every recheckSec while a problem shows
       if (C.clear) {
         const bad = C.show && (C.show.kind === 'mistake' || C.show.kind === 'review');
