@@ -61,7 +61,7 @@ before it (from the previous station finishing to the arrival), its mistakes, an
 |---|---|
 | Run-day lead | Brings the laptop, mounts the cameras, arranges the floor if the tables changed, sets up zones, starts and stops the session, uploads the footage |
 | Operators (one per station) | Set their code and level on their station's **Op** chip, then build at their station following its SOP, including the planned mistakes for the run |
-| Answer-key keeper | Only when the cameras are being scored (**Score the cameras** on in Setup): presses the keys as units leave each station and at QA. This is the ground truth every model is scored against |
+| Answer-key keeper | While the cameras are being scored (**Score the cameras**, on by default): presses the keys as units leave each station and at QA. This is the ground truth every model is scored against |
 | Station trainer (one per station) | Labels that station's footage, trains its model, adds it to the platform, tests it |
 
 ## 4. Run day (recording)
@@ -97,16 +97,16 @@ before it (from the previous station finishing to the arrival), its mistakes, an
 6. **Start.** Clear the work areas (counts start from zero), press **Start session**, then **Enter**.
    The title is filled in with the date, time and shift. **More details** holds the crew or
    training group, the shift and notes. The line under the title says what is not ready yet.
-7. **Run.** Nothing to press. The cameras log every cycle, step, QA arrival and every mistake. To **score the cameras**, turn on **Score the cameras** in Setup (the
-   laptop remembers it). The answer-key bar appears at the bottom and one person keys:
+7. **Run.** Nothing to press. The cameras log every cycle, step, QA arrival and every mistake. **Score the cameras** is on by default (Setup turns it off; the
+   laptop remembers it), so the answer-key bar shows at the bottom and one person keys:
    - A station's number key when a unit leaves it: the stations in flow order, so **1** to **3** on
      Class test (the bar shows each key). On S1 that is after each wire, so three presses per unit.
    - At QA, **P** for pass or **F** for fail, then pick the fail reason. P or F also closes the QA
      station's unit, so its number key only says so. A second QA station has its own Pass and Fail
      buttons on the bar.
    Fail reasons (and fails by cause) only come from the answer key.
-8. **Stop.** Press **Stop session**. The banner links the session's four CSV files (with units.csv) (the raw
-   event log and session record fold under **raw**).
+8. **Stop.** Press **Stop session**. The banner has one **Download run** link: a zip with the four CSV files and
+   `run.json` (every event and the settings used), no video. **Sessions** has the same link for every past run.
 
 Keep the page in the front tab the whole time; a background tab slows to about one check per
 second.
@@ -220,11 +220,11 @@ Every alert goes into the session's **verdicts.csv** (under **Sessions**),
   (`s1.mp4`, `s2.mp4` and so on). A new station's id now defaults to its role id, so S2 footage is `s2.mp4`,
   `events.jsonl` (every detected step and key press, with the time into each video) and
   `session.json`. The CSVs are under **Sessions**. Older sessions may use another id for a role (a
-  one-station layout for S2 saved `s1.mp4`): read `roles` in `session.json` (under **raw**), not the file name.
+  one-station layout for S2 saved `s1.mp4`): read `roles` in `run.json` (in **Download run**), not the file name.
 - Upload the whole folder to the team's shared Drive folder. It is about 1 GB per hour. Never
   commit it to git (the folder is git-ignored).
 - Each trainer takes their own station's video: `s1.mp4` for S1, `s2.mp4` for S2, and so on. An
-  added station films its role's work: `session.json` (under **raw**) lists each station's role, so
+  added station films its role's work: `run.json` (in **Download run**) lists each station's role, so
   `s5.mp4` from a second QA station is QA footage.
 
 ## 6a. Review your run
@@ -347,7 +347,7 @@ seen, they pick that code in **Hold out** before downloading.
 
 ### Test recipe for S2 (a live run with the answer key)
 
-1. In **Setup**, turn **Score the cameras** on.
+1. In **Setup**, check that **Score the cameras** is on (it is by default).
 2. Start the session. One person stands by the keyboard and presses **1** each time a unit leaves S2.
 3. Run 3 to 5 cycles, then stop the session.
 4. The **Done** tile shows detected cycles next to keyed cycles, and `events.jsonl` has the key presses.

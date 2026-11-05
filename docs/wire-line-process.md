@@ -195,6 +195,10 @@ Rules (the thresholds are live_check.py's):
 
 Config (all optional):
 
+- `after` on a substep, default none: `"after": "s2_open"`. That substep cannot fire until the named
+  earlier substep has happened in this cycle. `s2_close` uses it: the connector sits closed before
+  work starts, so a closed connector only ends a cycle after it was seen open. If the earlier substep
+  cannot be seen at all (its zone or signal is missing), nothing waits for it.
 - `mustStay` in a substep's model rule, default off:
   `"model": { "zone": "work", "class": "connector_closed", "mustStay": true }`. Once that substep
   is verified, its class must stay visible in its zone until the cycle ends. Off on every wire
@@ -265,15 +269,15 @@ bin has no reason, and the yield tile says "Turn on Score the cameras to log rea
    notes. The line under the title lists what is not ready (no camera, Setup needed, nothing
    recording). Counts start from zero.
 6. A normal run needs nothing pressed: the cameras log cycles, substeps, QA arrivals and
-   mistakes. To score the cameras, turn on **Score the cameras** in Setup (saved per laptop). Then a
+   mistakes. **Score the cameras** is on by default (Setup turns it off, saved per laptop). Then a
    bar at the bottom holds the answer key and one person keys it: a station's number (its place in
    the flow; **1** to **3** on Class test) when a unit leaves that station (on S1 after each wire, so three per unit), **P** or **F** at QA (F
    opens the reason chips just above the bar; pick one). Pass or Fail also closes the QA station's
    manual cycle, so its number key only shows "S4 closes its cycle with P or F". Each key shows its count, and the station's card flashes. With scoring off the bar
    is gone and the keys only say how to turn it on. Manual presses are stored separately from what
    the cameras detect; they are how we score the detection.
-7. Press **Stop session**. The banner links the four CSVs (with units.csv); `events.jsonl` and `session.json` fold
-   under **raw**. Copy the session folder off the laptop: video is about 1 GB per hour for four
+7. Press **Stop session**. The banner has one **Download run** link: a zip with the four CSVs and `run.json`, no
+   video. Copy the session folder off the laptop: video is about 1 GB per hour for four
    cameras.
 
 No camera handy? **Connect a camera** > **Recorded clip** offers the **demo clips** (the LEGO run
@@ -366,8 +370,8 @@ Folder `data/sessions/<id>/` (git-ignored), id like `20261015-233956-7509`:
 | `s1.mp4`, `s2.mp4`, ... `s5.mp4` | each station's video, named by station id (`.webm` on browsers without MP4 recording). `s1-2.mp4` is a second part if the source changed or Rec was switched off and on |
 
 Exports: `/api/sessions/<id>/substeps.csv`, `/cycles.csv`, `/verdicts.csv`, `/units.csv` and `/events.jsonl`
-(also linked from **Sessions**, which updates by itself every 10 seconds while open;
-the last two under **raw**). The whole run in one file is `/api/sessions/<id>/export.zip`
+(the API still serves each one). The page links one file per run, **Download run** on the Stop banner and in
+**Sessions** (which updates by itself every 10 seconds while open): `/api/sessions/<id>/export.zip`
 (see "Capture, review and the shared pool" below).
 
 ### Event fields

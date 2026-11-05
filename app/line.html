@@ -278,10 +278,6 @@ button.chip:hover { border-color: var(--warn-ink); }
 .sessions td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .sessions td a { color: var(--accent-2); margin-right: 8px; white-space: nowrap; }
 .sessions .tbl { max-height: 320px; overflow: auto; }
-details.raw { display: inline; font-size: 12px; }
-details.raw summary { display: inline; cursor: pointer; color: var(--muted); }
-details.raw[open] summary { margin-right: 6px; }
-.banner details.raw summary { color: inherit; }
 </style>
 </head>
 <body>
@@ -423,7 +419,7 @@ details.raw[open] summary { margin-right: 6px; }
     config: null, base: null, standard: { roles: {} }, layout: null, layouts: [], roles: [], editMode: false, qaIds: [], setup: {}, events: [], queue: [], session: null, lastSession: null, basis: store.get('wire-line:basis') || 'auto',
     modelOn: false, handsOn: false, cameras: [], clips: [], camAllowed: false, failPick: null, sending: false, summary: null, sumAt: 0, evSeen: -1,
     qaId: null, saveTimer: null, starting: false, stopping: false, soundOn: store.get('wire-line:sound') !== false, setupMode: false,
-    score: store.get('wire-line:score') === true,    // Score the cameras: the answer key shows (off by default)
+    score: store.get('wire-line:scoreOn') !== false,    // Score the cameras: the answer key shows (on by default; a new key, because the page saved false under the old one on every load)
     capOn: store.get('wire-line:capture'), capTotal: 0, capBusy: 0, capWarned: false    // capture switch (null: the config decides), frames this session, uploads in flight
   };
   const FLOOR = { grid: 40, cardW: 640, minZ: 0.25, maxZ: 2 };    // the same grid and card width as LineEngine.FLOOR
@@ -1557,7 +1553,7 @@ details.raw[open] summary { margin-right: 6px; }
   }
   function setScore(on) {
     G.score = !!on;
-    store.set('wire-line:score', G.score);
+    store.set('wire-line:scoreOn', G.score);
     if (!G.score && G.failPick) closeFail(true);
     $('akBar').hidden = !G.score; $('countItem').hidden = !G.score; $('chkScore').checked = G.score;
     G.evSeen = -1;
@@ -1868,7 +1864,7 @@ details.raw[open] summary { margin-right: 6px; }
       const L = doc.summary && doc.summary.line;
       const base = '/api/sessions/' + sess.id;
       banner('session', `Session saved: <b>${esc(sess.title || sess.id)}</b>${L ? ` | ${L.units} units, FPY ${L.fpy == null ? '--' : Math.round(L.fpy * 100) + '%'}` : ''} | ` +
-        `<a href="${base}/substeps.csv" download>substeps.csv</a> <a href="${base}/cycles.csv" download>cycles.csv</a> <a href="${base}/verdicts.csv" download>verdicts.csv</a> <a href="${base}/units.csv" download>units.csv</a> ${rawLinks(base)}` +
+        runLink(base) +
         (G.queue.length ? ` | <b>${G.queue.length} events were not sent</b>` : ''), G.queue.length ? 'crit' : 'good');
     } catch (e) {
       banner('session', 'Stopping had a problem: ' + esc(e && e.message || e) + '. The data sent so far is on disk.', 'crit');
@@ -1882,8 +1878,8 @@ details.raw[open] summary { margin-right: 6px; }
       renderSession(); loadClips(); if (!$('sessionsPanel').hidden) loadSessions();
     }
   }
-  // The model team's files (every event, the session record) fold under "raw"; the three CSVs stay in view.
-  const rawLinks = base => `<details class="raw"><summary>raw</summary><a href="${base}/events.jsonl" download>events.jsonl</a><a href="${base}" target="_blank" rel="noopener">session.json</a></details>`;
+  // One link per run: a zip with the CSVs and run.json. The recordings stay out of it (they get big); /review offers the zip with video.
+  const runLink = base => `<a href="${base}/export.zip" download title="One zip: cycles, steps, alerts and units as CSV files, plus run.json with every event and the settings used. No video.">Download run</a>`;
   async function loadSessions() {
     try {
       const j = await (await fetch('/api/sessions', { cache: 'no-store' })).json();
@@ -1891,9 +1887,9 @@ details.raw[open] summary { margin-right: 6px; }
         const base = '/api/sessions/' + s.id, bytes = s.videos.reduce((a, v) => a + (v.bytes || 0), 0);
         return `<tr><td class="mono">${esc(s.id)}</td><td>${esc(s.title || '')}</td><td>${esc(s.crew || '')}</td><td>${esc(s.shift || '')}</td>` +
           `<td>${s.startedAt ? esc(new Date(s.startedAt).toLocaleString()) : ''}</td><td>${s.endedAt ? esc(new Date(s.endedAt).toLocaleTimeString()) : '<span class="chip warn">not ended</span>'}</td>` +
-          `<td class="mono">${s.videos.length} (${fmtMB(bytes)})</td><td><a href="${base}/substeps.csv" download>substeps.csv</a><a href="${base}/cycles.csv" download>cycles.csv</a><a href="${base}/verdicts.csv" download>verdicts.csv</a><a href="${base}/units.csv" download>units.csv</a>${rawLinks(base)}</td></tr>`;
+          `<td class="mono">${s.videos.length} (${fmtMB(bytes)})</td><td>${runLink(base)}</td></tr>`;
       }).join('');
-      $('sessTbl').innerHTML = rows ? `<table><thead><tr><th>Id</th><th>Title</th><th>Crew / group</th><th>Shift</th><th>Started</th><th>Ended</th><th>Videos</th><th>Exports</th></tr></thead><tbody>${rows}</tbody></table>` : '<div class="muted">No sessions yet.</div>';
+      $('sessTbl').innerHTML = rows ? `<table><thead><tr><th>Id</th><th>Title</th><th>Crew / group</th><th>Shift</th><th>Started</th><th>Ended</th><th>Videos</th><th>Data</th></tr></thead><tbody>${rows}</tbody></table>` : '<div class="muted">No sessions yet.</div>';
     } catch (e) { $('sessTbl').innerHTML = '<div class="muted">The local server is not answering.</div>'; }
   }
 

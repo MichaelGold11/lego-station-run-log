@@ -933,5 +933,50 @@ console.log('capture triggers: captureWanted');
   check('a pending claim already taken falls through to a stall', w({ claimed: { '1:pick': true }, cycleActive: true, stepAt: T0 - 20000, pend: { claim: { step: 'pick', cycle: 1 } } }) === 'stalled');
 }
 
+// "after": a closed connector only ends an S2 cycle once it was seen open, in that same cycle.
+{
+  console.log('\nafter: S2 close waits for open');
+  const st = SHIPPED.stations.find(s => s.id === 's2'), classes = SHIPPED.models.s2.classes;
+  const rigS2 = (zones, model) => {
+    const eng = LE.createStation(st, { holdFrames: SHIPPED.holdFrames, defaults: SHIPPED.defaults, qaGraceSec: SHIPPED.qaGraceSec, modelClasses: model ? classes : null });
+    let t = 0; const events = [];
+    const hold = (zone, key, v) => {
+      for (let i = 0; i < 6; i++) {
+        const sig = {};
+        for (const z of zones) { sig[z] = { activity: 0, bright: 0 }; if (model) for (const c of classes) sig[z]['class:' + c] = 0; }
+        if (zone) sig[zone][key] = v;
+        events.push(...eng.update(sig, t += FRAME));
+      }
+    };
+    return { hold, ends: () => events.filter(e => e.type === 'cycle_end').length, eng };
+  };
+  const ALL = ['connectors', 'wires', 'work'];
+  const a = rigS2(ALL, true);
+  a.hold(null);                                  // a step only starts a cycle after its signal was off once
+  a.hold('wires', 'class:red_wire', 0.9);
+  check('the wires arriving start the cycle', a.eng.state().inCycle);
+  a.hold('work', 'class:connector_closed', 0.9);
+  check('a connector closed before work starts ends no cycle', a.ends() === 0 && a.eng.state().inCycle);
+  a.hold('work', 'class:connector_open', 0.9);
+  a.hold('work', 'class:connector_closed', 0.9);
+  check('open, then closed, ends the cycle', a.ends() === 1);
+  a.hold(null);
+  a.hold('wires', 'class:red_wire', 0.9);
+  check('the next unit starts a new cycle', a.eng.state().inCycle && a.eng.state().cycle === 2);
+  a.hold('work', 'class:connector_closed', 0.9);
+  check('the last cycle\'s open does not count for the next one', a.ends() === 1);
+  a.hold('work', 'class:connector_open', 0.9);
+  a.hold('work', 'class:connector_closed', 0.9);
+  check('the next open and close end the next cycle', a.ends() === 2);
+  const b = rigS2(['wires', 'work'], false);
+  b.hold(null);
+  b.hold('wires', 'activity', 0.9);
+  b.hold('work', 'activity', 0.9);
+  check('nothing waits for a step that cannot be seen (its zone is missing)', b.ends() === 1);
+  const bad = JSON.parse(JSON.stringify(SHIPPED));
+  bad.stations.find(s => s.id === 's2').substeps.find(s => s.id === 's2_open').after = 's2_close';
+  check('after must name an earlier substep', LE.checkConfig(bad).some(m => /s2_open: after/.test(m)));
+}
+
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);

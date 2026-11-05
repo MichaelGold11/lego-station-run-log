@@ -98,6 +98,7 @@
           }
         }
         if (sub.model && sub.model.mustStay != null && typeof sub.model.mustStay !== 'boolean') errs.push(sub.id + ': mustStay must be true or false.');
+        if (sub.after != null && !st.substeps.slice(0, st.substeps.indexOf(sub)).some(x => x.id === sub.after)) errs.push(sub.id + ': after must name an earlier substep of ' + st.id + '.');
         if (sub.standardSec != null && !(isNum(sub.standardSec) && sub.standardSec > 0)) errs.push(sub.id + ': standardSec must be a number of seconds above 0.');
       }
       const pc = st.positionCheck;
@@ -350,6 +351,7 @@
     const qa = station.qa || null;
     const lightIdx = qa ? subs.findIndex(s => s.id === qa.lightSubstep) : -1;
     const arrIdx = station.arrival ? subs.findIndex(s => s.id === station.arrival) : -1;
+    const afterIdx = subs.map(s => (s.after ? subs.findIndex(x => x.id === s.after) : -1));
     let modelClasses = o.modelClasses || null;
     let S = fresh(0);
 
@@ -397,10 +399,18 @@
     // Forward moves need the rule held N frames. Going back (a repeat) and starting a cycle also need the rule
     // to have been off since we were last there, so a hand resting in a zone cannot bounce the state back and forth.
     // The arrival substep counts once per cycle: once entered, it is never a repeat target until the next cycle.
+    // A substep with "after" waits until that earlier substep happened in this cycle. S2: the connector sits closed before
+    // work starts, so seeing it closed only ends a cycle once it was seen open. If the earlier step cannot be seen at all
+    // right now (its zone or signal is missing), nothing waits for it.
+    function waiting(i) {
+      const a = afterIdx[i];
+      return a >= 0 && live(a) && !(S.pos >= 0 && S.occ.some(o => o.id === subs[a].id));
+    }
+
     function choose(cands) {
       let fwd = null, back = null;
       for (const i of cands) {
-        if (i === S.pos) continue;
+        if (i === S.pos || waiting(i)) continue;
         if (S.pos < 0) { if (i !== endIdx && S.off[i] && (fwd == null || i < fwd)) fwd = i; continue; }
         if (i > S.pos) { if (fwd == null || i < fwd) fwd = i; } else if (S.off[i] && !(i === arrIdx && S.arrived) && (back == null || i > back)) back = i;
       }
