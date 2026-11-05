@@ -7,6 +7,7 @@
   "holdFrames": 3,
   "qaGraceSec": 5,
   "defaults": { "activity": 0.1, "bright": 0.5, "class": 0.4 },
+  "dashboard": { "slowFactor": 1.3, "photoConf": 0.6, "reviewDays": 7, "mediaCapMB": 1024 },
   "model": null,
   "capture": { "enabled": true, "stallSec": 12, "sampleSec": 25, "maxPerSession": 120, "maxPerStation": 40, "reviewDays": 7, "mediaCapMB": 1024 },
   "models": {

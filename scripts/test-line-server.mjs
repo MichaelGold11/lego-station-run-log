@@ -89,6 +89,10 @@ try {
   check('a wire-line.json in the data folder wins over the repo config', own.status === 200 && own.json.draft === 'v1' && own.json.stations[1].substeps[1].id === 's2_get_splice', own.text.slice(0, 120));
   const page = await req('GET', '/line');
   check('GET /line serves the page with cross-origin isolation headers', page.status === 200 && page.headers['cross-origin-embedder-policy'] === 'credentialless' && /<title>/.test(page.text));
+  const dash = await req('GET', '/dashboard');
+  check('GET /dashboard serves the dashboard page as text/html', dash.status === 200 && /text\/html/.test(dash.headers['content-type']) && /Wire Line Dashboard/.test(dash.text));
+  const dashBad = await req('GET', '/dashboard', null, { Host: 'evil.example' });
+  check('GET /dashboard with a foreign Host gets 403', dashBad.status === 403);
   const setup = { s1: { zones: { supply: { x: 0.1, y: 0.1, w: 0.2, h: 0.3 }, ghost: { x: 0, y: 0, w: 0.1, h: 0.1 } }, calib: { motion: { supply: 0.02 }, bright: { supply: { off: 80 } } } } };
   const put = await req('PUT', '/api/line/setup', setup, jsonHdr);
   check('PUT /api/line/setup saves zones and calibration', put.status === 200, put.text);

@@ -67,6 +67,7 @@ the screen looks the way it does: [docs/lean-plan.md](docs/lean-plan.md) and
 | http://localhost:4173/review | Check the frames a run captured (right, wrong, fix boxes), play clips, download the run, publish to the shared pool |
 | http://localhost:4173/collect | Film at home: a shot list, then upload one video; it becomes a session in Review |
 | http://localhost:4173/pool | The shared pool: counts per station, class and contributor, and the trainer's snapshot |
+| http://localhost:4173/dashboard | Mockup on sample data: the operator and manager dashboard ([docs/dashboard-plan.md](docs/dashboard-plan.md)) |
 | http://localhost:4173/runs | Archived: the LEGO run log ([docs/lego-run-log.md](docs/lego-run-log.md)) |
 | http://localhost:4173/live | Archived: the LEGO single-station live prototype |
 

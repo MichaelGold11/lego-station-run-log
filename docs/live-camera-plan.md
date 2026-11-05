@@ -75,6 +75,9 @@ Train a small detector on Colab, then run it live in the browser inside the exis
 
 ## Not doing
 - **Hosting the model on Colab:** it adds delay, breaks the no-upload goal, and sessions drop.
+- **Exception, 2026-10-22:** live tracking stays local and the stream is never uploaded. The
+  dashboard's optional AI reviewer may send flagged still frames (a few JPEGs of hands and
+  parts, cropped to the work zone) to the Claude API, behind a switch. See `docs/dashboard-plan.md`.
 - **Training on substeps directly:** that's plan B, only if the rules approach fails.
 - **Labeling before Phase 0 and 1:** the camera view will change.
 - **The 20 MB / long-video fix:** on hold, unless teammates keep logging recorded clips.

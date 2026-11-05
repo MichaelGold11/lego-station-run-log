@@ -1,0 +1,843 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Wire Line Dashboard</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Saira:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: one column of cards, max 1120px. Header, tab bar, then one view. Detail lives in native details dropdowns. */
+:root {
+  --bg: #eef0ee; --surface: #fcfcfb; --surface-2: #f3f4f2; --sunk: #e4e7e4;
+  --ink: #15181b; --ink-2: #4a4f56; --muted: #6c7179; --line: #dcdfdc; --line-2: #c5c9c5;
+  --accent: #a3522a; --accent-2: #8a4321; --on-accent: #ffffff; --accent-wash: rgba(163, 82, 42, .09);
+  --good: #0ca30c; --good-ink: #006300; --warn: #fab219; --warn-ink: #7a5200; --crit: #d03b3b; --crit-ink: #b02e2e;
+  --bar: #5f7688; --c1: #2f7f8f; --c2: #7a6aa6; --c3: #7b8a3a;
+  --k1: #c3d0da; --k2: #a3b6c5; --k3: #839bae; --k4: #637f94; --k5: #46647b; --k6: #2e4a61;
+  --ph-bg: #dfe3df; --ph-tray: #cdd2cd; --ph-part: #8d949b;
+  --shadow: 0 1px 2px rgba(21, 24, 27, .06);
+  --f-ui: "Saira", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101214; --surface: #181a1d; --surface-2: #1f2225; --sunk: #0c0d0f;
+    --ink: #eff1ef; --ink-2: #bfc3c8; --muted: #959aa1; --line: #2a2e33; --line-2: #3a3f45;
+    --accent: #dc8b55; --accent-2: #e9a273; --on-accent: #15181b; --accent-wash: rgba(220, 139, 85, .14);
+    --good-ink: #3fbf3f; --warn-ink: #fab219; --crit-ink: #e66767;
+    --bar: #7d95a8; --c1: #4fb0c2; --c2: #a898d6; --c3: #a6b85c;
+    --k1: #2f4254; --k2: #3d566c; --k3: #4f6d86; --k4: #6788a1; --k5: #86a5bc; --k6: #aac4d6;
+    --ph-bg: #23272b; --ph-tray: #2e3338; --ph-part: #6f777f;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101214; --surface: #181a1d; --surface-2: #1f2225; --sunk: #0c0d0f;
+  --ink: #eff1ef; --ink-2: #bfc3c8; --muted: #959aa1; --line: #2a2e33; --line-2: #3a3f45;
+  --accent: #dc8b55; --accent-2: #e9a273; --on-accent: #15181b; --accent-wash: rgba(220, 139, 85, .14);
+  --good-ink: #3fbf3f; --warn-ink: #fab219; --crit-ink: #e66767;
+  --bar: #7d95a8; --c1: #4fb0c2; --c2: #a898d6; --c3: #a6b85c;
+  --k1: #2f4254; --k2: #3d566c; --k3: #4f6d86; --k4: #6788a1; --k5: #86a5bc; --k6: #aac4d6;
+  --ph-bg: #23272b; --ph-tray: #2e3338; --ph-part: #6f777f;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .35);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { color-scheme: light; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-ui); font-size: 15px; line-height: 1.45;
+  padding-block: 16px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { margin: 0; font-weight: 600; text-wrap: balance; }
+p { margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+a { color: var(--accent-2); }
+.mono, td.num, th.num, .big, .brow .mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; word-spacing: -.3em; }   /* one gap, not a double monospace space */
+.muted { color: var(--muted); }
+.eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+.wrap { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 6px 16px; border-radius: 6px; border: 1px solid var(--line-2); background: var(--surface); cursor: pointer; font-weight: 500; font-size: 14px; }
+.btn:hover { border-color: var(--ink-2); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
+.btn.sm { min-height: 44px; padding: 4px 12px; font-size: 13px; }
+.btn.on, .chipbtn[aria-pressed="true"] { background: var(--accent-wash); border-color: var(--accent); color: var(--accent-2); }
+kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2); border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; color: var(--ink-2); }
+.btn.primary kbd { background: rgba(255, 255, 255, .18); border-color: rgba(255, 255, 255, .35); color: inherit; }
+.chip { display: inline-block; font-size: 12px; font-weight: 600; padding: 0 8px; border-radius: 4px; border: 1px solid var(--line-2); color: var(--ink-2); white-space: nowrap; line-height: 20px; }
+.chip.warn { color: var(--warn-ink); border-color: color-mix(in srgb, var(--warn) 70%, transparent); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.chip.crit { color: var(--crit-ink); border-color: color-mix(in srgb, var(--crit) 50%, transparent); background: color-mix(in srgb, var(--crit) 8%, transparent); }
+.chip.good { color: var(--good-ink); border-color: color-mix(in srgb, var(--good) 55%, transparent); }
+.chip.quiet { color: var(--muted); font-weight: 500; }
+.chipbtn { min-height: 44px; padding: 4px 14px; border-radius: 22px; border: 1px solid var(--line-2); background: var(--surface); cursor: pointer; font-size: 14px; }
+.chipbtn:hover { border-color: var(--ink-2); }
+select, input[type="text"], input[type="number"], input[type="date"], textarea { min-height: 44px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--surface); padding: 6px 10px; font-size: 14px; max-width: 100%; }
+textarea { width: 100%; min-height: 72px; resize: vertical; }
+.seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 6px; overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: transparent; min-height: 42px; padding: 4px 14px; cursor: pointer; font-size: 14px; font-weight: 500; }
+.seg button + button { border-left: 1px solid var(--line-2); }
+.seg button[aria-pressed="true"] { background: var(--accent-wash); color: var(--accent-2); font-weight: 600; }
+
+/* header */
+.hdr { display: flex; flex-direction: column; gap: 12px; }
+.brand { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.brand h1 { font-size: 26px; line-height: 1.1; }
+.ctl { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; }
+.ctl label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); min-width: 0; }
+.ctl label > .seg, .ctl label > select { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.ctl .grp { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+.tabs { display: flex; gap: 2px; overflow-x: auto; border-bottom: 1px solid var(--line-2); scrollbar-width: thin; }
+.tabs a { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; text-decoration: none; color: var(--ink-2); font-weight: 500; border-bottom: 3px solid transparent; white-space: nowrap; }
+.tabs a:hover { color: var(--ink); }
+.tabs a[aria-current="page"] { color: var(--accent-2); border-bottom-color: var(--accent); font-weight: 600; }
+.badge { font-family: var(--f-mono); font-size: 12px; min-width: 22px; padding: 0 6px; line-height: 20px; border-radius: 10px; background: var(--accent); color: var(--on-accent); text-align: center; }
+
+/* surfaces */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); min-width: 0; }
+.pad { padding: 16px; }
+.stack { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.headline { font-size: 22px; line-height: 1.25; font-weight: 600; max-width: 62ch; text-wrap: balance; }
+.sub { color: var(--ink-2); max-width: 62ch; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
+.card { display: flex; flex-direction: column; gap: 10px; padding: 16px; text-align: left; width: 100%; cursor: pointer; color: inherit; font: inherit; }
+button.card:hover { border-color: var(--ink-2); }
+.card .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.card .sent { color: var(--ink); flex: 1; }
+.big { font-family: var(--f-mono); font-variant-numeric: tabular-nums; font-size: 40px; line-height: 1; font-weight: 500; }
+.big small { word-spacing: 0; font-size: 15px; color: var(--muted); margin-left: 6px; font-weight: 400; }
+.sec-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.sec-h h2 { font-size: 17px; }
+
+/* details dropdowns */
+details.dd { border-top: 1px solid var(--line); }
+details.dd > summary { list-style: none; display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; font-weight: 600; font-size: 14px; color: var(--ink-2); }
+details.dd > summary::-webkit-details-marker { display: none; }
+details.dd > summary::before { content: ""; width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); transition: transform .12s; margin: 0 4px 0 2px; flex: none; }
+details.dd[open] > summary::before { transform: rotate(45deg); }
+details.dd > .body { padding: 4px 0 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+
+/* tables */
+.tbl { overflow-x: auto; max-width: 100%; border: 1px solid var(--line); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th { text-align: left; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 8px 10px; background: var(--surface-2); white-space: nowrap; }
+td { padding: 8px 10px; border-top: 1px solid var(--line); white-space: nowrap; }
+td.num, th.num { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.tbl.tall { max-height: 280px; overflow-y: auto; }
+.tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+/* training rows */
+.grp-h { display: flex; flex-direction: column; gap: 6px; }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) 72px 72px 170px 130px; gap: 10px; padding: 0 12px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+details.row { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+details.row > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: minmax(0, 1fr) 72px 72px 170px 130px; gap: 10px; align-items: center; min-height: 52px; padding: 4px 12px; }
+details.row > summary::-webkit-details-marker { display: none; }
+details.row[open] > summary { border-bottom: 1px solid var(--line); }
+details.row > .body { padding: 12px 14px 4px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.rname { font-weight: 500; min-width: 0; }
+.rname small { display: block; color: var(--muted); font-size: 12px; }
+.spread { width: 160px; height: 18px; display: block; }
+.sv-track { fill: var(--sunk); } .sv-box { fill: var(--bar); } .sv-dot { fill: var(--ink); stroke: var(--surface); stroke-width: 2; } .sv-std { stroke: var(--accent); stroke-width: 2; }
+.diag { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+.diag p { flex: 1; min-width: 220px; max-width: 62ch; }
+
+/* charts */
+.bars { display: flex; flex-direction: column; gap: 10px; }
+.brow { display: grid; grid-template-columns: 150px minmax(0, 1fr) 70px; gap: 10px; align-items: center; min-height: 32px; }
+.brow .lab { font-size: 13.5px; min-width: 0; }
+.track { position: relative; height: 18px; background: var(--sunk); border-radius: 4px; }
+.fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--bar); border-radius: 0 4px 4px 0; min-width: 2px; }
+.fill.hot { background: var(--crit); }
+.takt { position: absolute; top: -4px; bottom: -4px; width: 0; border-left: 2px dashed var(--accent); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--ink-2); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.stk { display: flex; gap: 2px; height: 28px; width: 100%; }
+.stk > div { height: 100%; min-width: 3px; border-radius: 3px; }
+.cols-chart { display: flex; align-items: flex-end; gap: 10px; height: 170px; padding-top: 18px; border-bottom: 1px solid var(--line-2); position: relative; }
+.cc { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; min-width: 0; gap: 3px; }
+.cc .v { font-family: var(--f-mono); font-size: 12px; color: var(--ink-2); }
+.cc .b { width: 100%; max-width: 56px; background: var(--bar); border-radius: 4px 4px 0 0; min-height: 2px; }
+.cc-l { display: flex; gap: 10px; }
+.cc-l span { flex: 1; text-align: center; font-size: 12px; color: var(--muted); min-width: 0; }
+.curve { width: 100%; max-width: 420px; height: auto; display: block; }
+.curve text { font-family: var(--f-mono); font-size: 9px; fill: var(--muted); }
+.curve .std { stroke: var(--accent); stroke-dasharray: 4 3; stroke-width: 1.5; fill: none; }
+.curve .ax { stroke: var(--line-2); stroke-width: 1; fill: none; }
+.curve .ln { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.mini { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.mini .mono { font-size: 28px; }
+
+/* inbox */
+.inbox-top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+.meter { height: 8px; background: var(--sunk); border-radius: 4px; overflow: hidden; width: 160px; }
+.meter > i { display: block; height: 100%; background: var(--bar); }
+.qcard { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.qhead { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; align-items: center; }
+.qtitle { font-size: 20px; font-weight: 600; max-width: 56ch; }
+.photo { position: relative; max-width: 460px; border: 1px solid var(--line-2); border-radius: 8px; overflow: hidden; }
+.photo svg { display: block; width: 100%; height: auto; }
+.photo .tag { position: absolute; left: 8px; top: 8px; }
+.ph-bg { fill: var(--ph-bg); } .ph-tray { fill: var(--ph-tray); stroke: var(--line-2); stroke-width: 1; }
+.ph-wire { fill: none; stroke: var(--ph-part); stroke-width: 5; stroke-linecap: round; }
+.ph-part { fill: var(--ph-part); } .ph-look { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-dasharray: 8 5; }
+.ph-txt { font-family: var(--f-mono); font-size: 11px; fill: var(--muted); } .ph-play { fill: var(--surface); stroke: var(--line-2); stroke-width: 1; opacity: .95; } .ph-tri { fill: var(--ink-2); }
+.btnrow { display: flex; flex-wrap: wrap; gap: 8px; }
+.say { padding: 10px 12px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--line); max-width: 62ch; }
+.say b { font-weight: 600; }
+.tl { position: relative; height: 22px; background: var(--sunk); border-radius: 4px; cursor: pointer; max-width: 460px; }
+.tl .span { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--accent) 45%, transparent); border-radius: 4px; }
+.tl .ph { position: absolute; top: -3px; bottom: -3px; width: 3px; background: var(--ink); border-radius: 2px; }
+.tl-l { display: flex; justify-content: space-between; max-width: 460px; font-size: 12px; color: var(--muted); }
+.playbtn { cursor: pointer; }
+.qlist { display: flex; flex-direction: column; gap: 6px; }
+.qitem { display: flex; gap: 10px; align-items: center; justify-content: space-between; min-height: 52px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer; text-align: left; width: 100%; }
+.qitem:hover { border-color: var(--ink-2); }
+.qitem .t { min-width: 0; flex: 1; }
+.empty { padding: 28px 18px; text-align: center; }
+.empty b { display: block; font-size: 18px; margin-bottom: 4px; }
+.bul { margin: 0; padding-left: 20px; }
+.bul li { margin: 3px 0; }
+
+/* rules */
+.rule { display: flex; align-items: center; gap: 12px; padding: 12px 14px; justify-content: space-between; }
+.rule .txt { min-width: 0; flex: 1; }
+.rule b { font-family: var(--f-mono); font-weight: 500; background: var(--accent-wash); padding: 0 5px; border-radius: 4px; }
+.sw { width: 52px; height: 44px; border: 0; background: transparent; cursor: pointer; padding: 0; flex: none; display: grid; place-items: center; }
+.sw i { width: 40px; height: 22px; border-radius: 11px; background: var(--line-2); position: relative; transition: background .12s; }
+.sw i::after { content: ""; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); transition: left .12s; box-shadow: var(--shadow); }
+.sw[aria-checked="true"] i { background: var(--accent); }
+.sw[aria-checked="true"] i::after { left: 21px; }
+.sentence { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; line-height: 1.2; }
+.sentence input[type="number"] { width: 76px; }
+.sentence select, .sentence input[type="text"] { max-width: 100%; }
+.res { border-left: 3px solid var(--good); padding: 8px 12px; background: var(--surface-2); border-radius: 0 6px 6px 0; }
+
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: 14px; z-index: 20; max-width: calc(100vw - 32px); }
+.foot { color: var(--muted); font-size: 12.5px; }
+
+@media (max-width: 780px) {
+  .cols { display: none; }
+  details.row > summary { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; padding: 8px 12px; }
+  details.row > summary .rname { grid-column: 1 / -1; }
+  details.row > summary .nstd, details.row > summary .nmed { display: inline; }
+  details.row > summary .nstd::before { content: "Standard "; color: var(--muted); font-family: var(--f-ui); }
+  details.row > summary .nmed::before { content: "Median "; color: var(--muted); font-family: var(--f-ui); }
+  .spread { width: 100%; max-width: 200px; }
+  .brow { grid-template-columns: 96px minmax(0, 1fr) 56px; gap: 8px; }
+  .headline { font-size: 20px; }
+}
+.sk { table-layout: fixed; min-width: 0; }
+.sk td, .sk th { white-space: normal; vertical-align: top; }
+.sk td.opc { font-family: var(--f-mono); width: 64px; }
+.sk .lv { font-weight: 600; display: block; }
+.sk .why { display: block; color: var(--muted); font-size: 12px; line-height: 1.3; }
+.sk .btn { min-height: 44px; padding: 4px 10px; margin-top: 4px; }
+@media (max-width: 560px) {
+  .ctl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; align-items: end; }
+  .ctl > label:first-child { grid-column: 1 / -1; }
+  .ctl > label:first-child .seg { display: flex; }
+  .ctl > label:first-child .seg button { flex: 1; padding: 4px 6px; }
+  .ctl select { width: 100%; }
+  .ctl .grp { flex-wrap: wrap; min-width: 0; }
+  .ctl .grp label { min-width: 0; }
+  .ctl .grp .seg { display: flex; }
+  .ctl .grp .seg button { flex: 1; padding: 4px 8px; }
+  .tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: visible; gap: 0; border-bottom: 0; }
+  .tabs a { justify-content: center; padding: 0 4px; border: 1px solid var(--line); margin: 0 -1px -1px 0; border-bottom-width: 3px; }
+  .tabs a[aria-current="page"] { border-color: var(--line); border-bottom-color: var(--accent); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hdr">
+    <div class="brand">
+      <div><div class="eyebrow">Dashboard</div><h1>Wire line</h1></div>
+      <span class="chip quiet" id="sample" title="Numbers on this page are generated, not recorded.">Sample data</span>
+    </div>
+    <div class="ctl">
+      <label>Period
+        <span class="seg" id="period" role="group" aria-label="Period">
+          <button type="button" data-period="session">Session</button><button type="button" data-period="today">Today</button><button type="button" data-period="week">Week</button><button type="button" data-period="month">Month</button>
+        </span>
+      </label>
+      <label for="station">Station
+        <select id="station"><option value="all">All stations</option><option value="s1">S1 Cut and strip</option><option value="s2">S2 Crimp side A</option><option value="s3">S3 Crimp side B (join)</option><option value="s4">S4 QA test</option></select>
+      </label>
+      <div class="grp">
+        <label>View as
+          <span class="seg" id="view" role="group" aria-label="View as">
+            <button type="button" data-view="manager">Manager</button><button type="button" data-view="operator">Operator</button>
+          </span>
+        </label>
+        <label for="code" id="codeLab" hidden>Your code<select id="code"></select></label>
+      </div>
+    </div>
+    <nav class="tabs" id="tabs" aria-label="Sections"></nav>
+  </header>
+  <main id="main" class="stack" tabindex="-1"></main>
+  <p class="foot" id="foot"></p>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<script>
+'use strict';
+/* ============ Sample data (seeded) ============
+   loadDash(filters) is the only place the page gets numbers. It returns the shape of a future
+   GET /api/dash?from&to&station response. Phase 1 replaces its body with a fetch of that endpoint;
+   nothing else on this page changes. */
+
+// Stations, substeps and labels are copied from data/meta/wire-line.json. std is the standard time in seconds
+// (the real config sets standardSec per substep; here they are sample values).
+const CONFIG = {
+  taktSec: 12, slowFactor: 1.3,
+  failReasons: [
+    { id: 'strip', label: 'Strip too short or long, or cut strands', cause: 's1', defect: true },
+    { id: 'crimp_a', label: 'Side A crimp loose or off', cause: 's2', defect: true },
+    { id: 'crimp_b', label: 'Side B crimp loose or off', cause: 's3', defect: true },
+    { id: 'wire_damage', label: 'Wire damaged', cause: 's1', defect: true },
+    { id: 'test_setup', label: 'Test setup problem (battery, bulb, clips)', cause: 's4', defect: false },
+    { id: 'other', label: 'Other', cause: null, defect: true }
+  ],
+  stations: [
+    { id: 's1', short: 'S1', label: 'Cut and strip', subs: [
+      ['s1_pick_wire', 'Pull wire from supply', 1.8], ['s1_measure_cut', 'Measure to the mark and cut', 3.2], ['s1_strip', 'Strip both ends', 3.4],
+      ['s1_check', 'Check strands and strip length', 1.6], ['s1_handoff', 'Place the pair in the out tray', 1.0]] },
+    { id: 's2', short: 'S2', label: 'Crimp side A', subs: [
+      ['s2_pick', 'Take a wire pair from the in tray', 1.2], ['s2_get_splice', 'Take a splice', 1.4], ['s2_insert', 'Push wire A into the splice', 2.6],
+      ['s2_crimp', 'Crimp side A', 2.4], ['s2_pull_test', 'Tug test side A', 1.6], ['s2_handoff', 'Pass to station 3', 1.0]] },
+    { id: 's3', short: 'S3', label: 'Crimp side B (join)', subs: [
+      ['s3_pick', 'Take the half-done unit', 1.4], ['s3_insert', 'Push wire B into the splice', 3.0], ['s3_crimp', 'Crimp side B', 3.6],
+      ['s3_pull_test', 'Tug test both sides', 2.0], ['s3_handoff', 'Pass to QA', 1.2]] },
+    { id: 's4', short: 'S4', label: 'QA test', subs: [
+      ['s4_pick', 'Take unit from the in tray', 1.2], ['s4_connect', 'Clip the ends to the battery and bulb', 3.0], ['s4_test', 'Bulb test', 2.4],
+      ['s4_disconnect', 'Unclip', 1.4], ['s4_sort', 'Sort into pass or fail bin', 1.4]] }
+  ].map(s => Object.assign(s, { subs: s.subs.map(a => ({ id: a[0], label: a[1], std: a[2] })) }))
+};
+const STN = id => CONFIG.stations.find(s => s.id === id);
+const SUB = id => { for (const s of CONFIG.stations) { const i = s.subs.findIndex(x => x.id === id); if (i >= 0) return { st: s, sub: s.subs[i], idx: i }; } return null; };
+const OPS = [['Op-02', 'certified'], ['Op-07', 'certified'], ['Op-11', 'training'], ['Op-14', 'certified'], ['Op-19', 'new'], ['Op-23', 'training']];
+const LEVELS = {}; OPS.forEach(o => { LEVELS[o[0]] = o[1]; });   // overall level; the per-station level lives in SKILL
+// Skill level per operator per station: 'certified' or 'learning'. In memory; Confirm on the skills matrix flips one cell.
+const SKILL = {}; OPS.forEach(o => { SKILL[o[0]] = {}; CONFIG.stations.forEach(st => { SKILL[o[0]][st.id] = o[1] === 'certified' ? 'certified' : 'learning'; }); });
+const LEVEL_LABEL = { certified: 'Certified', training: 'In training', new: 'New' };
+const SHIFTS = [
+  { id: 0, day: 0, label: 'Mon 08:00', model: 'v1' }, { id: 1, day: 1, label: 'Tue 08:00', model: 'v1' }, { id: 2, day: 2, label: 'Wed 08:00', model: 'v1' },
+  { id: 3, day: 3, label: 'Thu 08:00', model: 'v2' }, { id: 4, day: 4, label: 'Fri 08:00', model: 'v2' }, { id: 5, day: 4, label: 'Fri 14:00', model: 'v2' }
+];
+const ROSTER = [   // operator numbers per station for each shift (14 cycles each, in turn)
+  { s1: [2, 7, 23], s2: [14, 11, 19], s3: [2, 7, 19], s4: [14, 23, 11] },
+  { s1: [7, 14, 11], s2: [2, 11, 19], s3: [14, 7, 2], s4: [2, 23, 7] },
+  { s1: [2, 14, 23], s2: [7, 11, 19], s3: [2, 14, 11], s4: [7, 23, 14] },
+  { s1: [7, 2, 14], s2: [14, 11, 19], s3: [7, 2, 19], s4: [2, 23, 14] },
+  { s1: [2, 14, 11], s2: [7, 11, 19], s3: [14, 7, 2], s4: [7, 23, 2] },
+  { s1: [7, 14, 23], s2: [2, 11, 19], s3: [2, 14, 11], s4: [14, 23, 7] }
+];
+const PER_STINT = 14, SESSION_SEC = 3600;
+
+function mulberry(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+// How slow each operator is on each step, as a multiple of the standard. Planted cases live here.
+function factor(code, subId, n) {
+  const learn = Math.exp(-n / 30);
+  let f;
+  if (code === 'Op-02') f = 0.97; else if (code === 'Op-07') f = 1.0; else if (code === 'Op-14') f = 1.03;
+  else if (code === 'Op-11') f = 1.04 + 0.2 * learn; else if (code === 'Op-19') f = 1.08 + 0.2 * learn; else f = 1.05 + 0.18 * learn;
+  if (subId === 's2_insert' && (code === 'Op-11' || code === 'Op-19')) f = 1.2 + 1.2 * Math.exp(-n / 35);   // training: slow, falling
+  if (subId === 's3_crimp') f *= 1.7;                                                                         // process: slow for everyone
+  if (subId === 's1_strip') { if (code === 'Op-02') f = 0.78; else if (code === 'Op-14') f = 1.1; }          // technique: certified differ
+  if (subId === 's4_connect' && code === 'Op-23') f = 1.12;
+  return f;
+}
+const sigmaFor = (code, subId) => (subId === 's4_connect' && code === 'Op-23') ? 0.38 : 0.1;
+
+const ALL_CYCLES = (function () {
+  const R = mulberry(20261022), gauss = () => Math.sqrt(-2 * Math.log(R() + 1e-9)) * Math.cos(6.2831853 * R());
+  const out = [], cnt = {};
+  let fi = 0; const FSEQ = ['crimp_a', 'crimp_a', 'strip', 'crimp_a', 'crimp_b', 'crimp_a', 'test_setup', 'crimp_a', 'wire_damage', 'crimp_a', 'crimp_b', 'strip', 'crimp_a', 'other', 'crimp_a'];
+  const failPick = () => FSEQ[fi++ % FSEQ.length];
+  const kindPick = () => { const x = R(); return x < 0.35 ? 'wrong_order' : x < 0.75 ? 'missing' : 'position'; };
+  const MP = { s1: 0.012, s2: 0.022, s3: 0.016, s4: 0.006 };
+  SHIFTS.forEach(sh => CONFIG.stations.forEach(st => {
+    const ops = ROSTER[sh.id][st.id].map(n => 'Op-' + String(n).padStart(2, '0'));
+    const interval = SESSION_SEC / (PER_STINT * 3);
+    ops.forEach((op, oi) => {
+      for (let i = 0; i < PER_STINT; i++) {
+        const key = op + st.id, n = cnt[key] = cnt[key] === undefined ? 0 : cnt[key] + 1, idx = oi * PER_STINT + i;
+        const subs = st.subs.map(s => Math.max(0.4, s.std * factor(op, s.id, n) * Math.exp(sigmaFor(op, s.id) * gauss())));
+        const sec = subs.reduce((a, b) => a + b, 0);
+        const c = { id: sh.id + st.id + idx, sh: sh.id, day: sh.day, st: st.id, op, n, t: Math.round(idx * interval + R() * 6), sec, subs,
+          wait: Math.max(1, interval - sec + gauss() * 4), mistake: null, model: sh.model, needed: R() < (sh.model === 'v1' ? 0.11 : 0.04), review: null, fail: null, mismatch: false };
+        if (c.needed) c.review = R() < (sh.model === 'v1' ? 0.84 : 0.93) ? 'agree' : 'disagree';
+        if (R() < MP[st.id]) { const cand = st.subs.slice(0, -1); c.mistake = { step: cand[Math.floor(R() * cand.length)].id, kind: kindPick() }; }
+        if (st.id === 's4' && R() < 0.055) c.fail = failPick();
+        out.push(c);
+      }
+    });
+  }));
+  // Idle time follows the bottleneck (S3): upstream stations are blocked, S4 is starved. Units/h comes from the S3 pace.
+  const U = mulberry(20261023), medA = a => { const t = a.slice().sort((x, y) => x - y), m = t.length >> 1; return t.length % 2 ? t[m] : (t[m - 1] + t[m]) / 2; };
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  SHIFTS.forEach(sh => {
+    const mine = id => out.filter(c => c.sh === sh.id && c.st === id), bn = medA(mine('s3').map(c => c.sec));
+    CONFIG.stations.forEach(st => {
+      const own = medA(mine(st.id).map(c => c.sec)), base = st.id === 's3' ? 0.2 + 0.4 * U() : st.id === 's4' ? clamp(bn - own, 3, 5) : clamp(bn - own, 1.5, 3);
+      mine(st.id).forEach(c => { c.wait = Math.max(0.1, base + gauss() * 0.35); });
+    });
+    const util = 0.88 + 0.07 * U();
+    sh.uph = 3600 / bn * util;
+    sh.tenMin = [0, 1, 2, 3, 4, 5].map(() => sh.uph * (1 + (U() - 0.5) * 0.08));
+  });
+  const q = out.find(c => c.st === 's4' && c.sh === 2 && !c.fail && c.t > 1700); if (q) q.mismatch = true;   // the one QA mismatch
+  return out;
+})();
+
+const PERIODS = { session: s => s.id === 5, today: s => s.day === 4, week: () => true, month: () => true };
+function loadDash(filters) {
+  // PHASE 1: replace this function body with fetch('/api/dash?from=..&to=..&station=..') and return its JSON.
+  const f = filters || {}, sel = SHIFTS.filter(PERIODS[f.period || 'week']), ids = new Set(sel.map(s => s.id));
+  const inP = ALL_CYCLES.filter(c => ids.has(c.sh));
+  return {
+    config: CONFIG,
+    operators: OPS.map(o => ({ code: o[0], level: LEVELS[o[0]] })),
+    shifts: sel,
+    hours: sel.length,
+    all: inP,   // every station, whatever is selected (the skills matrix needs it)
+    cycles: inP.filter(c => !f.station || f.station === 'all' || c.st === f.station),
+    units: inP.filter(c => c.st === 's4')   // every unit that reached QA, whatever station is selected
+  };
+}
+
+/* ============ Analysis (pure functions of the rows) ============ */
+const med = a => { if (!a.length) return 0; const s = a.slice().sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+const qnt = (a, p) => { if (!a.length) return 0; const s = a.slice().sort((x, y) => x - y), i = (s.length - 1) * p, lo = Math.floor(i), hi = Math.ceil(i); return s[lo] + (s[hi] - s[lo]) * (i - lo); };
+const f1 = v => (Math.round(v * 10) / 10).toFixed(1);
+const nb = (n, unit) => n + '\u00a0' + unit;   // the one place a number meets its unit: never breaks across lines
+const sec = v => nb(f1(v), 's');
+const pct = v => Math.round(v * 100);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const list = a => a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+
+function opStats(rows, D) {
+  const by = {}; rows.forEach(r => (by[r.op] = by[r.op] || []).push(r));
+  return D.operators.filter(o => by[o.code]).map(o => {
+    const a = by[o.code].slice().sort((x, y) => x.n - y.n), secs = a.map(r => r.sec), k = Math.max(1, Math.floor(a.length / 3));
+    const first = med(secs.slice(0, k)), last = med(secs.slice(-k));
+    return { op: o.code, level: o.level, n: a.length, med: med(secs), p25: qnt(secs, .25), p75: qnt(secs, .75), first, last,
+      trend: a.length < 6 ? 'Too few' : last < first * 0.93 ? 'Faster' : last > first * 1.07 ? 'Slower' : 'Steady' };
+  });
+}
+const TAGS = {
+  process: { label: 'Process', word: 'Slow', tone: 'crit' },
+  training: { label: 'Training', word: 'Still learning', tone: 'warn' },
+  coaching: { label: 'Training', word: 'Needs coaching', tone: 'warn' },
+  technique: { label: 'Technique', word: 'Varies', tone: 'warn' },
+  inconsistent: { label: 'Inconsistent', word: 'Varies', tone: '' },
+  drift: { label: 'Drift', word: 'Slow', tone: 'warn' },
+  pace: { label: 'On pace', word: 'On pace', tone: 'good' },
+  few: { label: 'Few cycles', word: 'Few cycles', tone: 'quiet' }
+};
+// rows: [{op, n, sec, sh}] for one step. Returns the tag, the sentence and the evidence behind it.
+function diagnose(D, rows, std) {
+  const SF = D.config.slowFactor, all = rows.map(r => r.sec), ops = opStats(rows, D).filter(o => o.n >= 5);
+  const r = { std, n: all.length, med: med(all), p25: qnt(all, .25), p75: qnt(all, .75), ops, tag: 'pace', who: [] };
+  if (all.length < 5 || !ops.length) { r.tag = 'few'; r.text = 'Not enough cycles yet in this period.'; return r; }
+  const slow = ops.filter(o => o.med > std * SF && o.med - std >= 0.6), slowCert = slow.filter(o => o.level === 'certified'), cert = ops.filter(o => o.level === 'certified');
+  const stdTxt = ' against a ' + sec(std) + ' standard';
+  if (slow.length && slow.length / ops.length >= 0.5 && slowCert.length) {
+    r.tag = 'process'; r.who = slow.map(o => o.op);
+    r.text = 'Slow for ' + slow.length + ' of ' + ops.length + ' operators, including certified ones. The median is ' + sec(r.med) + stdTxt + '. Look at the step, the fixture or the written steps.';
+    return r;
+  }
+  if (slow.length && !slowCert.length) {
+    const a = slow.reduce((s, o) => s + o.first, 0) / slow.length, b = slow.reduce((s, o) => s + o.last, 0) / slow.length, falling = b < a * 0.93;
+    r.who = slow.map(o => o.op);
+    const names = list(slow.map(o => o.op)), lv = slow.every(o => o.level === 'new') ? 'new' : 'new or in training';
+    if (falling || slow.some(o => o.n < 20)) { r.tag = 'training'; r.text = 'Slow only for ' + names + ', who are ' + lv + '. Their times are falling, from ' + sec(a) + ' to ' + sec(b) + stdTxt + '. Keep practicing.'; }
+    else { r.tag = 'coaching'; r.text = 'Slow only for ' + names + ', who are ' + lv + '. Their times are flat after ' + nb(Math.min(...slow.map(o => o.n)), 'cycles') + ' (' + sec(b) + stdTxt + '). A short coaching session would help.'; }
+    return r;
+  }
+  if (cert.length >= 2) {
+    const hi = cert.reduce((x, y) => y.med > x.med ? y : x), lo = cert.reduce((x, y) => y.med < x.med ? y : x);
+    if ((hi.med - lo.med) / lo.med > 0.3) {
+      r.tag = 'technique'; r.who = [hi.op, lo.op];
+      r.text = 'Certified operators differ by ' + pct((hi.med - lo.med) / lo.med) + '%: ' + lo.op + ' takes ' + sec(lo.med) + ', ' + hi.op + ' takes ' + sec(hi.med) + '. Compare how they do it.';
+      return r;
+    }
+  }
+  const wide = ops.find(o => o.n >= 8 && (o.p75 - o.p25) / o.med > 0.4);
+  if (wide) { r.tag = 'inconsistent'; r.who = [wide.op]; r.text = wide.op + ' varies a lot from cycle to cycle: the middle half runs from ' + sec(wide.p25) + ' to ' + sec(wide.p75) + '. Check the clips.'; return r; }
+  const shs = [...new Set(rows.map(x => x.sh))].sort((x, y) => x - y);
+  if (shs.length >= 3) {
+    const cut = shs[Math.floor(shs.length / 2)], cr = rows.filter(x => LEVELS[x.op] === 'certified'), e = med(cr.filter(x => x.sh < cut).map(x => x.sec)), l = med(cr.filter(x => x.sh >= cut).map(x => x.sec));
+    if (e && l > e * 1.15) { r.tag = 'drift'; r.text = 'Slower for everyone since ' + SHIFTS[cut].label.split(' ')[0] + ': ' + sec(e) + ' to ' + sec(l) + '.'; return r; }
+  }
+  r.text = 'The median is ' + sec(r.med) + stdTxt + '.';
+  return r;
+}
+
+const stepRows = (D, st, idx) => D.cycles.filter(c => c.st === st.id).map(c => ({ op: c.op, n: c.n, sh: c.sh, shift: SHIFTS[c.sh].label, sec: c.subs[idx] }));
+
+// The three section models. Each one carries the headline, a status and its single big number.
+function buildModels(D, S) {
+  const SF = D.config.slowFactor, sts = D.config.stations.filter(s => S.station === 'all' || s.id === S.station);
+  // Training
+  const groups = sts.map(st => ({ st, rows: st.subs.map((sub, idx) => { const rows = stepRows(D, st, idx); return { st, sub, idx, rows, dx: diagnose(D, rows, sub.std) }; }) }));
+  const steps = groups.flatMap(g => g.rows), order = ['process', 'drift', 'technique', 'training', 'coaching', 'inconsistent'];
+  const attn = steps.filter(s => order.includes(s.dx.tag)).sort((a, b) => order.indexOf(a.dx.tag) - order.indexOf(b.dx.tag));
+  const onPace = steps.length - attn.length;
+  const short = s => { const d = s.dx, nm = s.st.short + ' ' + s.sub.label;
+    return d.tag === 'process' ? nm + ' is slow for most operators' : d.tag === 'training' || d.tag === 'coaching' ? nm + ' is still being learned by ' + list(d.who)
+      : d.tag === 'technique' ? nm + ' is done differently by certified operators' : d.tag === 'inconsistent' ? nm + ' varies a lot for ' + d.who[0] : nm + ' got slower'; };
+  const me = D.operators.find(o => o.code === S.code);
+  const mine = steps.map(s => ({ s, st: opStats(s.rows, D).find(o => o.op === S.code) })).filter(x => x.st && x.st.n >= 5);
+  const mineSlow = mine.filter(x => x.st.med > x.s.sub.std * SF).sort((a, b) => b.st.med / b.s.sub.std - a.st.med / a.s.sub.std);
+  const train = { groups, steps, attn, onPace, mine, mineSlow, me };
+  if (S.view === 'operator') {
+    train.headline = !mine.length ? S.code + ' has no cycles in this period.' : mineSlow.length ? 'You are on pace on ' + (mine.length - mineSlow.length) + ' of ' + mine.length + ' steps. The best one to practice is ' + mineSlow[0].s.sub.label + ' (' + sec(mineSlow[0].st.med) + ', standard ' + sec(mineSlow[0].s.sub.std) + ').' : 'You are on pace on every step.';
+    train.num = mine.length - mineSlow.length; train.of = mine.length; train.tone = mineSlow.length ? 'warn' : 'good'; train.chip = mineSlow.length ? 'Room to improve' : 'On pace';
+    train.sent = train.headline;
+  } else {
+    train.headline = !steps.length ? 'No steps in this period.' : attn.length ? (attn.length === 1 ? 'One step needs a look: ' : attn.length + ' steps need a look. The biggest: ') + short(attn[0]) + '.' : 'Every step is on pace.';
+    train.num = onPace; train.of = steps.length; train.tone = attn.some(a => a.dx.tag === 'process') ? 'crit' : attn.length ? 'warn' : 'good';
+    train.chip = attn.length ? attn.length + (attn.length === 1 ? ' step to watch' : ' steps to watch') : 'On pace'; train.sent = train.headline;
+  }
+  // Throughput
+  const stt = sts.map(st => {
+    const cs = D.cycles.filter(c => c.st === st.id), ms = med(cs.map(c => c.sec));
+    return { st, n: cs.length, med: ms, wait: med(cs.map(c => c.wait)), subs: st.subs.map((sub, i) => ({ sub, med: med(cs.map(c => c.subs[i])) })) };
+  }).filter(x => x.n);
+  const hot = stt.reduce((a, b) => b.med > (a ? a.med : 0) ? b : a, null), units = D.units.length, uph = D.hours ? D.shifts.reduce((a, s) => a + s.uph, 0) / D.hours : 0, takt = D.config.taktSec;
+  let buckets;
+  if (D.shifts.length > 1) buckets = D.shifts.map(s => ({ label: s.label.replace(' 08:00', ' am').replace(' 14:00', ' pm'), v: s.uph }));
+  else buckets = [0, 1, 2, 3, 4, 5].map(i => ({ label: nb(i * 10, 'min'), v: D.shifts[0].tenMin[i] }));
+  const thr = { stt, hot, units, uph, takt, buckets, cycles: D.cycles, over: hot && hot.med > takt };
+  thr.headline = !hot ? 'No cycles in this period.' : S.station === 'all'
+    ? (thr.over ? nb(Math.round(uph), 'units/h') + ' (target ' + Math.round(3600 / takt) + ')' + '. ' + hot.st.short + ' sets the pace (' + sec(hot.med) + ' per unit vs ' + nb(takt, 's') + ' takt).' : nb(Math.round(uph), 'units/h') + ' (target ' + Math.round(3600 / takt) + ')' + '. Every station is within the ' + nb(takt, 's') + ' takt.')
+    : hot.st.short + ' runs ' + sec(hot.med) + ' per unit' + (thr.over ? ', over the ' + nb(takt, 's') + ' takt.' : ', within the ' + nb(takt, 's') + ' takt.');
+  thr.tone = thr.over ? 'crit' : 'good'; thr.chip = thr.over ? hot.st.short + ' over takt' : 'On takt'; thr.sent = thr.headline;
+  // Quality
+  const failU = D.units.filter(u => u.fail), reasonOf = id => D.config.failReasons.find(r => r.id === id);
+  const inScope = u => S.station === 'all' || (reasonOf(u.fail).cause === S.station);
+  const fails = failU.filter(inScope), defects = fails.filter(u => reasonOf(u.fail).defect);
+  const fpy = D.units.length ? 1 - defects.length / D.units.length : 1;
+  const byReason = D.config.failReasons.map(r => ({ r, n: fails.filter(u => u.fail === r.id).length })).filter(x => x.n).sort((a, b) => b.n - a.n);
+  const mk = {}; D.cycles.filter(c => c.mistake).forEach(c => { const k = c.mistake.step + '|' + c.mistake.kind; mk[k] = (mk[k] || 0) + 1; });
+  const mistakes = Object.keys(mk).map(k => { const [step, kind] = k.split('|'); return { step, kind, n: mk[k], sub: SUB(step) }; }).sort((a, b) => b.n - a.n);
+  const mism = D.units.filter(u => u.mismatch);
+  const cam = ['v1', 'v2'].map(m => { const cs = D.cycles.filter(c => c.model === m), rv = cs.filter(c => c.review); return { m, n: cs.length, need: cs.length ? cs.filter(c => c.needed).length / cs.length : 0, agree: rv.length ? rv.filter(c => c.review === 'agree').length / rv.length : 0, reviewed: rv.length }; }).filter(x => x.n);
+  const qual = { fpy, units: D.units.length, fails, defects, byReason, mistakes, mism, cam, reasonOf };
+  const topR = byReason[0];
+  qual.headline = !D.units.length ? 'No units in this period.' : fpy >= 0.9 ? 'Quality is steady: ' + pct(fpy) + '% of units passed first time.'
+    : pct(fpy) + '% of units passed first time.' + (topR ? ' Most fails: ' + topR.r.label.replace(/ \(.*\)/, '') + (topR.r.cause ? ' (' + STN(topR.r.cause).short + ').' : '.') : '');
+  qual.tone = fpy < 0.8 ? 'crit' : fpy < 0.9 ? 'warn' : 'good'; qual.chip = fpy < 0.9 ? 'Below 90%' : 'Steady'; qual.sent = qual.headline;
+  return { train, thr, qual };
+}
+
+/* ============ State ============ */
+const TABS = [['today', 'Today'], ['training', 'Training'], ['throughput', 'Throughput'], ['quality', 'Quality'], ['inbox', 'Inbox'], ['rules', 'Rules']];
+const REASONS = ['Dropped part', 'Searched for part', 'Tool problem', 'Redid step', 'Interruption', 'Other'];
+const DISMISS = ['Not true', 'Already known', 'Not worth it', 'Other'];
+const S = { tab: 'today', period: 'week', station: 'all', view: 'manager', code: 'Op-11', open: new Set(), cur: 0, list: false, mb: 340, kept: 212, items: [], rules: [], nr: null };
+let D, M, playTimer = null;
+const CSVS = {};
+const stepOptions = (sel, extra) => (extra ? '<option value="cycle"' + (sel === 'cycle' ? ' selected' : '') + '>Whole cycle</option>' : '') + CONFIG.stations.map(st => '<optgroup label="' + esc(st.short + ' ' + st.label) + '">' + st.subs.map(s => '<option value="' + s.id + '"' + (s.id === sel ? ' selected' : '') + '>' + esc(s.label) + '</option>').join('') + '</optgroup>').join('');
+const stepName = id => id === 'cycle' ? 'Whole cycle' : SUB(id).sub.label;
+
+/* ============ Small builders ============ */
+const chip = (tone, text) => '<span class="chip ' + (tone || '') + '">' + esc(text) + '</span>';
+const toCsv = (cols, rows) => [cols.map(c => c.h)].concat(rows).map(r => r.map(v => /[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : v).join(',')).join('\n');
+function raw(key, cols, rows, file) {
+  CSVS[key] = { text: toCsv(cols, rows), file, n: rows.length };
+  const lim = 60;
+  return '<div class="tbl tall"><table><thead><tr>' + cols.map(c => '<th class="' + (c.num ? 'num' : '') + '">' + esc(c.h) + '</th>').join('') + '</tr></thead><tbody>' +
+    rows.slice(0, lim).map(r => '<tr>' + r.map((v, i) => '<td class="' + (cols[i].num ? 'num' : '') + '">' + esc(v) + '</td>').join('') + '</tr>').join('') + '</tbody></table></div>' +
+    '<div class="tools"><button class="btn sm" data-act="csv" data-key="' + key + '">Download CSV</button><button class="btn sm" data-act="copycsv" data-key="' + key + '">Copy CSV</button><span class="muted">' + (rows.length > lim ? 'Showing the first ' + lim + ' of ' + rows.length + ' rows. The CSV has all of them.' : rows.length + ' rows') + '</span></div>';
+}
+const dd = (k, title, body) => '<details class="dd" data-k="' + k + '"' + (S.open.has(k) ? ' open' : '') + '><summary>' + esc(title) + '</summary><div class="body">' + body + '</div></details>';
+function spread(d) {
+  const W = 160, max = d.std * 2.5, x = v => Math.min(W - 3, Math.max(3, v / max * W));
+  return '<svg class="spread" viewBox="0 0 160 18" role="img" aria-label="Middle half ' + f1(d.p25) + ' to ' + f1(d.p75) + ' seconds, median ' + f1(d.med) + ', standard ' + f1(d.std) + '"><rect class="sv-track" x="0" y="7" width="160" height="4" rx="2"/><rect class="sv-box" x="' + x(d.p25) + '" y="4" width="' + Math.max(4, x(d.p75) - x(d.p25)) + '" height="10" rx="3"/><line class="sv-std" x1="' + x(d.std) + '" x2="' + x(d.std) + '" y1="1" y2="17"/><circle class="sv-dot" cx="' + x(d.med) + '" cy="9" r="4.5"/></svg>';
+}
+function curve(series, std) {
+  const W = 320, H = 124, L = 30, R = 38, T = 10, B = 22;
+  let xm = 1, ym = std * 2; series.forEach(s => s.pts.forEach(p => { xm = Math.max(xm, p[0]); ym = Math.max(ym, p[1] * 1.08); }));
+  const X = n => L + n / xm * (W - L - R), Y = v => H - B - v / ym * (H - T - B), cols = ['var(--c1)', 'var(--c2)', 'var(--c3)'];
+  // end labels: sort by height and push apart so two labels never sit within 12 units of each other
+  const lab = series.map((s, i) => ({ s, i, y: Y(s.pts[s.pts.length - 1][1]) + 3 })).sort((a, b) => a.y - b.y);
+  for (let k = 1; k < lab.length; k++) if (lab[k].y - lab[k - 1].y < 12) lab[k].y = lab[k - 1].y + 12;
+  return '<svg class="curve" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Learning curve: seconds per cycle against cycle number, with the standard as a dashed line"><path class="ax" d="M' + L + ' ' + T + 'V' + (H - B) + 'H' + (W - R) + '"/>' +
+    '<line class="std" x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(std) + '" y2="' + Y(std) + '"/><text x="' + (L + 3) + '" y="' + (Y(std) - 4) + '">standard ' + sec(std) + '</text>' +
+    '<text x="' + (L - 4) + '" y="' + (H - B + 3) + '" text-anchor="end">0</text><text x="' + (L - 4) + '" y="' + (T + 6) + '" text-anchor="end">' + nb(Math.round(ym), 's') + '</text><text x="' + L + '" y="' + (H - 6) + '">cycle number (0 to ' + xm + ')</text>' +
+    series.map((s, i) => '<path class="ln" stroke="' + cols[i % 3] + '" d="' + s.pts.map((p, j) => (j ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1)).join('') + '"/>').join('') +
+    lab.map(l => '<text x="' + (X(l.s.pts[l.s.pts.length - 1][0]) + 4) + '" y="' + l.y.toFixed(1) + '" style="fill:' + cols[l.i % 3] + '">' + l.s.op + '</text>').join('') + '</svg>';
+}
+function rolling(rows, w) { const a = rows.slice().sort((x, y) => x.n - y.n), out = []; for (let i = 0; i < a.length; i++) { const win = a.slice(Math.max(0, i - w + 1), i + 1).map(r => r.sec); out.push([a[i].n, med(win)]); } return out; }
+const visItems = () => S.items.filter(i => S.view === 'manager' || i.kind !== 'suggestion');
+const pending = () => visItems().filter(i => i.status === 'pending');
+const kindLabel = { photo: 'Photo check', slow: 'Slow step', suggestion: 'Suggestion' };
+const itemTitle = i => i.kind === 'photo' ? i.stn.short + ': is "' + SUB(i.step).sub.label + '" done?' : i.kind === 'slow' ? SUB(i.sub).st.short + ' ' + SUB(i.sub).sub.label + ': ' + sec(i.took) + ' vs ' + sec(i.std) + ' standard' : i.title;
+
+/* ============ Seed inbox and rules from the week's data ============ */
+function seed() {
+  const DW = loadDash({ period: 'week', station: 'all' }), MW = buildModels(DW, { station: 'all', view: 'manager', code: 'Op-11' });
+  const dxOf = id => MW.train.steps.find(s => s.sub.id === id);
+  const crimp = dxOf('s3_crimp'), ins = dxOf('s2_insert'), learners = ins.dx.ops.filter(o => o.level !== 'certified' && o.med > ins.sub.std * CONFIG.slowFactor);
+  S.items = [
+    { id: 'i1', kind: 'slow', status: 'pending', sub: 's2_insert', op: 'Op-19', took: 9.4, std: 2.6, total: 27.6, start: 8.1, reasons: new Set(), note: '', pos: 0 },
+    { id: 'i2', kind: 'photo', status: 'pending', st: 's2', stn: STN('s2'), step: 's2_crimp', camera: 'Crimp A done', conf: 58, ai: 'Looks done, the splice is crimped on the left', aiConf: 84, box: [150, 92, 100, 52], wrongOpen: false, pick: 's2_crimp' },
+    { id: 'i3', kind: 'suggestion', status: 'pending', cat: 'Process', title: 'Check the S3 crimp fixture',
+      bullets: ['Crimp side B is slow for ' + crimp.dx.ops.filter(o => o.med > crimp.sub.std * CONFIG.slowFactor).length + ' of ' + crimp.dx.ops.length + ' operators, including every certified one.', 'Median ' + sec(crimp.dx.med) + ' against a ' + sec(crimp.sub.std) + ' standard.', 'It makes S3 the slowest station: the line runs at its pace.'],
+      action: 'Try a new fixture or jig on S3 and compare Crimp side B before and after.', rule: { kind: 'trial', change: 'New crimp fixture', station: 's3', step: 's3_crimp' } },
+    { id: 'i4', kind: 'photo', status: 'pending', st: 's3', stn: STN('s3'), step: 's3_pull_test', camera: 'Tug test done', conf: 52, ai: 'The hands are covering the splice, so I cannot tell', aiConf: 61, box: [140, 88, 120, 60], wrongOpen: false, pick: 's3_pull_test' },
+    { id: 'i5', kind: 'slow', status: 'pending', sub: 's3_crimp', op: 'Op-02', took: 12.8, std: 3.6, total: 31.2, start: 14.6, reasons: new Set(), note: '', pos: 0 },
+    { id: 'i6', kind: 'photo', status: 'pending', st: 's1', stn: STN('s1'), step: 's1_strip', camera: 'Strip done', conf: 55, ai: 'Both ends look stripped to the right length', aiConf: 79, box: [80, 70, 90, 60], wrongOpen: false, pick: 's1_strip' },
+    { id: 'i7', kind: 'suggestion', status: 'pending', cat: 'Training', title: 'Coach pushing wire A into the splice',
+      bullets: [list(learners.map(o => o.op)) + ' are slower than the ' + sec(ins.sub.std) + ' standard on this step.', 'Their times are falling: ' + (learners.length ? sec(learners.reduce((s, o) => s + o.first, 0) / learners.length) + ' to ' + sec(learners.reduce((s, o) => s + o.last, 0) / learners.length) + '.' : 'no data yet.'), 'Everyone else is on pace.'],
+      action: 'Pair them with a certified operator for one session, then compare the step before and after.', rule: { kind: 'trial', change: 'Paired practice', station: 's2', step: 's2_insert' } }
+  ];
+  S.rules = [
+    { id: 'r1', kind: 'drift', on: true, p: { step: 's3_crimp', n: 10, x: '1.3', m: 5 } },
+    { id: 'r2', kind: 'trial', on: true, p: { date: '2026-10-12', change: 'Moved the crimp tool to the left', station: 's3', step: 'cycle' }, result: { text: 'Faster by 2.1 s (12%), likely real', before: 24, after: 22, bm: 17.5, am: 15.4 } },
+    { id: 'r3', kind: 'review', on: true, p: { when: 'Friday 4 pm', scope: 'the week' } }
+  ];
+  S.nr = { kind: 'drift', drift: { step: 's2_insert', n: 10, x: '1.3', m: 5 }, trial: { date: '2026-10-23', change: 'New fixture', station: 's3', step: 's3_crimp' }, review: { when: 'end of session', scope: 'the session' } };
+}
+function ruleText(r) {
+  const p = r.p, b = t => '<b>' + esc(t) + '</b>';
+  if (r.kind === 'drift') return 'When ' + b(stepName(p.step)) + ' median over the last ' + b(p.n) + ' cycles is over ' + b('standard x' + p.x) + ', flag it on /line and clip the next ' + b(p.m) + ' cycles.';
+  if (r.kind === 'trial') return 'From ' + b(p.date) + ', ' + b(p.change) + ' on ' + b(STN(p.station).short + ' ' + STN(p.station).label) + ': compare ' + b(stepName(p.step)) + ' before and after.';
+  return 'Every ' + b(p.when) + ', run the AI review for ' + b(p.scope) + '.';
+}
+
+/* ============ Views ============ */
+function vToday() {
+  const T = M.train, H = M.thr, Q = M.qual, probs = [];   // only sections whose status is warn or crit
+  if (H.tone === 'warn' || H.tone === 'crit') probs.push(H.hot.st.short + ' sets the pace and runs over takt.');
+  if (T.tone === 'warn' || T.tone === 'crit') probs.push(S.view === 'manager' ? (T.attn.length === 1 ? '1 step needs' : T.attn.length + ' steps need') + ' a look.' : 'One step to practice.');
+  if (Q.tone === 'warn' || Q.tone === 'crit') probs.push('First pass yield is ' + pct(Q.fpy) + '%.');
+  const head = probs.length ? probs.join(' ') : 'Nothing is wrong. The line is on pace and quality is steady.';
+  const card = (tab, eb, m, num, unit) => '<button class="panel card" data-goto="' + tab + '"><div class="top"><span class="eyebrow">' + eb + '</span>' + chip(m.tone, m.chip) + '</div><p class="sent">' + esc(m.sent) + '</p><div class="big">' + num + '<small>' + unit + '</small></div></button>';
+  const need = pending().slice(0, 3);
+  return '<h2 class="headline">' + esc(head) + '</h2><div class="grid3">' +
+    card('training', 'Training', T, T.num, 'of ' + T.of + ' steps on pace') + card('throughput', 'Throughput', H, Math.round(H.uph), 'units/h, target ' + Math.round(3600 / H.takt)) + card('quality', 'Quality', Q, pct(Q.fpy) + '%', 'first pass') + '</div>' +
+    '<section class="stack"><div class="sec-h"><h2>Needs you</h2><a href="#inbox">Open Inbox (' + pending().length + ')</a></div>' +
+    (need.length ? '<div class="qlist">' + need.map(i => '<button class="qitem" data-act="item" data-id="' + i.id + '"><span class="t">' + esc(itemTitle(i)) + '</span>' + chip('', kindLabel[i.kind]) + '</button>').join('') + '</div>' : '<div class="panel empty"><b>Nothing to review.</b><span class="muted">The camera is sure about everything it saw.</span></div>') + '</section>';
+}
+
+function stepRow(s) {
+  const k = 'step:' + s.sub.id, d = s.dx, tag = TAGS[d.tag], op = S.view === 'operator', mine = op ? d.ops.find(o => o.op === S.code) : null;
+  let body = '<div class="diag">' + chip(tag.tone, tag.label) + '<p>' + esc(d.text) + '</p></div>';
+  if (!op) {
+    body += dd(k + ':ops', 'By operator', d.ops.length ? '<div class="tbl"><table><thead><tr><th>Operator</th><th>Level</th><th class="num">Cycles</th><th class="num">Median</th><th>Trend</th></tr></thead><tbody>' + d.ops.map(o => '<tr><td class="mono">' + o.op + '</td><td>' + LEVEL_LABEL[o.level] + '</td><td class="num">' + o.n + '</td><td class="num">' + sec(o.med) + '</td><td>' + o.trend + '</td></tr>').join('') + '</tbody></table></div>' : '<p class="muted">No operator has 5 cycles on this step yet.</p>');
+  } else {
+    body += dd(k + ':ops', 'You and the team', '<div class="tbl"><table><thead><tr><th></th><th class="num">Cycles</th><th class="num">Median</th><th>Compared with standard</th></tr></thead><tbody>' +
+      '<tr><td>You (<span class="mono">' + S.code + '</span>)</td><td class="num">' + (mine ? mine.n : 0) + '</td><td class="num">' + (mine ? sec(mine.med) : 'n/a') + '</td><td>' + (mine ? (mine.med > d.std * CONFIG.slowFactor ? 'Above standard, ' + mine.trend.toLowerCase() : 'On pace, ' + mine.trend.toLowerCase()) : 'No cycles here') + '</td></tr>' +
+      '<tr><td>Team median</td><td class="num">' + d.n + '</td><td class="num">' + sec(d.med) + '</td><td>Standard ' + sec(d.std) + '</td></tr></tbody></table></div>');
+  }
+  const ser = (op ? d.ops.filter(o => o.op === S.code) : d.ops.filter(o => o.level !== 'certified')).filter(o => o.n >= 6).slice(0, 3).map(o => ({ op: o.op, pts: rolling(s.rows.filter(r => r.op === o.op), 5) }));
+  body += dd(k + ':lc', 'Learning curve', ser.length ? curve(ser, s.sub.std) + '<p class="muted">Each line is a 5-cycle running median of one operator. Lower is faster.</p>' : '<p class="muted">' + (op ? 'You have' : 'No operator in training has') + ' 6 cycles on this step yet.</p>');
+  const clips = S.items.filter(i => i.kind === 'slow' && i.status === 'pending' && i.sub === s.sub.id);
+  if (clips.length) body += '<p><a href="#inbox" data-act="item" data-id="' + clips[0].id + '">' + clips.length + (clips.length === 1 ? ' clip' : ' clips') + ' to review</a></p>';
+  body += dd(k + ':all', 'All cycles', raw('cyc:' + s.sub.id, [{ h: 'Session' }, { h: 'Operator' }, { h: 'Cycle', num: 1 }, { h: 'Seconds', num: 1 }], s.rows.map(r => [r.shift, r.op, r.n + 1, f1(r.sec)]), s.sub.id + '.csv'));
+  return '<details class="row" data-k="' + k + '"' + (S.open.has(k) ? ' open' : '') + '><summary><span class="rname">' + esc(s.sub.label) + '</span><span class="mono nstd">' + sec(s.sub.std) + '</span><span class="mono nmed">' + (d.n ? sec(d.med) : 'n/a') + '</span>' +
+    (d.n >= 5 ? spread(d) : '<span></span>') + '<span>' + chip(tag.tone, tag.word) + '</span></summary><div class="body">' + body + '</div></details>';
+}
+function vTraining() {
+  const T = M.train;
+  const ops = D.operators.filter(o => S.view === 'manager' || o.code === S.code);
+  return '<h2 class="headline">' + esc(T.headline) + '</h2>' +
+    T.groups.map(g => '<section class="grp-h"><div class="eyebrow">' + g.st.short + ' ' + esc(g.st.label) + '</div><div class="cols"><span>Step</span><span>Standard</span><span>Median</span><span>Spread</span><span>Tag</span></div>' + g.rows.map(stepRow).join('') + '</section>').join('') +
+    '<div class="muted foot">Spread bar: the middle half of cycles. The dot is the median, the orange tick is the standard.</div>' +
+    '<section class="stack" id="skills"><div class="sec-h"><h2>Skills by station</h2></div><p class="muted">Certified is a level a manager confirmed. Ready means ' + nb(20, 'cycles') + ' or more at the station in this period, no slow step there, and no mistakes in the last ' + nb(10, 'cycles') + '. Learning shows what is holding it back. A dash means the operator did not work that station.</p>' +
+    '<div class="tbl"><table class="sk"><thead><tr><th>Operator</th>' + CONFIG.stations.map(st => '<th>' + st.short + '</th>').join('') + '</tr></thead><tbody>' +
+    ops.map(o => '<tr><td class="opc">' + o.code + '</td>' + CONFIG.stations.map(st => skillTd(o.code, st)).join('') + '</tr>').join('') + '</tbody></table></div></section>';
+}
+function skillCell(code, stId) {
+  const lvl = SKILL[code][stId], rows = D.all.filter(c => c.op === code && c.st === stId).sort((a, b) => a.sh - b.sh || a.t - b.t);
+  if (lvl === 'certified') return { k: 'cert' };
+  if (!rows.length) return { k: 'none' };
+  const st = STN(stId), slowSub = st.subs.find((sub, i) => med(rows.map(r => r.subs[i])) > sub.std * D.config.slowFactor);
+  if (slowSub) return { k: 'learn', why: 'slow on ' + slowSub.label };
+  if (rows.length < 20) return { k: 'learn', why: nb(rows.length, 'of') + ' 20 cycles' };
+  if (rows.slice(-10).some(r => r.mistake)) return { k: 'learn', why: 'a recent mistake' };
+  return { k: 'ready' };
+}
+function skillTd(code, st) {
+  const c = skillCell(code, st.id), nm = code + ' ' + st.short;
+  if (c.k === 'cert') return '<td><span class="lv">Certified</span></td>';
+  if (c.k === 'none') return '<td><span class="muted" aria-label="' + nm + ' not worked in this period">-</span></td>';
+  if (c.k === 'learn') return '<td><span class="lv">Learning</span><span class="why">' + esc(c.why) + '</span></td>';
+  return '<td><span class="lv">Ready</span>' + (S.view === 'manager' ? '<button class="btn sm" data-act="confirm" data-code="' + code + '" data-st="' + st.id + '" aria-label="Confirm ' + nm + '">Confirm</button>' : '<span class="why">Ask your manager to confirm.</span>') + '</td>';
+}
+
+function vThroughput() {
+  const H = M.thr; if (!H.hot) return '<h2 class="headline">' + esc(H.headline) + '</h2>';
+  const max = Math.max(H.hot.med, H.takt) * 1.15, w = v => (v / max * 100).toFixed(1) + '%', maxW = Math.max(...H.stt.map(x => x.wait)) * 1.1;
+  const bars = H.stt.map(x => '<div class="brow"><span class="lab">' + x.st.short + ' ' + esc(x.st.label) + '</span><div class="track"><div class="fill ' + (x === H.hot && H.over ? 'hot' : '') + '" style="width:' + w(x.med) + '"></div><div class="takt" style="left:' + w(H.takt) + '"></div></div><span class="mono">' + sec(x.med) + '</span></div>').join('');
+  const mxB = Math.max(...H.buckets.map(b => b.v), 1);
+  const cols = '<div class="cols-chart">' + H.buckets.map(b => '<div class="cc"><span class="v">' + Math.round(b.v) + '</span><div class="b" style="height:' + (b.v / mxB * 120).toFixed(0) + 'px"></div></div>').join('') + '</div><div class="cc-l">' + H.buckets.map(b => '<span>' + esc(b.label) + '</span>').join('') + '</div>';
+  const ramp = ['var(--k1)', 'var(--k2)', 'var(--k3)', 'var(--k4)', 'var(--k5)', 'var(--k6)'];
+  const stacks = H.stt.map(x => { const tot = x.subs.reduce((a, b) => a + b.med, 0), top = x.subs.reduce((a, b) => b.med / b.sub.std > a.med / a.sub.std ? b : a);
+    return dd('thr:' + x.st.id, x.st.short + ' ' + x.st.label + ': where the time goes', '<div class="stk">' + x.subs.map((b, i) => '<div title="' + esc(b.sub.label) + ' ' + sec(b.med) + '" style="width:' + (b.med / tot * 100).toFixed(1) + '%;background:' + ramp[i % 6] + '"></div>').join('') + '</div><div class="legend">' + x.subs.map((b, i) => '<span><i style="background:' + ramp[i % 6] + '"></i>' + esc(b.sub.label) + ' <span class="mono">' + sec(b.med) + '</span></span>').join('') + '</div>' +
+      '<p class="sub">' + (top.med > top.sub.std * CONFIG.slowFactor ? 'The best place to cut: ' + esc(top.sub.label.toLowerCase()) + ' takes ' + sec(top.med) + ', standard ' + sec(top.sub.std) + '.' : 'No single step stands out here.') + '</p>'); }).join('');
+  const waits = H.stt.map(x => '<div class="brow"><span class="lab">' + x.st.short + ' ' + esc(x.st.label) + '</span><div class="track"><div class="fill" style="width:' + (x.wait / maxW * 100).toFixed(1) + '%"></div></div><span class="mono">' + sec(x.wait) + '</span></div>').join('');
+  return '<h2 class="headline">' + esc(H.headline) + '</h2>' +
+    '<section class="panel pad stack"><div class="sec-h"><h2>Line balance</h2><span class="muted">Median seconds per unit. Dashed line: takt ' + nb(H.takt, 's') + '</span></div><div class="bars">' + bars + '</div>' + stacks + '</section>' +
+    '<section class="panel pad stack"><div class="sec-h"><h2>Units per hour</h2><span class="muted">' + (D.shifts.length > 1 ? 'Units per hour in each session, from the S3 pace' : 'Rate in each 10 minutes of the session') + '</span></div>' + cols + '</section>' +
+    '<section class="panel pad stack"><div class="sec-h"><h2>Waiting between cycles</h2><span class="muted">Seconds per unit a station sits idle: blocked by the next station or waiting for the last one</span></div><div class="bars">' + waits + '</div>' +
+    dd('thr:all', 'All cycles', raw('thr', [{ h: 'Session' }, { h: 'Station' }, { h: 'Operator' }, { h: 'Cycle', num: 1 }, { h: 'Seconds', num: 1 }, { h: 'Idle s', num: 1 }], H.cycles.map(c => [SHIFTS[c.sh].label, c.st.toUpperCase(), c.op, c.n + 1, f1(c.sec), f1(c.wait)]), 'cycles.csv')) + '</section>';
+}
+
+function vQuality() {
+  const Q = M.qual; if (!Q.units) return '<h2 class="headline">' + esc(Q.headline) + '</h2>';
+  const mx = Math.max(...Q.byReason.map(x => x.n), 1), rr = x => '<div class="brow"><span class="lab">' + esc(x.r.label) + '</span><div class="track"><div class="fill ' + (x.r.defect ? 'hot' : '') + '" style="width:' + (x.n / mx * 100).toFixed(1) + '%"></div></div><span class="mono">' + x.n + ' ' + (x.r.cause ? STN(x.r.cause).short : '') + '</span></div>';
+  const steps = {}; Q.mistakes.forEach(m => { (steps[m.step] = steps[m.step] || { sub: m.sub, wrong_order: 0, missing: 0, position: 0 })[m.kind] += m.n; });
+  const mrows = Object.values(steps).sort((a, b) => (b.wrong_order + b.missing + b.position) - (a.wrong_order + a.missing + a.position));
+  const nm = mrows.reduce((a, r) => a + r.wrong_order + r.missing + r.position, 0);
+  const cam = Q.cam.map(c => '<div class="mini"><span class="eyebrow">Model ' + c.m + '</span><span class="mono">' + pct(c.need) + '%</span><span>of cycles needed a person</span><span class="muted">Agrees with people ' + pct(c.agree) + '% (' + c.reviewed + ' reviews, ' + c.n + ' cycles)</span></div>').join('');
+  return '<h2 class="headline">' + esc(Q.headline) + '</h2>' +
+    '<div class="pair"><div class="mini"><span class="eyebrow">First pass yield</span><span class="mono">' + pct(Q.fpy) + '%</span></div><div class="mini"><span class="eyebrow">Units tested</span><span class="mono">' + Q.units + '</span></div><div class="mini"><span class="eyebrow">Fails</span><span class="mono">' + Q.fails.length + '</span></div></div>' +
+    '<section class="panel pad stack"><div class="sec-h"><h2>Fails by cause station</h2><span class="muted">Red bars are defects. Grey is the test setup.</span></div><div class="bars">' + Q.byReason.slice(0, 3).map(rr).join('') + '</div>' +
+    (Q.byReason.length > 3 ? dd('q:causes', 'All causes', '<div class="bars">' + Q.byReason.map(rr).join('') + '</div>') : '') + '</section>' +
+    '<section class="panel pad stack"><div class="sec-h"><h2>Mistakes by step and kind</h2><span class="muted">' + nm + ' caught by the camera</span></div>' +
+    (mrows.length ? '<div class="tbl"><table><thead><tr><th>Step</th><th class="num">Wrong order</th><th class="num">Missing</th><th class="num">Position</th></tr></thead><tbody>' + mrows.slice(0, 6).map(r => '<tr><td>' + r.sub.st.short + ' ' + esc(r.sub.sub.label) + '</td><td class="num">' + r.wrong_order + '</td><td class="num">' + r.missing + '</td><td class="num">' + r.position + '</td></tr>').join('') + '</tbody></table></div>' : '<p class="muted">No mistakes in this period.</p>') + '</section>' +
+    '<section class="panel pad stack"><div class="sec-h"><h2>QA mismatches</h2><span class="mono">' + Q.mism.length + '</span></div><p class="sub">' + (Q.mism.length ? 'The camera and the person at QA disagreed on the bulb test ' + Q.mism.length + (Q.mism.length === 1 ? ' time.' : ' times.') : 'The camera and QA always agreed.') + '</p>' +
+    (Q.mism.length ? dd('q:mm', 'Which units', raw('mm', [{ h: 'Session' }, { h: 'Cycle', num: 1 }], Q.mism.map(u => [SHIFTS[u.sh].label, u.n + 1]), 'mismatches.csv')) : '') + '</section>' +
+    '<section class="panel pad stack"><div class="sec-h"><h2>Camera trust</h2><span class="muted">How often the camera needed a person</span></div><div class="pair">' + cam + '</div>' +
+    (Q.cam.length > 1 ? '<p class="sub">Model ' + Q.cam[1].m + ' needs a person ' + Math.round((Q.cam[0].need - Q.cam[1].need) * 100) + '\u00a0points less often than ' + Q.cam[0].m + '.</p>' : '') +
+    dd('q:all', 'All units', raw('units', [{ h: 'Session' }, { h: 'Cycle', num: 1 }, { h: 'Result' }, { h: 'Cause' }, { h: 'QA mismatch' }], D.units.map(u => [SHIFTS[u.sh].label, u.n + 1, u.fail ? 'Fail' : 'Pass', u.fail ? Q.reasonOf(u.fail).label : '', u.mismatch ? 'yes' : '']), 'units.csv')) + '</section>';
+}
+
+function frame(i, play) {
+  const st = i.stn || SUB(i.sub).st, b = i.box || [0, 0, 0, 0];
+  return '<div class="photo"><svg viewBox="0 0 400 260" role="img" aria-label="Sample picture of the ' + esc(st.label) + ' work area"><rect class="ph-bg" width="400" height="260"/>' +
+    '<rect class="ph-tray" x="14" y="156" width="96" height="90" rx="6"/><rect class="ph-tray" x="290" y="156" width="96" height="90" rx="6"/><text class="ph-txt" x="22" y="172">in tray</text><text class="ph-txt" x="298" y="172">out tray</text>' +
+    '<path class="ph-wire" d="M30 60 C 110 30, 150 110, 196 118"/><path class="ph-wire" d="M370 52 C 290 30, 250 110, 204 118"/><rect class="ph-part" x="172" y="108" width="56" height="20" rx="7"/><rect class="ph-part" x="186" y="150" width="28" height="64" rx="5"/>' +
+    (i.kind === 'photo' ? '<rect class="ph-look" x="' + b[0] + '" y="' + b[1] + '" width="' + b[2] + '" height="' + b[3] + '" rx="6"/>' : '') + '</svg><span class="chip tag">' + (play ? 'Sample clip' : 'Sample photo') + '</span>' +
+    (play ? '<button class="playbtn" data-act="play" data-id="' + i.id + '" aria-label="' + (i.playing ? 'Pause' : 'Play') + ' the clip" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:56px;height:56px;border-radius:50%;border:1px solid var(--line-2);background:var(--surface);color:var(--ink);font-size:20px;cursor:pointer">' + (i.playing ? '||' : '&#9654;') + '</button>' : '') + '</div>';
+}
+function vInbox() {
+  const vis = visItems(), pend = pending();
+  const meter = '<div class="inbox-top"><div class="stack" style="gap:4px"><span class="mono">Review media ' + nb(Math.round(S.mb), 'MB') + ' of ' + nb(1, 'GB') + '</span><div class="meter" role="img" aria-label="' + Math.round(S.mb) + ' of 1024 megabytes used"><i style="width:' + (S.mb / 1024 * 100).toFixed(1) + '%"></i></div></div><span class="mono">Photos kept for training: ' + S.kept + '</span>' +
+    '<div class="btnrow"><button class="btn sm" data-act="list" aria-pressed="' + S.list + '">' + (S.list ? 'Show one at a time' : 'Show list (' + vis.length + ')') + '</button></div></div>';
+  let main;
+  if (S.list) main = '<div class="qlist">' + vis.map(i => '<button class="qitem" data-act="item" data-id="' + i.id + '"' + (i.status !== 'pending' ? ' disabled style="opacity:.6;cursor:default"' : '') + '><span class="t">' + esc(itemTitle(i)) + '</span><span>' + chip('', kindLabel[i.kind]) + ' ' + chip(i.status === 'pending' ? 'warn' : 'good', i.status === 'pending' ? 'Waiting' : i.outcome) + '</span></button>').join('') + '</div>';
+  else if (!pend.length) main = '<div class="panel empty"><b>Nothing to review.</b><span class="muted">The camera is sure about everything it saw.</span></div>';
+  else {
+    S.cur = ((S.cur % pend.length) + pend.length) % pend.length; const i = pend[S.cur];
+    const nav = '<div class="btnrow"><button class="btn sm" data-act="prev">Prev</button><button class="btn sm" data-act="next">Next</button><span class="muted" style="align-self:center">' + (S.cur + 1) + ' of ' + pend.length + '</span></div>';
+    let body = '';
+    if (i.kind === 'photo') {
+      body = frame(i) + '<p class="say">Camera thinks: <b>' + esc(i.camera) + '</b> <span class="mono">(' + i.conf + '%)</span></p><p class="say">AI suggestion: <b>' + esc(i.ai) + '</b> <span class="mono">(' + i.aiConf + '%)</span></p>' +
+        '<div class="btnrow"><button class="btn primary" data-act="correct">Correct <kbd>Y</kbd></button><button class="btn" data-act="wrong">Wrong <kbd>N</kbd></button><button class="btn" data-act="cant">Can\'t tell</button><button class="btn" data-act="skip">Skip <kbd>S</kbd></button></div>' +
+        (i.wrongOpen ? '<div class="sentence"><label for="wrongPick">What step is it?</label><select id="wrongPick">' + i.stn.subs.map(s => '<option value="' + s.id + '"' + (s.id === i.pick ? ' selected' : '') + '>' + esc(s.label) + '</option>').join('') + '</select><button class="btn primary" data-act="savewrong">Save</button></div>' : '') +
+        '<p class="muted">A photo you confirm or correct is kept to train the camera. Anything else is deleted.</p>';
+    } else if (i.kind === 'slow') {
+      const pc = v => (v / i.total * 100).toFixed(1) + '%';
+      body = frame(i, true) + '<div class="tl" data-act="seek" data-id="' + i.id + '" role="slider" aria-label="Clip position" aria-valuemin="0" aria-valuemax="' + Math.round(i.total) + '" aria-valuenow="' + Math.round(i.pos * i.total) + '" tabindex="0"><div class="span" style="left:' + pc(i.start) + ';width:' + pc(i.took) + '"></div><div class="ph" id="ph" style="left:' + (i.pos * 100).toFixed(1) + '%"></div></div><div class="tl-l mono"><span id="tm">' + sec(i.pos * i.total) + '</span><span>' + sec(i.total) + '</span></div>' +
+        '<p class="say"><b>' + esc(SUB(i.sub).sub.label) + '</b> took <span class="mono">' + sec(i.took) + '</span> vs <span class="mono">' + sec(i.std) + '</span> standard. The shaded part of the bar is that step.</p>' +
+        '<div class="btnrow" role="group" aria-label="Reason">' + REASONS.map(r => '<button class="chipbtn" data-act="chip" data-r="' + r + '" aria-pressed="' + i.reasons.has(r) + '">' + r + '</button>').join('') + '</div>' +
+        '<label class="stack" style="gap:4px" for="note"><span class="eyebrow">Note (optional)</span><textarea id="note" data-note="' + i.id + '">' + esc(i.note) + '</textarea></label>' +
+        '<div class="btnrow"><button class="btn primary" data-act="savetags">Save tags <kbd>Y</kbd></button><button class="btn" data-act="skip">Skip <kbd>S</kbd></button></div><p class="muted">The clip is deleted after you save. The tags stay.</p>';
+    } else {
+      body = '<ul class="bul">' + i.bullets.map(b => '<li>' + esc(b) + '</li>').join('') + '</ul><p class="say"><b>Suggested:</b> ' + esc(i.action) + '</p>' +
+        (i.dismissOpen ? '<div class="stack"><span class="eyebrow">Why dismiss it?</span><div class="btnrow">' + DISMISS.map(r => '<button class="chipbtn" data-act="dreason" data-r="' + r + '">' + r + '</button>').join('') + '</div></div>' :
+          '<div class="btnrow"><button class="btn primary" data-act="accept">Accept <kbd>Y</kbd></button><button class="btn" data-act="dismiss">Dismiss <kbd>N</kbd></button><button class="btn" data-act="skip">Skip <kbd>S</kbd></button></div><p class="muted">Accepting starts a trial. You can follow it in Rules.</p>');
+    }
+    main = '<article class="panel qcard"><div class="qhead"><div class="btnrow">' + chip('', kindLabel[i.kind]) + (i.stn ? chip('quiet', i.stn.short + ' ' + i.stn.label) : i.sub ? chip('quiet', SUB(i.sub).st.short + (i.op ? ' ' + i.op : '')) : chip(i.cat === 'Process' ? 'crit' : 'warn', i.cat)) + '</div>' + nav + '</div><h2 class="qtitle">' + esc(itemTitle(i)) + '</h2>' + body + '</article>';
+  }
+  return '<h2 class="headline">' + (pend.length ? pend.length + (pend.length === 1 ? ' thing needs' : ' things need') + ' a person. Keys: Y for yes, N for no, S to skip.' : 'Nothing to review. The camera is sure about everything it saw.') + '</h2>' + meter + main;
+}
+
+function ruleSelect(id, path, opts, val) { return '<select id="' + id + '" data-nr="' + path + '" aria-label="' + path + '">' + opts.map(o => '<option' + (o === val ? ' selected' : '') + '>' + o + '</option>').join('') + '</select>'; }
+function vRules() {
+  const mgr = S.view === 'manager', n = S.nr, k = n.kind;
+  const rules = S.rules.map(r => '<div class="panel stack"><div class="rule"><div class="txt"><div class="eyebrow">' + (r.kind === 'drift' ? 'Drift alert' : r.kind === 'trial' ? 'Trial' : 'Scheduled review') + (r.status ? ' ' + esc(r.status) : '') + '</div><p>' + ruleText(r) + '</p></div>' +
+    '<button class="sw" role="switch" aria-checked="' + r.on + '" aria-label="' + (r.on ? 'Turn off' : 'Turn on') + ' this rule" data-act="sw" data-id="' + r.id + '" ' + (mgr ? '' : 'disabled') + '><i></i></button></div>' +
+    (r.result ? '<div class="res" style="margin:0 14px 14px"><b>' + esc(r.result.text) + '</b><div class="muted mono">Before: ' + r.result.before + ' cycles, median ' + sec(r.result.bm) + '. After: ' + r.result.after + ' cycles, median ' + sec(r.result.am) + '.</div></div>' : '') + '</div>').join('');
+  const nI = (path, v, w) => '<input type="number" id="nr-' + path.replace('.', '-') + '" data-nr="' + path + '" value="' + v + '" min="1" style="width:' + (w || 76) + 'px" aria-label="' + path + '">';
+  let form = '';
+  if (k === 'drift') form = 'When <select id="nr-drift-step" data-nr="drift.step">' + stepOptions(n.drift.step) + '</select> median over the last ' + nI('drift.n', n.drift.n) + ' cycles is over ' + '<select id="nr-drift-x" data-nr="drift.x" aria-label="Threshold">' + ['1.2','1.3','1.5'].map(v => '<option value="' + v + '"' + (v === n.drift.x ? ' selected' : '') + '>standard x' + v + '</option>').join('') + '</select>, ' + 'flag it on /line and clip the next ' + nI('drift.m', n.drift.m) + ' cycles.';
+  if (k === 'trial') form = 'From <input type="date" id="nr-trial-date" data-nr="trial.date" value="' + n.trial.date + '">, <input type="text" id="nr-trial-change" data-nr="trial.change" value="' + esc(n.trial.change) + '" aria-label="Change" size="16"> on <select id="nr-trial-station" data-nr="trial.station">' + CONFIG.stations.map(s => '<option value="' + s.id + '"' + (s.id === n.trial.station ? ' selected' : '') + '>' + s.short + ' ' + esc(s.label) + '</option>').join('') + '</select>: compare <select id="nr-trial-step" data-nr="trial.step">' + stepOptions(n.trial.step, true) + '</select> before and after.';
+  if (k === 'review') form = 'Every ' + ruleSelect('nr-review-when', 'review.when', ['end of session', 'Friday 4 pm', '1st of the month'], n.review.when) + ', run the AI review for ' + ruleSelect('nr-review-scope', 'review.scope', ['the session', 'the week', 'the month'], n.review.scope) + '.';
+  return '<h2 class="headline">' + S.rules.filter(r => r.on).length + ' of ' + S.rules.length + ' rules are on. ' + (mgr ? 'Add one below.' : 'Managers set the rules.') + '</h2>' + '<div class="stack">' + rules + '</div>' +
+    (mgr ? '<section class="panel pad stack"><div class="sec-h"><h2>New rule</h2></div><div class="seg" role="group" aria-label="Rule type" style="align-self:flex-start">' + [['drift', 'Drift alert'], ['trial', 'Trial'], ['review', 'Review']].map(a => '<button type="button" data-act="nrkind" data-k="' + a[0] + '" aria-pressed="' + (k === a[0]) + '">' + a[1] + '</button>').join('') + '</div><div class="sentence">' + form + '</div><div><button class="btn primary" data-act="addrule">New rule</button></div></section>' : '');
+}
+const VIEWS = { today: vToday, training: vTraining, throughput: vThroughput, quality: vQuality, inbox: vInbox, rules: vRules };
+
+/* ============ Render and events ============ */
+function toast(t) { const el = document.getElementById('toast'); el.textContent = t; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { el.hidden = true; }, 2600); }
+function stopPlay() { clearInterval(playTimer); playTimer = null; S.items.forEach(i => { i.playing = false; }); }
+function render() {
+  stopPlay(); D = loadDash({ period: S.period, station: S.station }); M = buildModels(D, S);
+  document.querySelectorAll('[data-period]').forEach(b => b.setAttribute('aria-pressed', b.dataset.period === S.period));
+  document.querySelectorAll('[data-view]').forEach(b => b.setAttribute('aria-pressed', b.dataset.view === S.view));
+  document.getElementById('station').value = S.station; document.getElementById('codeLab').hidden = S.view !== 'operator';
+  const cs = document.getElementById('code'); if (!cs.options.length || cs.dataset.v !== JSON.stringify(D.operators.map(o => o.code + o.level))) { cs.innerHTML = D.operators.map(o => '<option' + (o.code === S.code ? ' selected' : '') + '>' + o.code + '</option>').join(''); cs.dataset.v = JSON.stringify(D.operators.map(o => o.code + o.level)); }
+  cs.value = S.code;
+  document.getElementById('tabs').innerHTML = TABS.map(t => '<a href="#' + t[0] + '"' + (t[0] === S.tab ? ' aria-current="page"' : '') + '>' + t[1] + (t[0] === 'inbox' ? ' <span class="badge" aria-label="' + pending().length + ' waiting">' + pending().length + '</span>' : '') + '</a>').join('');
+  document.getElementById('main').innerHTML = VIEWS[S.tab]();
+  document.getElementById('foot').textContent = 'Sample data: made up for this mockup (one week, six sessions, four stations).' + (S.period === 'month' ? ' Month shows the same week until real sessions are connected.' : '');
+}
+function decide(i, outcome, extra) { i.status = 'done'; i.outcome = outcome; if (extra) extra(); render(); }
+function setPos(i, p) { i.pos = Math.max(0, Math.min(1, p)); const ph = document.getElementById('ph'), tm = document.getElementById('tm'); if (ph) ph.style.left = (i.pos * 100).toFixed(1) + '%'; if (tm) tm.textContent = sec(i.pos * i.total); }
+const cur = () => pending()[S.cur];
+const A = {
+  csv(t) { const c = CSVS[t.dataset.key]; const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([c.text], { type: 'text/csv' })); a.download = c.file; document.body.appendChild(a); a.click(); a.remove(); toast('CSV ready: ' + c.n + ' rows'); },
+  copycsv(t) { const c = CSVS[t.dataset.key]; (navigator.clipboard ? navigator.clipboard.writeText(c.text) : Promise.reject()).then(() => toast('CSV copied: ' + c.n + ' rows'), () => toast('Copy is blocked here. Use Download CSV.')); },
+  confirm(t) { SKILL[t.dataset.code][t.dataset.st] = 'certified'; toast(t.dataset.code + ' is now certified on ' + t.dataset.st.toUpperCase()); render(); },
+  item(t) { const i = S.items.find(x => x.id === t.dataset.id); if (i.status !== 'pending') return; S.list = false; S.cur = pending().indexOf(i); if (S.tab !== 'inbox') location.hash = '#inbox'; else render(); },
+  list() { S.list = !S.list; render(); }, prev() { S.cur--; render(); }, next() { S.cur++; render(); },
+  skip() { if (pending().length > 1) { S.cur++; toast('Skipped. It stays in the queue.'); } else toast('That was the last one.'); render(); },
+  correct() { const i = cur(); if (i && i.kind === 'photo') decide(i, 'Correct', () => { S.kept++; toast('Marked correct. The photo is kept for training.'); }); },
+  wrong() { const i = cur(); if (i && i.kind === 'photo') { i.wrongOpen = true; render(); document.getElementById('wrongPick').focus(); } },
+  savewrong() { const i = cur(); i.pick = document.getElementById('wrongPick').value; decide(i, 'Corrected', () => { S.kept++; toast('Saved: ' + stepName(i.pick) + '. The photo is kept for training.'); }); },
+  cant() { const i = cur(); decide(i, 'Can\'t tell', () => toast('Marked can\'t tell. The photo is deleted.')); },
+  chip(t) { const i = cur(); i.reasons.has(t.dataset.r) ? i.reasons.delete(t.dataset.r) : i.reasons.add(t.dataset.r); render(); },
+  savetags() { const i = cur(); if (!i.reasons.size) return toast('Pick at least one reason first.'); decide(i, [...i.reasons].join(', '), () => { S.mb = Math.max(0, S.mb - 18); toast('Tags saved. The clip is deleted.'); }); },
+  accept() { const i = cur(), r = i.rule; S.rules.push({ id: 'r' + (S.rules.length + 1), kind: 'trial', on: true, status: '(collecting data)', p: { date: '2026-10-23', change: r.change, station: r.station, step: r.step } }); decide(i, 'Accepted', () => toast('Accepted. A trial was added to Rules.')); },
+  dismiss() { const i = cur(); i.dismissOpen = true; render(); },
+  dreason(t) { const i = cur(); decide(i, 'Dismissed: ' + t.dataset.r, () => toast('Dismissed. The reason feeds the next review.')); },
+  play(t) { const i = S.items.find(x => x.id === t.dataset.id); if (i.playing) { stopPlay(); render(); return; } i.playing = true; if (i.pos >= 1) i.pos = 0; render(); i.playing = true; playTimer = setInterval(() => { setPos(i, i.pos + 0.3 / i.total); if (i.pos >= 1) { stopPlay(); render(); } }, 100); },
+  seek(t, e) { const i = S.items.find(x => x.id === t.dataset.id), r = t.getBoundingClientRect(); setPos(i, (e.clientX - r.left) / r.width); },
+  sw(t) { const r = S.rules.find(x => x.id === t.dataset.id); r.on = !r.on; render(); },
+  nrkind(t) { S.nr.kind = t.dataset.k; render(); },
+  addrule() { const n = S.nr, p = Object.assign({}, n[n.kind]); S.rules.push({ id: 'r' + (S.rules.length + 1), kind: n.kind, on: true, p, status: n.kind === 'trial' ? '(collecting data)' : '' }); toast('Rule added'); render(); }
+};
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-period],[data-view],[data-goto],[data-act]'); if (!t) return;
+  if (t.dataset.period) { S.period = t.dataset.period; render(); }
+  else if (t.dataset.view) { S.view = t.dataset.view; render(); }
+  else if (t.dataset.goto) { location.hash = '#' + t.dataset.goto; }
+  else if (A[t.dataset.act]) A[t.dataset.act](t, e);
+});
+document.addEventListener('toggle', e => { const d = e.target; if (d.dataset && d.dataset.k) d.open ? S.open.add(d.dataset.k) : S.open.delete(d.dataset.k); }, true);
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.id === 'station') { S.station = t.value; render(); }
+  else if (t.id === 'code') { S.code = t.value; render(); }
+  else if (t.dataset.nr) { const [a, b] = t.dataset.nr.split('.'); S.nr[a][b] = t.type === 'number' ? Math.max(1, +t.value || 1) : t.value; }
+});
+document.addEventListener('input', e => { const t = e.target; if (t.dataset.note) S.items.find(x => x.id === t.dataset.note).note = t.value; else if (t.dataset.nr && t.type === 'text') { const [a, b] = t.dataset.nr.split('.'); S.nr[a][b] = t.value; } });
+document.addEventListener('keydown', e => {
+  if (e.target.getAttribute && e.target.getAttribute('role') === 'slider' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { const i = cur(); setPos(i, i.pos + (e.key === 'ArrowRight' ? 0.05 : -0.05)); return; }
+  if (S.tab !== 'inbox' || S.list || e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || !cur()) return;
+  const k = e.key.toLowerCase(), i = cur();
+  if (k === 's') A.skip();
+  else if (k === 'y') { i.kind === 'photo' ? A.correct() : i.kind === 'slow' ? A.savetags() : i.dismissOpen ? 0 : A.accept(); }
+  else if (k === 'n') { i.kind === 'photo' ? A.wrong() : i.kind === 'suggestion' ? A.dismiss() : 0; }
+});
+function route() { const h = location.hash.replace(/^#\/?/, ''); S.tab = VIEWS[h] ? h : 'today'; render(); window.scrollTo(0, 0); }
+window.addEventListener('hashchange', route);
+seed(); route();
+</script>
+</body>
+</html>

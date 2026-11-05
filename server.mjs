@@ -176,6 +176,7 @@ async function handle(req, res) {
     if (vend) { res.writeHead(302, { Location: VENDOR[vend].cdn + rel }); return res.end(); }
     return fail(res, 404, 'not_found', 'No such model file.');
   }
+  if (p === '/dashboard') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'dashboard.html')), 'text/html; charset=utf-8');
   if (p === '/line') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'line.html')), 'text/html; charset=utf-8', ISOLATE);
   if (p === '/pool') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'pool.html')), 'text/html; charset=utf-8', ISOLATE);
   if (p === '/collect') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'collect.html')), 'text/html; charset=utf-8', ISOLATE);
