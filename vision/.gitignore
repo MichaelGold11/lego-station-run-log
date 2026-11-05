@@ -1,0 +1,9 @@
+# Raw videos and extracted frames are large; keep them off GitHub.
+videos/*
+!videos/.gitkeep
+frames/
+logs/*
+!logs/.gitkeep
+__pycache__/
+frames.zip
+models/hand_landmarker.task
