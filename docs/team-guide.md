@@ -85,9 +85,10 @@ The team works on one repo. Follow these rules so everyone's work can be merged.
 - Work gets into `main` only by pull request, with the tests passing (`npm run test:line` and `npm run test:live`). Never push to `main`. GitHub enforces this: a push to `main` is refused, and a pull request needs one approval from someone else before it can merge.
 - Each pull request shows proof: real units against logged units on a named recording or run,
   before and after your change.
-- One owner per station's `.onnx` model and per station's block in `wire-line.json`. A model file cannot be merged,
-  only replaced, so ask the owner first. Shared files (`app/line.html`, `app/line-engine.js`) get small,
-  single-purpose changes.
+- One owner per station's `.onnx` model. A model file cannot be merged, only replaced, so ask the owner first.
+- Most of the team tunes S2, so a station's block in `wire-line.json` gets small, single-purpose changes. Where two
+  people change the same setting, the better before-and-after proof wins. Shared files (`app/line.html`,
+  `app/line-engine.js`) get small, single-purpose changes too.
 - Never commit `data/sessions/`, `data/meta/wire-line-setup.json` or `data/meta/wire-line-layouts.json`.
   The repo is public. Share a run with **Download run**.
 - You need write access to push a branch. If a push is refused, ask Michael for an invite.

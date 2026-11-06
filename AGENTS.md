@@ -19,7 +19,7 @@ Branch and merge rules: the same guide, "Branches and merging". In short:
 
 - One branch per person per idea, named `<name>/<idea>`, from an up-to-date `main`. Merge `main` into it at least weekly. Never rewrite pushed history. Teammates never push to `main`: only Michael does, or an agent he tells to.
 - Into `main` only by pull request, with tests passing and one approval (GitHub enforces this; only Michael can bypass it). Each PR shows proof: real units against logged units on a named recording or run, before and after.
-- One owner per station's `.onnx` model and that station's block in `wire-line.json`. `app/line.html` and `app/line-engine.js` get small, single-purpose changes.
+- One owner per station's `.onnx` model. Most of the team tunes S2, so a station's block in `wire-line.json` gets small, single-purpose changes; where two people change the same setting, the better before-and-after proof wins. `app/line.html` and `app/line-engine.js` get small, single-purpose changes too.
 - Never commit `data/sessions/`, `data/meta/wire-line-setup.json` or `data/meta/wire-line-layouts.json`. The repo is public.
 
 ## What this is

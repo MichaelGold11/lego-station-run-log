@@ -13,6 +13,8 @@ The point: you do your own runs, your own Claude reviews each one, and you tune 
 
 Claude web cannot reach your laptop, your camera or your phone, so on that path Claude helps and you paste. Everyone needs Google Chrome installed.
 
+**Know your station first.** Most of us test S2, and one person tests S3. Claude must confirm yours before setup and must not assume S2. Every `s2` on this page means your station, so if you test S3, use `s3`.
+
 Windows has not been tried on a real laptop yet. If a step fails there, send Michael what it said.
 
 ## Step 1. Install the tools and download the project (everyone, once)
@@ -91,7 +93,7 @@ cd %USERPROFILE%\lego-station-run-log
 npm run setup -- --station s2
 ```
 
-Use your own station if you have one (`s1` to `s4`). It ends with `Done. Next: join your phone hotspot`. If it stops with an error, paste the text into claude.ai and ask what to do.
+If you test S3, change `s2` to `s3` first. It ends with `Done. Next: join your phone hotspot`. If it stops with an error, paste the text into claude.ai and ask what to do.
 
 ## Step 3. Phone and first run (everyone)
 
@@ -99,8 +101,8 @@ Use your own station if you have one (`s1` to `s4`). It ends with `Done. Next: j
 2. Laptop: join the phone's hotspot from the Wi-Fi menu.
 3. Step 2B only: paste `npm run go` in your window. It is the same on Mac and Windows, and Chrome opens on the QR code. On a Mac, if it asks about `node`, click **Allow**.
 4. Scan the QR code with the iPhone camera. Tap **Show Details**, then **visit this website**, then allow the camera. The phone shows LIVE. If the link fails, try the next address in the **Address** list under the QR code.
-5. Mount the phone in landscape straight above the table. Clear the table. Press **Start session**, **Calibrate** in the Start form, then **Enter**.
-6. Bring the parts in. On S2, build one good unit, one without the black wire and one with a lever left up. Set each one down for 2 seconds. Press **Stop session**. Only the good one should count.
+5. Mount the phone in landscape straight above the table. On S3 only: press **Setup** and drag a box around each area it asks for, because S3 has no standard boxes yet. Clear the table. Press **Start session**, **Calibrate** in the Start form, then **Enter**.
+6. Bring the parts in. On S2, build one good unit, one without the black wire and one with a lever left up. Set each one down for 2 seconds. Only the good one should count. On S3, build 3 units the normal way. Press **Stop session**.
 
 ## Step 4. Read the run
 
@@ -113,7 +115,7 @@ black wire, one with a lever left up. Only the good one should count. Tell me in
 real units against logged units, what went wrong, and what to try first.
 ```
 
-On later runs, change the sentence about the units to match what you built.
+On S3 or on later runs, change the station and the sentence about the units to match what you did.
 
 ## Step 5. Tune it and run again (everyone)
 
@@ -136,6 +138,8 @@ npm run go
 ```
 
 When you are happy, go back to that claude.ai/code session. Ask Claude to run the tests and put real units against logged units, before and after, in the description. Then click **Create PR**.
+
+**Training a model, or saving boxes for a station.** Follow [team-guide.md](team-guide.md), sections 7 and 8. To share boxes, press **Save as standard** in Setup and include `data/meta/wire-line-standard.json` in your pull request. These files live on your laptop, so use Claude Desktop for this.
 
 The rules for merging are in [team-guide.md](team-guide.md), "Branches and merging".
 
@@ -175,6 +179,7 @@ npm run go
 | `already exists` when you clone | You have it already. Go into that folder and run `git checkout main`, then `git pull` |
 | The phone link does nothing | Try the next **Address**. Check the laptop is on the hotspot, not other Wi-Fi. On Windows, redo the firewall step |
 | The phone says LIVE but no video reaches the laptop (Windows) | Open Windows Security > Firewall & network protection > Allow an app through firewall > Change settings. Tick Private and Public for Node.js and Google Chrome |
+| You set up the wrong station | Run setup again with the right station and add `--force`, for example `npm run setup -- --station s3 --force` |
 | Setup says `check ffmpeg` | A live run works without it. Review clips and Collect need it |
 
 More fixes are in [team-guide.md](team-guide.md), "Troubleshooting". When the course ends, Windows laptops can remove the firewall rules in an Administrator Command Prompt:
@@ -199,9 +204,10 @@ data/sessions/ or the setup and layout files: the repo is public. If a step fail
 tell me what you tried. Do not work around a failing test. If a tool is not found, tell me to quit
 and reopen this app. On Windows, if npm is blocked with "running scripts is disabled", use npm.cmd.
 
-Ask me my first name and my station (s1 to s4; use s2 if I am not sure). Then do this yourself:
+Ask me my first name and which station I am testing. Most of the team tests s2 and one person tests
+s3. Confirm it with me before setup and do not assume s2. Then do this yourself:
 - Run git checkout main and git pull, then git checkout -b <name>/<station>-tuning. Do not push yet.
-- Run npm run setup -- --station <station>.
+- Run npm run setup -- --station <station>. If it keeps a layout for another station, add --force.
 - Run npm run test:line and npm run test:live. All must pass.
 
 MY STEP 1: tell me to turn on Personal Hotspot with Maximize Compatibility, set Auto-Lock to Never,
@@ -214,11 +220,13 @@ the next address in the Address list under the QR code.
 
 MY STEP 3: tell me to mount the phone in landscape straight above the table, clear the table, then
 press Start session, Calibrate in the Start form, and Enter. The boxes come from the standard
-setup, so only move them if they miss my work area.
+setup, so only move them if they miss my work area. S3 has no standard boxes yet: before Start
+session, have me press Setup and drag a box around each area it asks for.
 
 MY STEP 4: tell me to bring the parts in now and build 3 units, setting each finished one down for
 2 seconds. On S2, build one good unit, one without the black wire and one with a lever left up:
-only the good one should count. Then press Stop session and tell you "done".
+only the good one should count. On S3, build 3 units the normal way. Then press Stop session and
+tell you "done".
 
 Then read the newest folder in data/sessions/ (session.json and events.jsonl) and tell me plainly:
 real units against logged units, what went wrong, and what to try first. Do not use /analyze-runs:
