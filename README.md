@@ -33,6 +33,7 @@ npm run go
 `npm run go` starts the server in the background and opens **Chrome** on the wire line (`/line`) with the phone QR code showing.
 `npm run stop` stops it. To run all four stations instead, use `npm install` and `npm start`, then open http://localhost:4173.
 Your own phone and hotspot: see [docs/team-guide.md](docs/team-guide.md), "Your own laptop, phone and hotspot".
+Teammates: start at [docs/claude-setup-prompt.md](docs/claude-setup-prompt.md), the steps to paste on Mac or Windows with Claude Desktop or Claude web.
 
 The wire line (`/line`):
 

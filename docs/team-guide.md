@@ -12,7 +12,10 @@ the matching section here.
 
 ## 1. Setup (once per laptop)
 
-1. Install three tools.
+Teammates: follow [claude-setup-prompt.md](claude-setup-prompt.md). It has the exact steps and copy-paste
+boxes for Mac and Windows, on Claude Desktop or Claude web. This section is the short reference.
+
+1. Install three tools. On Windows use Command Prompt: PowerShell blocks `npm` by default.
 
    | Tool | Windows | Mac |
    |---|---|---|
@@ -26,7 +29,8 @@ the matching section here.
        cd lego-station-run-log
        npm run setup -- --station s2
 
-   `npm run setup` checks your tools and prints the install command for any that are missing. It
+   `npm run setup` checks your tools and prints the install command for any that are missing. A
+   live run works without ffmpeg, so that one is only a warning; Review clips and Collect need it. It
    runs `npm install`, makes the phone certificate, and sets up a floor with just your one station
    (s1 to s4, s2 if you are not sure). It is safe to run again. It never replaces your layout unless
    you add `--force`. Setting up for a whole class on one laptop instead? Skip it: plain
@@ -38,7 +42,7 @@ the matching section here.
 
 ## Your own laptop, phone and hotspot
 
-Use this when you run one station on your own laptop with your own iPhone. About 5 minutes the first time.
+Use this when you run one station on your own laptop with your own iPhone. About 5 minutes the first time. The full walkthrough is [claude-setup-prompt.md](claude-setup-prompt.md).
 
 1. **Phone.** Turn on Personal Hotspot and switch **Maximize Compatibility** on (Settings > Personal
    Hotspot). Set Auto-Lock to **Never** (Settings > Display & Brightness). Plug the phone in.
@@ -53,11 +57,12 @@ Use this when you run one station on your own laptop with your own iPhone. About
 - Mac: when it asks, choose **Allow** for `node`. If you said Deny, open System Settings > Network >
   Firewall > Options and set `node` to Allow incoming connections.
 - Windows: not yet tested on a real Windows laptop. A hotspot network is usually called Public, and
-  Windows blocks the phone there. Open Windows Security > Firewall & network protection > Allow an app
-  through firewall > Change settings. Tick **Private and Public** for Node.js and for Google Chrome.
-  Or in an Administrator terminal:
-  `netsh advfirewall firewall add rule name="Wire line phone" dir=in action=allow protocol=TCP localport=4174 profile=any`.
-  Chrome needs allowing too, because the phone video goes straight to Chrome over WebRTC.
+  Windows blocks the phone there. Both Node.js and Chrome need allowing, because the phone page comes
+  from port 4174 and the phone video goes straight to Chrome over WebRTC. Paste the two `netsh` lines
+  from [claude-setup-prompt.md](claude-setup-prompt.md) in an Administrator Command Prompt (a person
+  has to do this: Claude cannot open one). Or open Windows Security > Firewall & network protection >
+  Allow an app through firewall > Change settings, and tick **Private and Public** for Node.js and for
+  Google Chrome.
 
 **When the `.local` link fails.** The phone page says it cannot connect, or the QR code does nothing. Open the
 **Address** list under the QR code and pick the next address. Try each one. Check the laptop is

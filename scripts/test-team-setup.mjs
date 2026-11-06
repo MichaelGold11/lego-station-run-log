@@ -44,6 +44,16 @@ try {
   r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'team-setup.mjs'), '--skip-install', '--skip-cert', '--station', 's9'], { env: { ...process.env, DATA_DIR: bad }, encoding: 'utf8' });
   check('a bad station is refused', r.status !== 0 && /s9/.test(r.stderr));
   check('a bad station writes no layout', !fs.existsSync(path.join(bad, 'meta', 'wire-line-layouts.json')));
+
+  // A missing ffmpeg is a warning, not a failure. Hide it by giving the script a PATH with only git in it.
+  const findOnPath = n => { for (const d of (process.env.PATH || '').split(path.delimiter)) for (const f of [n, n + '.exe']) { const p = path.join(d, f); if (d && fs.existsSync(p)) return p; } return null; };
+  const gitBin = findOnPath('git'), stub = path.join(tmp, 'bin');
+  let stubbed = false;
+  if (gitBin) { try { fs.mkdirSync(stub); fs.symlinkSync(gitBin, path.join(stub, path.basename(gitBin))); stubbed = true; } catch (e) { console.log('  SKIP  ffmpeg-missing check: cannot make a symlink here.'); } }
+  if (stubbed) {
+    r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'team-setup.mjs'), '--skip-install', '--skip-cert', '--station', 's2', '--force'], { env: { ...process.env, DATA_DIR: tmp, PATH: stub }, encoding: 'utf8' });
+    check('missing ffmpeg warns and still exits 0', r.status === 0 && /check\s+ffmpeg is not on PATH/.test(r.stdout) && !/MISSING\s+ffmpeg/.test(r.stdout), r.stdout + r.stderr);
+  }
 } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 
 console.log('team setup: ' + passes + ' passed, ' + fails + ' failed');

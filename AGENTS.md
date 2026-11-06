@@ -14,6 +14,7 @@ People: start with `README.md`.
 
 Setting up a teammate's laptop: `npm run setup -- --station s2`, then `npm run go` (stop with `npm run stop`).
 Their own phone and hotspot: [docs/team-guide.md](docs/team-guide.md), "Your own laptop, phone and hotspot".
+The walkthrough teammates follow on Mac or Windows, with Claude Desktop or Claude web: [docs/claude-setup-prompt.md](docs/claude-setup-prompt.md).
 Branch and merge rules: the same guide, "Branches and merging". In short:
 
 - One branch per person per idea, named `<name>/<idea>`, from an up-to-date `main`. Merge `main` into it at least weekly. Never rewrite pushed history. Teammates never push to `main`: only Michael does, or an agent he tells to.

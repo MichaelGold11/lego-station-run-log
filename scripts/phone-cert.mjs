@@ -30,7 +30,9 @@ let opensslBin;
 export function findOpenssl() {
   if (opensslBin !== undefined) return opensslBin;
   const cands = [process.env.OPENSSL, 'openssl', '/opt/homebrew/bin/openssl', '/usr/local/bin/openssl', '/usr/bin/openssl',
-    'C:\\Program Files\\Git\\mingw64\\bin\\openssl.exe', 'C:\\Program Files\\Git\\usr\\bin\\openssl.exe'].filter(Boolean);
+    'C:\\Program Files\\Git\\mingw64\\bin\\openssl.exe', 'C:\\Program Files\\Git\\usr\\bin\\openssl.exe',
+    ...(process.env.LOCALAPPDATA ? ['mingw64', 'usr'].map(d => process.env.LOCALAPPDATA + '\\Programs\\Git\\' + d + '\\bin\\openssl.exe') : []),
+    'C:\\Program Files (x86)\\Git\\mingw64\\bin\\openssl.exe', 'C:\\Program Files (x86)\\Git\\usr\\bin\\openssl.exe'].filter(Boolean);
   opensslBin = null;
   for (const c of cands) {
     try { if (spawnSync(c, ['version'], { stdio: 'ignore', timeout: 5000 }).status === 0) { opensslBin = c; break; } } catch (e) { /* next */ }

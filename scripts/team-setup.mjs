@@ -66,9 +66,10 @@ function main() {
   const major = Number(process.versions.node.split('.')[0]);
   if (major >= 18) say('  ok       Node ' + process.versions.node);
   else { say('  MISSING  Node 18 or newer (you have ' + process.versions.node + '). Fix: ' + hint('node')); missing++; }
-  for (const [k, a] of [['git', ['--version']], ['ffmpeg', ['-version']]]) {
-    if (has(k, a)) say('  ok       ' + k); else { say('  MISSING  ' + k + '. Fix: ' + hint(k)); missing++; }
-  }
+  if (has('git', ['--version'])) say('  ok       git'); else { say('  MISSING  git. Fix: ' + hint('git')); missing++; }
+  // A live run does not need ffmpeg; only Review clips and the Collect upload do.
+  if (has('ffmpeg', ['-version'])) say('  ok       ffmpeg');
+  else say('  check    ffmpeg is not on PATH. A live run works without it. Review clips and Collect need it. Fix: ' + hint('ffmpeg'));
   // phone-cert.mjs also looks in Homebrew and Git for Windows, so only a quick look here.
   if (has('openssl', ['version'])) say('  ok       openssl');
   else say('  check    openssl is not on PATH. The certificate step below tells you if it is really missing. Fix: ' + hint('openssl'));
