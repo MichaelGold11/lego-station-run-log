@@ -47,6 +47,7 @@
       "id": "s2",
       "label": "Arrange and clamp",
       "output": "the three wires closed in lever connector 1, red top, white middle, black bottom",
+      "assembly": { "class": "unit_complete", "closed": "connector_closed", "open": "connector_open", "wires": ["red_wire", "white_wire"], "darkWire": "black_wire" },
       "zones": [
         { "id": "connectors", "label": "Lever connectors" },
         { "id": "wires", "label": "Cut wires" },
@@ -59,7 +60,7 @@
         { "id": "s2_arrive", "label": "Wires arrive from S1", "zones": { "zone": "wires", "signal": "activity" }, "model": { "anyOf": [{ "zone": "wires", "class": "red_wire" }, { "zone": "wires", "class": "white_wire" }, { "zone": "wires", "class": "black_wire" }] } },
         { "id": "s2_open", "label": "Open the lever connector", "zones": { "zone": "connectors", "signal": "activity" }, "model": { "zone": "work", "class": "connector_open" } },
         { "id": "s2_arrange", "label": "Arrange the wires: red top, white middle, black bottom", "zones": { "zone": "wires", "signal": "activity" }, "model": null },
-        { "id": "s2_close", "label": "Close the levers on the wires", "after": "s2_open", "zones": { "zone": "work", "signal": "activity" }, "model": { "zone": "work", "class": "connector_closed" } }
+        { "id": "s2_close", "label": "Close the levers on the wires", "after": "s2_open", "zones": { "zone": "work", "signal": "activity" }, "model": { "zone": "work", "class": "unit_complete" } }
       ]
     },
     {

@@ -273,6 +273,17 @@ bin has no reason, and the yield tile says "Turn on Score the cameras to log rea
    readouts so boxes can be checked, Calibrate can sample and **Save correct state** has results, but
    it still tracks no step. After Start a station with a model waits for its first model result
    before it tracks, so a part already in view has to leave before it can open a cycle.
+
+   **When a unit counts as done (S2).** The connector has three levers and looks closed between wires,
+   so "closed" alone ended units early. S2's `assembly` setting asks for all of this in one model
+   result, and the tracker then holds it for its usual frames: `connector_closed` at 0.6 or more, no
+   `connector_open` at 0.4 or more, `red_wire` and `white_wire` each with an end at the connector, and a
+   dark colorless line crossing at least half of the arcs around the connector on the side the wires
+   leave. That last check is pixels, not the model: the model cannot see a black wire once it is clamped
+   (best score 0.10 to 0.23 on finished units). It needs a light table. On every frame of the four S2
+   recordings it fired only on the two finished units and never early; the two recordings where the unit
+   stayed in someone's hands never fired, so a unit has to be set down to count. Teaching the model to see a
+   clamped black wire would remove the pixel check.
 6. A normal run needs nothing pressed: the cameras log cycles, substeps, QA arrivals and
    mistakes. **Score the cameras** is on by default (Setup turns it off, saved per laptop). Then a
    bar at the bottom holds the answer key and one person keys it: a station's number (its place in

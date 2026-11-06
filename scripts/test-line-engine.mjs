@@ -937,7 +937,7 @@ console.log('capture triggers: captureWanted');
 // "after": a closed connector only ends an S2 cycle once it was seen open, in that same cycle.
 {
   console.log('\nafter: S2 close waits for open');
-  const st = SHIPPED.stations.find(s => s.id === 's2'), classes = SHIPPED.models.s2.classes;
+  const st = SHIPPED.stations.find(s => s.id === 's2'), classes = LE.trackedClasses(st, SHIPPED.models.s2.classes);
   const rigS2 = (zones, model) => {
     const eng = LE.createStation(st, { holdFrames: SHIPPED.holdFrames, defaults: SHIPPED.defaults, qaGraceSec: SHIPPED.qaGraceSec, modelClasses: model ? classes : null });
     let t = 0; const events = [];
@@ -956,18 +956,18 @@ console.log('capture triggers: captureWanted');
   a.hold(null);                                  // a step only starts a cycle after its signal was off once
   a.hold('wires', 'class:red_wire', 0.9);
   check('the wires arriving start the cycle', a.eng.state().inCycle);
-  a.hold('work', 'class:connector_closed', 0.9);
+  a.hold('work', 'class:unit_complete', 0.9);
   check('a connector closed before work starts ends no cycle', a.ends() === 0 && a.eng.state().inCycle);
   a.hold('work', 'class:connector_open', 0.9);
-  a.hold('work', 'class:connector_closed', 0.9);
+  a.hold('work', 'class:unit_complete', 0.9);
   check('open, then closed, ends the cycle', a.ends() === 1);
   a.hold(null);
   a.hold('wires', 'class:red_wire', 0.9);
   check('the next unit starts a new cycle', a.eng.state().inCycle && a.eng.state().cycle === 2);
-  a.hold('work', 'class:connector_closed', 0.9);
+  a.hold('work', 'class:unit_complete', 0.9);
   check('the last cycle\'s open does not count for the next one', a.ends() === 1);
   a.hold('work', 'class:connector_open', 0.9);
-  a.hold('work', 'class:connector_closed', 0.9);
+  a.hold('work', 'class:unit_complete', 0.9);
   check('the next open and close end the next cycle', a.ends() === 2);
   const b = rigS2(['wires', 'work'], false);
   b.hold(null);
@@ -979,10 +979,47 @@ console.log('capture triggers: captureWanted');
   check('after must name an earlier substep', LE.checkConfig(bad).some(m => /s2_open: after/.test(m)));
 }
 
+// S2 is done only when every clamp is closed and all three wires are in: the connector also looks closed between wires.
+{
+  console.log('\nunit_complete: all clamps closed, all three wires in');
+  const st = SHIPPED.stations.find(s => s.id === 's2'), spec = st.assembly, W = 640, H = 480;
+  const box = (cls, conf, x0, y0, x1, y1) => ({ cls, conf, nbox: [x0 / W, y0 / H, x1 / W, y1 / H] });
+  const conn = (conf, cls) => box(cls || 'connector_closed', conf == null ? 0.85 : conf, 280, 220, 320, 260);
+  const red = box('red_wire', 0.77, 300, 235, 520, 250), white = box('white_wire', 0.65, 300, 150, 520, 240);
+  // A white table, with a black wire leaving the connector to the right unless told otherwise.
+  const table = line => (x, y) => (x < 0 || y < 0 || x >= W || y >= H ? null : x > 300 && Math.abs(y - 240 + (x - 300) * 0.2) < 2.5 ? line : [220, 220, 220]);
+  const black = table([20, 20, 22]), none = table([220, 220, 220]);
+  const done = (d, px) => LE.unitCheck(d, px || black, W, H, spec);
+  const ok = done([conn(), red, white]);
+  check('closed, red and white ending at the connector, a black line beside them: done', !!ok && ok.cls === 'unit_complete' && ok.conf === 0.85 && ok.derived === true, JSON.stringify(ok));
+  check('no black wire: not done, even with the connector closed', done([conn(), red, white], none) === null);
+  check('a red line is not the black wire', done([conn(), red, white], table([150, 30, 30])) === null);
+  check('white not seen: not done (the 18.2 s moment of run 174617)', done([conn(), red]) === null);
+  check('red not seen: not done', done([conn(), white]) === null);
+  const loose = box('red_wire', 0.77, 180, 235, 420, 250);
+  check('a wire lying under the connector is not in it: its ends are far away', done([conn(), loose, white]) === null);
+  check('any clamp read as open: not done', done([conn(), red, white, conn(0.5, 'connector_open')]) === null);
+  check('a weak closed read: not done', done([conn(0.5), red, white]) === null);
+  check('no connector: not done', done([red, white]) === null);
+  check('a connector at the frame edge does not throw and stays not done', LE.unitCheck([box('connector_closed', 0.9, 0, 0, 40, 40), box('red_wire', 0.8, 20, 18, 240, 26), box('white_wire', 0.7, 20, 10, 240, 40)], () => null, W, H, spec) === null);
+  check('the page tracks the derived class only on a station with an assembly', LE.trackedClasses(st, ['a']).join() === 'a,unit_complete' && LE.trackedClasses({}, ['a']).join() === 'a');
+  const bad = JSON.parse(JSON.stringify(SHIPPED));
+  bad.stations.find(s => s.id === 's2').assembly = { class: 'x' };
+  check('a broken assembly is reported', LE.checkConfig(bad).some(m => /s2: assembly needs/.test(m)));
+  const eng = LE.createStation(st, { holdFrames: SHIPPED.holdFrames, defaults: SHIPPED.defaults, qaGraceSec: SHIPPED.qaGraceSec, modelClasses: LE.trackedClasses(st, SHIPPED.models.s2.classes) });
+  let t = 0, ends = 0;
+  const hold = (zone, key) => { for (let i = 0; i < 6; i++) { const sig = {}; for (const z of ['connectors', 'wires', 'work']) { sig[z] = { activity: 0, bright: 0 }; for (const c of LE.trackedClasses(st, SHIPPED.models.s2.classes)) sig[z]['class:' + c] = 0; } if (zone) sig[zone][key] = 0.9; ends += eng.update(sig, t += FRAME).filter(e => e.type === 'cycle_end').length; } };
+  hold(null); hold('wires', 'class:red_wire'); hold('work', 'class:connector_open');
+  hold('work', 'class:connector_closed');
+  check('closed between wires does not end the unit', ends === 0 && eng.state().inCycle);
+  hold('work', 'class:connector_open'); hold('work', 'class:unit_complete');
+  check('the finished unit ends it, once', ends === 1 && !eng.state().inCycle);
+}
+
 // Outside a session the page calls idle() and passes idle to the checker: the camera shows, nothing is tracked or judged.
 {
   console.log('\nidle: nothing is tracked before Start');
-  const st = SHIPPED.stations.find(s => s.id === 's2'), classes = SHIPPED.models.s2.classes, zones = ['connectors', 'wires', 'work'];
+  const st = SHIPPED.stations.find(s => s.id === 's2'), classes = LE.trackedClasses(st, SHIPPED.models.s2.classes), zones = ['connectors', 'wires', 'work'];
   const rig = () => {
     const eng = LE.createStation(st, { holdFrames: SHIPPED.holdFrames, defaults: SHIPPED.defaults, qaGraceSec: SHIPPED.qaGraceSec, modelClasses: classes });
     let t = 0;

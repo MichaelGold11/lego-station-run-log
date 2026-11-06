@@ -81,6 +81,7 @@
     if (!cfg || !Array.isArray(cfg.stations) || !cfg.stations.length) return ['The config has no stations.'];
     const seenSt = {}, seenSub = {};
     for (const st of cfg.stations) {
+      if (st.assembly != null) { const a = st.assembly; if (typeof a !== 'object' || !a.class || !a.closed || !a.open || !Array.isArray(a.wires) || !a.wires.length) errs.push(st.id + ': assembly needs class, closed, open and wires.'); }
       if (!st || !/^[a-z][a-z0-9_]{0,15}$/.test(st.id || '')) { errs.push('Station id "' + (st && st.id) + '" must be short lowercase letters, digits or _.'); continue; }
       if (seenSt[st.id]) errs.push('Station ' + st.id + ' appears twice.');
       seenSt[st.id] = true;
@@ -599,6 +600,48 @@
       out[id] = s;
     }
     return out;
+  }
+  // A finished unit (station.assembly): all clamps closed and every wire in the connector. "Closed" alone is not enough, because
+  // the connector looks closed between wires. The model cannot see a black wire once it is clamped, so that one is read from the
+  // pixels. Measured on the S2 recordings of 2026-10-29 and 2026-11-05: docs/wire-line-process.md, "When a unit counts as done".
+  const ASSEMBLY = { closed: 0.6, open: 0.4, wire: 0.4, endTol: 1.5, ringIn: 1.5, ringOut: 3.2, rings: 8, arc: 75, dark: 0.55, sat: 0.35, minDark: 0.5 };
+  const trackedClasses = (station, classes) => (station && station.assembly ? classes.concat(station.assembly.class) : classes);
+  function geom(d, W, H) { const [a, b, c, e] = d.nbox; return { x0: a * W, y0: b * H, x1: c * W, y1: e * H, cx: (a + c) / 2 * W, cy: (b + e) / 2 * H, w: (c - a) * W, h: (e - b) * H }; }
+  // A wire box's possible ends: the middles of its short edges when it is thin, else its corners (the wire runs corner to corner).
+  function wireEnds(b) {
+    if (b.w > 3 * b.h) return [[b.x0, b.cy], [b.x1, b.cy]];
+    if (b.h > 3 * b.w) return [[b.cx, b.y0], [b.cx, b.y1]];
+    return [[b.x0, b.y0], [b.x1, b.y0], [b.x0, b.y1], [b.x1, b.y1]];
+  }
+  // Share of the arcs around the connector, on the side the wires leave, that cross a dark colorless line. px(x, y) -> [r, g, b] or null.
+  function darkLine(px, c, dir, o) {
+    const R = Math.max(c.w, c.h) / 2, a0 = Math.atan2(dir[1], dir[0]), half = o.arc * Math.PI / 180;
+    let hits = 0;
+    for (let k = 0; k < o.rings; k++) {
+      const r = R * (o.ringIn + (o.ringOut - o.ringIn) * k / (o.rings - 1)), n = Math.max(24, Math.round(2 * half * r)), cols = [];
+      for (let i = 0; i <= n; i++) { const a = a0 - half + 2 * half * i / n, p = px(c.cx + r * Math.cos(a), c.cy + r * Math.sin(a)); if (p) cols.push(p); }
+      if (cols.length < 8) continue;
+      const med = cols.map(p => Math.max(p[0], p[1], p[2])).sort((x, y) => x - y)[cols.length >> 1];
+      if (cols.some(p => { const v = Math.max(p[0], p[1], p[2]), m = Math.min(p[0], p[1], p[2]); return v < med * o.dark && (v - m) / (v || 1) < o.sat; })) hits++;
+    }
+    return hits / o.rings;
+  }
+  // One model result -> a detection of spec.class on the connector when the unit is finished, else null.
+  function unitCheck(dets, px, W, H, spec) {
+    const o = ASSEMBLY, best = (cls, min) => (dets || []).filter(d => d.cls === cls && d.conf >= min && d.nbox).sort((a, b) => b.conf - a.conf)[0] || null;
+    const closed = best(spec.closed, o.closed);
+    if (!closed || best(spec.open, o.open)) return null;
+    const c = geom(closed, W, H), R = Math.max(c.w, c.h) / 2, far = [];
+    for (const cls of spec.wires) {
+      const w = best(cls, o.wire);
+      if (!w) return null;
+      const b = geom(w, W, H), dist = e => Math.hypot(e[0] - c.cx, e[1] - c.cy);
+      if (Math.min.apply(null, wireEnds(b).map(dist)) / R > o.endTol) return null;
+      far.push([[b.x0, b.y0], [b.x1, b.y0], [b.x0, b.y1], [b.x1, b.y1]].sort((p, q) => dist(q) - dist(p))[0]);
+    }
+    const mx = far.reduce((a, p) => a + p[0], 0) / far.length, my = far.reduce((a, p) => a + p[1], 0) / far.length;
+    if (spec.darkWire && darkLine(px, c, [mx - c.cx, my - c.cy], o) < o.minDark) return null;
+    return { cls: spec.class, conf: closed.conf, nbox: closed.nbox, box: closed.box, derived: true };
   }
   // Hands (arrays of landmarks {x, y} in 0..1) -> {zone: share of one hand's landmarks inside, best hand}.
   function handPresence(hands, zones) {
@@ -1161,7 +1204,7 @@
     DEFAULTS, MOTION, MISMATCH_NOTE, EVENT_TYPES, CYCLE_ACTIONS, SUBSTEP_COLS, CYCLE_COLS, VERDICT_COLS, CHECK, LEVELS, OPERATOR_CODE, FLOOR, CLASS_TEST,
     members, activeRule, evalRule, missingOf, ruleText, checkConfig, captureDefaults, CAPTURE_DEFAULTS, captureWanted, nextSampleDue, modelFor, checkModelOutput, e2eBadClass, qaDecide, createStation,
     operatorCode, defaultName, shortName, classTestLayout, setupKey, nextStationId, freeSpot, saveScheduler, applyLayout,
-    zoneSignals, calibrationFrom, classSignals, handPresence, steadyClasses, mergeSignals, createChecker,
+    zoneSignals, calibrationFrom, classSignals, trackedClasses, unitCheck, ASSEMBLY, handPresence, steadyClasses, mergeSignals, createChecker,
     sortEvents, ruleZones, unobserved, NO_DATA, detectedCycles, manualCycles, summarize, substepsCsv, cyclesCsv, verdictsCsv, linkUnits, unitCols, unitsCsv, csvCell
   };
 });

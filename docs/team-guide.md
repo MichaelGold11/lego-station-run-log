@@ -353,7 +353,10 @@ seen, they pick that code in **Hold out** before downloading.
 
 1. In **Setup**, check that **Score the cameras** is on (it is by default).
 2. Start the session. One person stands by the keyboard and presses **1** each time a unit leaves S2.
-3. Run 3 to 5 cycles, then stop the session.
+3. Run 3 to 5 cycles, then stop the session. **Set each finished unit down on the table for a second or
+   two before moving it.** S2 marks a unit done only when all three levers are closed and all three
+   wires are in the connector, and it checks that on a unit that is lying still and in view. A unit carried
+   away in your hands is not counted.
 4. The **Done** tile shows detected cycles next to keyed cycles, and `events.jsonl` has the key presses.
    This scores cycle counts and cycle times only, not individual steps. To review steps, use the saved
    video and the `events.jsonl` times.
@@ -371,6 +374,7 @@ Score is off.
 | The page is slow | Keep it in the front tab; export your model at 416 or 320. **Models: off** in Setup stops every model on this laptop (it remembers that) |
 | A `.webm` video will not seek | `ffmpeg -i s1.webm -c copy s1-fixed.webm` |
 | Unit counts go negative | Units were already in the work areas when the session started |
+| S2 does not mark a unit done | Set it down in the Work area, wires leading away from the connector and hands clear, for a second or two. A yellow `unit_complete` box shows on the connector when it counts |
 | Nothing lights up or counts | That is normal before **Start session**. Setup shows the model's boxes, so use it to check what the model sees |
 | No alert sounds | Click anywhere on the page once, check that **Sound** is on (top of the page) and the station's **Mute sounds** is off (Setup) |
 | A MISTAKE at the start of many units | The first step's zone missed the hand: make that zone cover where the hand goes |
