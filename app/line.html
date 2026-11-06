@@ -518,12 +518,12 @@ button.chip:hover { border-color: var(--warn-ink); }
     const z = stdZones(st), r = G.standard.roles[st.cfg.role || st.cfg.id];
     if (!Object.keys(z).length || Object.keys(st.setup.zones).length) { st.stdAuto = true; return; }
     if (r && r.aspect > 0 && !viewAspect(st)) return;
-    st.stdAuto = true;
     const why = stdMismatch(st);
-    if (why) {
-      st.stdMsg = why + ' Not applied: draw the zones, or press Use standard setup to apply it anyway.';
-      banner('std:' + st.cfg.id, esc(st.cfg.id.toUpperCase()) + ': ' + esc(st.stdMsg));
+    if (why) {    // not settled: the phone is often held upright to scan the QR code and mounted the other way after, so this keeps trying
+      const msg = why + ' Not applied: draw the zones, or press Use standard setup to apply it anyway.';
+      if (msg !== st.stdMsg) { st.stdMsg = msg; banner('std:' + st.cfg.id, esc(st.cfg.id.toUpperCase()) + ': ' + esc(msg)); }
     } else {
+      st.stdAuto = true;
       st.setup.zones = z; st.prevGray = null; st.stdMsg = 'Standard setup applied';
       saveSetup(st);
       banner('std:' + st.cfg.id, esc(st.cfg.id.toUpperCase()) + ': standard setup applied. Calibrate with the work area empty.');
