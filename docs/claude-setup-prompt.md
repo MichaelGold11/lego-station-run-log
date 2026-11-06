@@ -2,6 +2,8 @@
 
 Follow this page to run the Wire line on your own laptop, with your own iPhone and hotspot. Every box has a copy button at its top right (on GitHub). About 20 minutes the first time.
 
+The point: you do your own runs, your own Claude reviews each one, and you tune your setup on your own branch. When everyone's best changes are merged, the whole system gets stronger.
+
 ## Which path am I on?
 
 | You use | Who runs the commands |
@@ -111,6 +113,32 @@ black wire, one with a lever left up. Only the good one should count. Tell me in
 real units against logged units, what went wrong, and what to try first.
 ```
 
+On later runs, change the sentence about the units to match what you built.
+
+## Step 5. Tune it and run again (everyone)
+
+This is the main job. Repeat it until your counts are right:
+
+1. Do a run and have your own Claude review it (Step 4).
+2. Make the one change Claude says to try first.
+3. Run again. Compare real units against logged units, before and after.
+4. When you are happy with it, send a pull request, so your work can be merged.
+
+**Claude Desktop.** Claude reads each run straight from your laptop, so you do not need **Download run**. Ask it to make the change, and it commits to `<name>/<station>-tuning`. When you are happy, ask it to open a pull request. If the first push says you are not signed in, install GitHub's tool (`brew install gh` on Mac, `winget install --id GitHub.cli -e` on Windows), then paste `gh auth login` in your terminal. If GitHub refuses you, ask Michael for an invite.
+
+**Claude web.** After each run, give your files to Claude in chat (Step 4). To make the change, open claude.ai/code and pick `MichaelGold11/lego-station-run-log`. Paste what the chat found, ask for the change, and add this line: `Use the branch <your name>/<station>-tuning.` Claude pushes your change to that branch. This needs a paid plan and write access: on a free plan, Claude can review your runs but cannot make the change. Then on your laptop, using your branch name (if Claude gave it another name, use that one):
+
+```
+npm run stop
+git fetch
+git checkout <your name>/<station>-tuning
+npm run go
+```
+
+When you are happy, go back to that claude.ai/code session. Ask Claude to run the tests and put real units against logged units, before and after, in the description. Then click **Create PR**.
+
+The rules for merging are in [team-guide.md](team-guide.md), "Branches and merging".
+
 ## Later runs
 
 Open Terminal or Command Prompt and go to the folder.
@@ -137,21 +165,6 @@ git pull
 npm run setup -- --station s2
 npm run go
 ```
-
-## Tuning on your own branch
-
-**Claude Desktop.** Ask Claude in the same session. It commits to `<name>/<station>-tuning`. If the first push says you are not signed in, install GitHub's tool (`brew install gh` on Mac, `winget install --id GitHub.cli -e` on Windows), then paste `gh auth login` in your terminal. If GitHub refuses you, ask Michael for an invite.
-
-**Claude web.** Open claude.ai/code and pick `MichaelGold11/lego-station-run-log`. Paste what the chat found, ask for the change, and add this line: `Use the branch <your name>/<station>-tuning.` Claude pushes your change to that branch. This needs a paid plan and write access. Then on your laptop, using your branch name (if Claude gave it another name, use that one):
-
-```
-npm run stop
-git fetch
-git checkout <your name>/<station>-tuning
-npm run go
-```
-
-The rules for merging are in [team-guide.md](team-guide.md), "Branches and merging".
 
 ## If something goes wrong
 
@@ -211,9 +224,10 @@ Then read the newest folder in data/sessions/ (session.json and events.jsonl) an
 real units against logged units, what went wrong, and what to try first. Do not use /analyze-runs:
 it is for the archived LEGO run log.
 
-After that, help me tune on my branch by the rules in docs/team-guide.md ("Branches and merging"):
-small commits, tests passing, proof from a real run, and a pull request into main when something
-is better. Push at the first real commit. If the push says I am not signed in, tell me to run
+After that, help me tune on my branch by the rules in docs/team-guide.md ("Branches and merging").
+After every run, review it the same way, suggest one change, and compare it with the last run. Use
+small commits, tests passing and proof from a real run. Open a pull request into main when I say I
+am happy with it. Push at the first real commit. If the push says I am not signed in, tell me to run
 gh auth login in my own terminal (install gh first if it is missing). If GitHub refuses me access,
 tell me to ask Michael for an invite and carry on locally.
 ```
