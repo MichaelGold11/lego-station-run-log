@@ -142,12 +142,12 @@ npm run go
 
 **Claude Desktop.** Ask Claude in the same session. It commits to `<name>/<station>-tuning`. If the first push says you are not signed in, install GitHub's tool (`brew install gh` on Mac, `winget install --id GitHub.cli -e` on Windows), then paste `gh auth login` in your terminal. If GitHub refuses you, ask Michael for an invite.
 
-**Claude web.** Open claude.ai/code, pick `MichaelGold11/lego-station-run-log`, paste what the chat found and ask for the change. Claude pushes a branch and names it. This needs a paid plan and write access. Then on your laptop:
+**Claude web.** Open claude.ai/code and pick `MichaelGold11/lego-station-run-log`. Paste what the chat found, ask for the change, and add this line: `Use the branch <your name>/<station>-tuning.` Claude pushes your change to that branch. This needs a paid plan and write access. Then on your laptop, using your branch name (if Claude gave it another name, use that one):
 
 ```
 npm run stop
 git fetch
-git checkout <the branch Claude named>
+git checkout <your name>/<station>-tuning
 npm run go
 ```
 

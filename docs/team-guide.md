@@ -82,7 +82,7 @@ The team works on one repo. Follow these rules so everyone's work can be merged.
 - One branch per person per idea, named `<name>/<idea>` (for example `sam/s2-lever-zones`). Start it
   from an up-to-date `main`.
 - Merge `main` into your branch at least once a week. Never rewrite history you have pushed (no force push).
-- Work gets into `main` only by pull request, with the tests passing (`npm run test:line` and `npm run test:live`). Never push to `main`.
+- Work gets into `main` only by pull request, with the tests passing (`npm run test:line` and `npm run test:live`). Never push to `main`. GitHub enforces this: a push to `main` is refused, and a pull request needs one approval from someone else before it can merge.
 - Each pull request shows proof: real units against logged units on a named recording or run,
   before and after your change.
 - One owner per station's `.onnx` model and per station's block in `wire-line.json`. A model file cannot be merged,
