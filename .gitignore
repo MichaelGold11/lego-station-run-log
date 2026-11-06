@@ -23,3 +23,5 @@ training/*/videos/*
 !training/*/videos/.gitkeep
 training/*/frames/
 training/*/*.zip
+data/server.log
+data/server.pid

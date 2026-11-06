@@ -25,11 +25,16 @@ Then:
 ```bash
 git clone https://github.com/MichaelGold11/lego-station-run-log.git
 cd lego-station-run-log
-npm install
-npm start
+npm run setup -- --station s2
+npm run go
 ```
 
-Open http://localhost:4173 in **Chrome**. It opens the wire line (`/line`):
+`npm run setup` runs `npm install`, makes the phone certificate and sets up a one-station floor (s1 to s4).
+`npm run go` starts the server in the background and opens **Chrome** on the wire line (`/line`) with the phone QR code showing.
+`npm run stop` stops it. To run all four stations instead, use `npm install` and `npm start`, then open http://localhost:4173.
+Your own phone and hotspot: see [docs/team-guide.md](docs/team-guide.md), "Your own laptop, phone and hotspot".
+
+The wire line (`/line`):
 
 1. Each station shows **Connect a camera**. Pick **Phone or tablet** and scan the QR code with that
    station's phone, or pick a **USB camera** or a **Recorded clip**. The laptop remembers it.

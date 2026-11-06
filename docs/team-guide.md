@@ -24,11 +24,68 @@ the matching section here.
 
        git clone https://github.com/MichaelGold11/lego-station-run-log.git
        cd lego-station-run-log
-       npm install
+       npm run setup -- --station s2
 
-3. Run `npm start`, then open http://localhost:4173/line in **Chrome**. Leave the terminal open;
-   closing it stops the page.
-4. To get updates later: Ctrl+C, `git pull`, then `npm start` again.
+   `npm run setup` checks your tools and prints the install command for any that are missing. It
+   runs `npm install`, makes the phone certificate, and sets up a floor with just your one station
+   (s1 to s4, s2 if you are not sure). It is safe to run again. It never replaces your layout unless
+   you add `--force`. Setting up for a whole class on one laptop instead? Skip it: plain
+   `npm install` keeps the four-station Class test floor.
+3. Run `npm run go`. It starts the server in the background and opens Chrome on your station with
+   the phone QR code showing. You need no terminal open. `npm run stop` stops the server. (Or run
+   `npm start` and open http://localhost:4173/line in **Chrome**; closing that terminal stops the page.)
+4. To get updates later: `npm run stop`, `git pull`, then `npm run go` again.
+
+## Your own laptop, phone and hotspot
+
+Use this when you run one station on your own laptop with your own iPhone. About 5 minutes the first time.
+
+1. **Phone.** Turn on Personal Hotspot and switch **Maximize Compatibility** on (Settings > Personal
+   Hotspot). Set Auto-Lock to **Never** (Settings > Display & Brightness). Plug the phone in.
+2. **Laptop.** Join the phone's hotspot from the laptop's Wi-Fi menu. Both must be on that one network.
+3. **Start.** Run `npm run go`. Scan the QR code with the iPhone camera. On the warning tap
+   **Show Details**, then **visit this website**, then allow the camera. The phone shows LIVE. This
+   is first-time only: the link keeps working.
+4. **Mount** the phone in landscape straight above the table. Clear the table, press **Start session**,
+   **Calibrate** in the Start form, and **Enter**.
+
+**Firewall.**
+- Mac: when it asks, choose **Allow** for `node`. If you said Deny, open System Settings > Network >
+  Firewall > Options and set `node` to Allow incoming connections.
+- Windows: not yet tested on a real Windows laptop. A hotspot network is usually called Public, and
+  Windows blocks the phone there. Open Windows Security > Firewall & network protection > Allow an app
+  through firewall > Change settings. Tick **Private and Public** for Node.js and for Google Chrome.
+  Or in an Administrator terminal:
+  `netsh advfirewall firewall add rule name="Wire line phone" dir=in action=allow protocol=TCP localport=4174 profile=any`.
+  Chrome needs allowing too, because the phone video goes straight to Chrome over WebRTC.
+
+**When the `.local` link fails.** The phone page says it cannot connect, or the QR code does nothing. Open the
+**Address** list under the QR code and pick the next address. Try each one. Check the laptop is
+on the hotspot, not on other Wi-Fi. Check the firewall step above. Some carriers give a hotspot with
+an IPv6 address only: use the `.local` link there.
+
+**8 GB laptops.**
+- Run one station only (the setup command does this).
+- Keep **Hand tracking** off.
+- Close other apps, and other Chrome tabs.
+- Keep the page in the front tab. If it is slow, export your model at 416 or 320.
+
+## Branches and merging
+
+The team works on one repo. Follow these rules so everyone's work can be merged.
+
+- One branch per person per idea, named `<name>/<idea>` (for example `sam/s2-lever-zones`). Start it
+  from an up-to-date `main`.
+- Merge `main` into your branch at least once a week. Never rewrite history you have pushed (no force push).
+- Work gets into `main` only by pull request, with the tests passing (`npm run test:line` and `npm run test:live`). Never push to `main`.
+- Each pull request shows proof: real units against logged units on a named recording or run,
+  before and after your change.
+- One owner per station's `.onnx` model and per station's block in `wire-line.json`. A model file cannot be merged,
+  only replaced, so ask the owner first. Shared files (`app/line.html`, `app/line-engine.js`) get small,
+  single-purpose changes.
+- Never commit `data/sessions/`, `data/meta/wire-line-setup.json` or `data/meta/wire-line-layouts.json`.
+  The repo is public. Share a run with **Download run**.
+- You need write access to push a branch. If a push is refused, ask Michael for an invite.
 
 ## 2. The process (v2: lever connectors)
 
@@ -375,6 +432,7 @@ Score is off.
 | A `.webm` video will not seek | `ffmpeg -i s1.webm -c copy s1-fixed.webm` |
 | Unit counts go negative | Units were already in the work areas when the session started |
 | S2 does not mark a unit done | Set it down in the Work area, wires leading away from the connector and hands clear, for a second or two. A yellow `unit_complete` box shows on the connector when it counts |
+| `npm run test:line` says the sample video is missing | That part is skipped on a fresh clone. It is not a failure |
 | Nothing lights up or counts | That is normal before **Start session**. Setup shows the model's boxes, so use it to check what the model sees |
 | No alert sounds | Click anywhere on the page once, check that **Sound** is on (top of the page) and the station's **Mute sounds** is off (Setup) |
 | A MISTAKE at the start of many units | The first step's zone missed the hand: make that zone cover where the hand goes |

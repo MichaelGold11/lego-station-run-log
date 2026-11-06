@@ -10,6 +10,17 @@ People: start with `README.md`.
 | `/runs` | Archived: the LEGO run log this section and "Analyze runs" are about ([docs/lego-run-log.md](docs/lego-run-log.md)) |
 | `/live` | Archived: the LEGO single-station live prototype |
 
+## Team setup and merging
+
+Setting up a teammate's laptop: `npm run setup -- --station s2`, then `npm run go` (stop with `npm run stop`).
+Their own phone and hotspot: [docs/team-guide.md](docs/team-guide.md), "Your own laptop, phone and hotspot".
+Branch and merge rules: the same guide, "Branches and merging". In short:
+
+- One branch per person per idea, named `<name>/<idea>`, from an up-to-date `main`. Merge `main` into it at least weekly. Never rewrite pushed history. Never push to `main`.
+- Into `main` only by pull request, with tests passing. Each PR shows proof: real units against logged units on a named recording or run, before and after.
+- One owner per station's `.onnx` model and that station's block in `wire-line.json`. `app/line.html` and `app/line-engine.js` get small, single-purpose changes.
+- Never commit `data/sessions/`, `data/meta/wire-line-setup.json` or `data/meta/wire-line-layouts.json`. The repo is public.
+
 ## What this is
 
 A time-study tool for one simulated manual assembly station: a LEGO build (white 4×6 plate,

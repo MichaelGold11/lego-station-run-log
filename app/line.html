@@ -2636,6 +2636,16 @@ button.chip:hover { border-color: var(--warn-ink); }
     } catch (e) { /* no permissions API */ }
     await restoreSources(false);
     G.ready = true;
+    // /line?phone=s2 (from npm run go): connect that station's phone source and show its QR code. Does nothing when the
+    // station is missing, already has a source, or a session is running.
+    try {
+      const want = new URLSearchParams(location.search).get('phone');
+      const pst = want && LIST.find(s => s.id === want);
+      if (pst && !G.session && (!pst.source || !pst.source.key || pst.source.key === 'none')) {
+        await setSource(pst, 'phone');
+        if (pst.phone) { pst.phone.showQr = true; renderPhone(pst, true); }
+      }
+    } catch (e) { console.warn('phone link', e); }
     if (LIST.some(modelOf) && store.get('wire-line:model') !== false) setModel(true);
     if (store.get('wire-line:hands') === true) setHands(true);
   })();

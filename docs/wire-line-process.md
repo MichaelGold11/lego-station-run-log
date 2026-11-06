@@ -370,7 +370,9 @@ through". Free fallbacks: a home router, or a phone's Personal Hotspot that the 
 phones join. Michael's carrier gives an IPv6-only hotspot, so use the `.local` link there (the
 laptop's IPv4 address on it is a placeholder that phones cannot reach). The hotspot phone can also
 be one of the cameras; it reaches the laptop the same way. Test the network the day before.
-On a Mac, allow incoming connections for `node` if the firewall asks.
+On a Mac, allow incoming connections for `node` if the firewall asks. On Windows a hotspot counts as a
+Public network: allow Node.js (TCP 4174) and Chrome on all profiles, or the phone cannot connect (not yet
+tested on a real Windows laptop). Steps are in [team-guide.md](team-guide.md), "Your own laptop, phone and hotspot".
 
 ## What a session produces
 
@@ -687,5 +689,5 @@ with a class number beyond your list drops that station back to zones with the s
   IPv6 address), including reloads, a lost phone and an 8 second recording. A real iPhone has been
   tested up to the camera page (over the IPv6-only hotspot, by the `.local` name); a real iPhone
   streaming into `/line`, four at once, and the picture's orientation when a phone lies flat are
-  not tested yet.
+  not tested yet. Windows firewall steps for a hotspot have not been tested on a real Windows laptop.
 - A lost phone takes about 10 to 15 seconds to show as lost (WebRTC waits that long before giving up).
