@@ -310,18 +310,39 @@ function cleanStandard(body, cfg) {
     const st = STATION_ID.test(rid) && cfg.stations.find(s => s.id === rid);
     if (!st) return { error: 'Unknown role "' + String(rid).slice(0, 40) + '".' };
     if (!v || typeof v !== 'object' || Array.isArray(v)) return { error: 'Role ' + rid + ' must be an object.' };
-    const zoneIds = (st.zones || []).map(z => z.id), zones = {};
-    for (const [zid, r] of Object.entries(v.zones || {})) {
-      if (!zoneIds.includes(zid)) continue;
-      if (!r || !num01(r.x) || !num01(r.y) || !num01(r.w) || !num01(r.h) || r.w <= 0 || r.h <= 0) return { error: rid + ': zone ' + zid + ' needs x, y, w, h between 0 and 1 (w and h above 0).' };
-      zones[zid] = { x: r.x, y: r.y, w: r.w, h: r.h };
+    const zoneIds = (st.zones || []).map(z => z.id);
+    // One view = zones + aspect (video width / height when drawn) + source (what filmed it). Aspect and source are optional (older records have neither).
+    const view = (w, label) => {
+      const zones = {};
+      for (const [zid, r] of Object.entries(w.zones || {})) {
+        if (!zoneIds.includes(zid)) continue;
+        if (!r || !num01(r.x) || !num01(r.y) || !num01(r.w) || !num01(r.h) || r.w <= 0 || r.h <= 0) return { error: label + ': zone ' + zid + ' needs x, y, w, h between 0 and 1 (w and h above 0).' };
+        zones[zid] = { x: r.x, y: r.y, w: r.w, h: r.h };
+      }
+      if (w.aspect != null && !numIn(w.aspect, 0.2, 5)) return { error: label + ': aspect must be a number between 0.2 and 5 (video width divided by height).' };
+      if (w.source != null && w.source !== 'phone' && w.source !== 'camera') return { error: label + ': source must be "phone" or "camera".' };
+      const o = { zones, note: text(w.note, 300), updatedAt: text(w.updatedAt, 40) || new Date().toISOString() };
+      if (w.aspect != null) o.aspect = w.aspect;
+      if (w.source != null) o.source = w.source;
+      return { view: o };
+    };
+    const main = view(v, rid);
+    if (main.error) return main;
+    roles[rid] = main.view;
+    // otherViews: the same boxes for other shapes of video (a phone held upright), at most 8. A view with no known zone is dropped.
+    if (v.otherViews != null) {
+      if (!Array.isArray(v.otherViews) || v.otherViews.length > 8) return { error: rid + ': otherViews must be a list of at most 8 views.' };
+      const others = [];
+      for (let i = 0; i < v.otherViews.length; i++) {
+        const w = v.otherViews[i], label = rid + ' otherViews[' + i + ']';
+        if (!w || typeof w !== 'object' || Array.isArray(w)) return { error: label + ' must be an object.' };
+        if (w.aspect == null) return { error: label + ': aspect is required (video width divided by height).' };
+        const r = view(w, label);
+        if (r.error) return r;
+        if (Object.keys(r.view.zones).length) others.push(r.view);
+      }
+      roles[rid].otherViews = others;
     }
-    // aspect: video width / height when the zones were drawn; source: what filmed it. Both optional (older records have neither).
-    if (v.aspect != null && !numIn(v.aspect, 0.2, 5)) return { error: rid + ': aspect must be a number between 0.2 and 5 (video width divided by height).' };
-    if (v.source != null && v.source !== 'phone' && v.source !== 'camera') return { error: rid + ': source must be "phone" or "camera".' };
-    roles[rid] = { zones, note: text(v.note, 300), updatedAt: text(v.updatedAt, 40) || new Date().toISOString() };
-    if (v.aspect != null) roles[rid].aspect = v.aspect;
-    if (v.source != null) roles[rid].source = v.source;
   }
   return { standard: { version: 1, roles } };
 }

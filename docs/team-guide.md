@@ -149,7 +149,7 @@ before it (from the previous station finishing to the arrival), its mistakes, an
    automatically when a station has none saved ("Standard setup applied"), so nobody redraws them.
    **Use standard setup** puts the standard back on a station that was edited. When the mount or
    the environment changes, edit the boxes and press **Save as standard** again. A station uses the
-   standard of its role, whatever its own id. Saving keeps the role's existing note. If the standard was drawn on a different shape of view than the live one, the warning names both ratios (for example 3:4 and 9:16). The standard holds only the zones: **Calibrate**
+   standard of its role, whatever its own id. Saving keeps the role's existing note. A role can hold one set of boxes per shape of view (landscape, portrait): the main view plus up to 8 `otherViews`. The page picks the one nearest to the live picture, so the boxes follow the phone when it is turned, unless you drew or edited them yourself or a session is running. **Save as standard** replaces the view that fits the live shape, or adds a new one. Landscape stays the recommended mount, because the S2 unit-done rule was tuned on landscape footage. If no view fits the live shape, the boxes are still applied and the warning names both ratios (for example 3:4 and 9:16). The standard holds only the zones: **Calibrate**
    (next step) is never part of it, because the brightness and motion baselines depend on the
    light that day.
 4. **Calibrate.** With each work area empty and still, press **Calibrate empty** (2 seconds). Press
@@ -216,8 +216,10 @@ Any phone or tablet with a camera works: iPhone, iPad, Android, or another lapto
 
 1. **Get each phone ready.** Turn the screen timeout off (iPhone and iPad: Settings > Display &
    Brightness > Auto-Lock: **Never**; Android: Settings > Display > Screen timeout, the longest).
-   Plug it in. If it will lie flat over the table, lock the rotation (iPhone and iPad:
-   **Orientation Lock** in Control Center; Android: **Auto-rotate** off).
+   Plug it in. If it will lie flat over the table, hold it sideways until the picture on its page
+   is wide, then lay it flat. On an iPhone leave **Orientation Lock** off, because it holds the
+   picture upright. On an iPad or Android, lock the rotation once the picture is wide. The boxes
+   come in either direction, and landscape is the recommended mount.
 2. **Same network.** The laptop and all the phones join the same Wi-Fi. If that is campus Wi-Fi
    and the phones say "The video cannot get through", use a home router or one phone's Personal
    Hotspot instead (that phone can be one of the cameras).
@@ -451,7 +453,7 @@ Score is off.
 | A station is off screen | Press **Fit** (bottom right) |
 | A station will not move | Press **Edit layout** first; nothing moves while a session records |
 | The Mac asks about incoming connections for `node` | Allow it, or the phones cannot reach the laptop |
-| The phone picture turns sideways | Lock the phone's rotation (Orientation Lock, or Auto-rotate off), then reload its page |
+| The phone picture turns sideways | Hold the phone sideways until its picture is wide, then lay it flat. On an iPhone turn Orientation Lock off (it holds the picture upright); on an iPad or Android lock the rotation once the picture is wide. The standard boxes follow the picture when it turns |
 
 ## 11. Still open
 
