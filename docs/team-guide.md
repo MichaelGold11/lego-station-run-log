@@ -439,7 +439,8 @@ Score is off.
 | The page is slow | Keep it in the front tab; export your model at 416 or 320. **Models: off** in Setup stops every model on this laptop (it remembers that) |
 | A `.webm` video will not seek | `ffmpeg -i s1.webm -c copy s1-fixed.webm` |
 | Unit counts go negative | Units were already in the work areas when the session started |
-| S2 does not mark a unit done | Set it down in the Work area, wires leading away from the connector and hands clear, for a second or two. A yellow `unit_complete` box shows on the connector when it counts |
+| S2 does not mark a unit done | Set it down in the Work area, wires leading away from the connector and hands clear, for a second or two. A yellow `unit_complete` box shows on the connector when it counts. Work on a smooth surface that is not white or pale (brown card works): on white paper or a pale sheet the model rarely sees the white wire, so a good unit never counts. Keep the unit in the middle, away from the frame edge |
+| S2 counts a unit with no black wire or a lever left up | Known gap (five S2 test runs, 2026-11-12): once the white wire is visible, a raised lever reads as closed and a loose black wire lying nearby can pass the black-wire check. Check those units by eye until the model or the check is improved |
 | `npm run test:line` says the sample video is missing | That part is skipped on a fresh clone. It is not a failure |
 | Nothing lights up or counts | That is normal before **Start session**. Setup shows the model's boxes, so use it to check what the model sees |
 | No alert sounds | Click anywhere on the page once, check that **Sound** is on (top of the page) and the station's **Mute sounds** is off (Setup) |
