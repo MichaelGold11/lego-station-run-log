@@ -1078,6 +1078,9 @@ console.log('capture triggers: captureWanted');
   const s2ids = SHIPPED.stations.find(s => s.id === 's2').zones.map(z => z.id);
   const land = LE.pickStandardView(STD.roles.s2, s2ids, 4 / 3), port = LE.pickStandardView(STD.roles.s2, s2ids, 3 / 4);
   check('committed standard: s2 has a view that fits at 4:3 and one at 3:4, with different boxes, each holding every s2 zone', land && port && land.fits && port.fits && !LE.sameZones(land.view.zones, port.view.zones) && s2ids.every(id => land.view.zones[id] && port.view.zones[id]), JSON.stringify([land, port]));
+  // The server keeps at most 300 characters of a note, so a longer one would be cut the first time anyone presses Save as standard.
+  const stdNotes = Object.values(STD.roles).flatMap(r => [r].concat(r.otherViews || [])).map(v => v.note || "");
+  check("committed standard: every note is at most 300 characters, so the file comes back unchanged from a save", stdNotes.every(n => n.length <= 300), stdNotes.map(n => n.length).join());
 }
 
 console.log('\n' + passes + ' passed, ' + fails + ' failed');

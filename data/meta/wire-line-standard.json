@@ -55,7 +55,7 @@
           },
           "aspect": 0.75,
           "source": "phone",
-          "note": "S2, phone held portrait (480x640), overhead on a white table. Placed from sessions 20261029-181913-9f67 and 20261029-182536-ad27: every wire and connector detection center falls inside its zone. Work stops short of the bottom left corner, where the model sees a false black_wire at about (0.03, 0.84).",
+          "note": "S2, phone held portrait (480x640), overhead on a white table. Placed from sessions 20261029-181913-9f67 and 20261029-182536-ad27: every wire and connector detection center falls inside its zone. Work stops short of the bottom left corner, where the model sees a false black_wire near (0.03, 0.84).",
           "updatedAt": "2026-10-29T23:45:00.000Z"
         }
       ]
