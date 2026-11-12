@@ -1054,5 +1054,34 @@ console.log('capture triggers: captureWanted');
   check('the same part in a session is a mistake (the rig really can raise one)', r.verdicts.some(v => v.kind === 'mistake'), r.kinds());
 }
 
+{
+  console.log('standard views');
+  const B = (x) => ({ x, y: 0.1, w: 0.3, h: 0.3 });
+  const role = { zones: { a: B(0.1), b: B(0.5), z: B(0.2) }, aspect: 4 / 3, source: 'camera', updatedAt: 'L', otherViews: [{ zones: { a: B(0.2), b: B(0.6) }, aspect: 0.75, source: 'phone', updatedAt: 'P' }, { zones: { z: B(0.3) }, aspect: 2, updatedAt: 'E' }] };
+  const v = LE.standardViews(role, ['a', 'b']);
+  check('standardViews lists the main view first, filtered to the zone ids, and leaves out a view with no zone left', v.length === 2 && v[0].main && v[0].index === -1 && v[1].index === 0 && !v[1].main && Object.keys(v[0].zones).join() === 'a,b' && v[1].aspect === 0.75 && v[1].source === 'phone' && v[1].updatedAt === 'P', JSON.stringify(v));
+  v[0].zones.a.x = 0.9;
+  check('standardViews returns copies of the zones', role.zones.a.x === 0.1);
+  check('standardViews on an undefined role is empty', LE.standardViews(undefined, ['a']).length === 0);
+  const pk = a => LE.pickStandardView(role, ['a', 'b'], a);
+  check('pickStandardView at 4:3 picks the landscape view and it fits', pk(4 / 3).view.main && pk(4 / 3).fits);
+  check('pickStandardView at 3:4 picks the portrait view and it fits', pk(0.75).view.source === 'phone' && pk(0.75).fits);
+  check('pickStandardView at 16:9 picks landscape and does not fit', pk(16 / 9).view.main && !pk(16 / 9).fits);
+  check('pickStandardView with an unknown aspect picks the first view and fits', [null, 0, NaN, undefined].every(a => pk(a).view.main && pk(a).fits));
+  check('pickStandardView on a role with no zones is null', LE.pickStandardView({ zones: {} }, ['a'], 1) === null && LE.pickStandardView(undefined, ['a'], 1) === null);
+  const leg = LE.pickStandardView({ zones: { a: B(0.1) } }, ['a'], 0.75);
+  check('a legacy role with no otherViews and no aspect is picked and fits', leg && leg.fits && leg.view.main);
+  const mixed = LE.pickStandardView({ zones: { a: B(0.1) }, otherViews: [{ zones: { a: B(0.4) }, aspect: 0.75 }] }, ['a'], 0.8);
+  check('a view with no aspect is only used when no view with an aspect exists', mixed.view.aspect === 0.75 && mixed.fits);
+  check('sameZones: same ids and every number within 0.0005', LE.sameZones({ a: B(0.1) }, { a: B(0.1004) }) && !LE.sameZones({ a: B(0.1) }, { a: B(0.101) }) && !LE.sameZones({ a: B(0.1) }, { a: B(0.1), b: B(0.2) }) && !LE.sameZones({ a: B(0.1) }, { b: B(0.1) }) && !LE.sameZones(null, {}));
+  const STD = JSON.parse(fs.readFileSync(new URL('../data/meta/wire-line-standard.json', import.meta.url), 'utf8'));
+  const s2ids = SHIPPED.stations.find(s => s.id === 's2').zones.map(z => z.id);
+  const land = LE.pickStandardView(STD.roles.s2, s2ids, 4 / 3), port = LE.pickStandardView(STD.roles.s2, s2ids, 3 / 4);
+  check('committed standard: s2 has a view that fits at 4:3 and one at 3:4, with different boxes, each holding every s2 zone', land && port && land.fits && port.fits && !LE.sameZones(land.view.zones, port.view.zones) && s2ids.every(id => land.view.zones[id] && port.view.zones[id]), JSON.stringify([land, port]));
+  // The server keeps at most 300 characters of a note, so a longer one would be cut the first time anyone presses Save as standard.
+  const stdNotes = Object.values(STD.roles).flatMap(r => [r].concat(r.otherViews || [])).map(v => v.note || "");
+  check("committed standard: every note is at most 300 characters, so the file comes back unchanged from a save", stdNotes.every(n => n.length <= 300), stdNotes.map(n => n.length).join());
+}
+
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);

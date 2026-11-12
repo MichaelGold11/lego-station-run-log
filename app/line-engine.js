@@ -1200,11 +1200,53 @@
     return lines.join('\n') + '\n';
   }
 
+  // ---------- standard setup views ----------
+  // A role in the standard file holds its main view (zones, aspect, ...) and optional otherViews for other shapes of video.
+  // Zones are fractions of the frame, so each view only fits the shape (width / height) it was drawn on.
+  function standardViews(role, zoneIds) {
+    const out = [];
+    if (!role || typeof role !== 'object') return out;
+    const ids = Array.isArray(zoneIds) ? zoneIds : null;
+    const add = (v, main, index) => {
+      if (!v || typeof v !== 'object' || !v.zones || typeof v.zones !== 'object') return;
+      const zones = {};
+      for (const k of Object.keys(v.zones)) {
+        const b = v.zones[k];
+        if (b && (!ids || ids.includes(k))) zones[k] = { x: b.x, y: b.y, w: b.w, h: b.h };
+      }
+      if (!Object.keys(zones).length) return;
+      out.push({ zones, aspect: v.aspect > 0 ? v.aspect : null, source: v.source || null, updatedAt: v.updatedAt || null, main, index });
+    };
+    add(role, true, -1);
+    if (Array.isArray(role.otherViews)) role.otherViews.slice(0, 8).forEach((v, i) => add(v, false, i));
+    return out;
+  }
+  // The view for a live shape: the nearest aspect (by ratio). fits: within 10% of it (or the view records no aspect).
+  function pickStandardView(role, zoneIds, aspect) {
+    const views = standardViews(role, zoneIds);
+    if (!views.length) return null;
+    if (!(aspect > 0)) return { view: views[0], fits: true };
+    const withA = views.filter(v => v.aspect), pool = withA.length ? withA : views;
+    let best = pool[0], bd = Infinity;
+    for (const v of pool) {
+      const d = v.aspect ? Math.abs(Math.log(aspect / v.aspect)) : Infinity;
+      if (d < bd) { bd = d; best = v; }
+    }
+    return { view: best, fits: !best.aspect || Math.abs(aspect / best.aspect - 1) <= 0.1 };
+  }
+  // The same boxes (same zone ids, every x, y, w, h within half a thousandth).
+  function sameZones(a, b) {
+    if (!a || !b) return false;
+    const ka = Object.keys(a), kb = Object.keys(b);
+    if (ka.length !== kb.length) return false;
+    return ka.every(k => b[k] && a[k] && ['x', 'y', 'w', 'h'].every(f => Math.abs(a[k][f] - b[k][f]) <= 0.0005));
+  }
+
   return {
     DEFAULTS, MOTION, MISMATCH_NOTE, EVENT_TYPES, CYCLE_ACTIONS, SUBSTEP_COLS, CYCLE_COLS, VERDICT_COLS, CHECK, LEVELS, OPERATOR_CODE, FLOOR, CLASS_TEST,
     members, activeRule, evalRule, missingOf, ruleText, checkConfig, captureDefaults, CAPTURE_DEFAULTS, captureWanted, nextSampleDue, modelFor, checkModelOutput, e2eBadClass, qaDecide, createStation,
     operatorCode, defaultName, shortName, classTestLayout, setupKey, nextStationId, freeSpot, saveScheduler, applyLayout,
     zoneSignals, calibrationFrom, classSignals, trackedClasses, unitCheck, ASSEMBLY, handPresence, steadyClasses, mergeSignals, createChecker,
-    sortEvents, ruleZones, unobserved, NO_DATA, detectedCycles, manualCycles, summarize, substepsCsv, cyclesCsv, verdictsCsv, linkUnits, unitCols, unitsCsv, csvCell
+    standardViews, pickStandardView, sameZones, sortEvents, ruleZones, unobserved, NO_DATA, detectedCycles, manualCycles, summarize, substepsCsv, cyclesCsv, verdictsCsv, linkUnits, unitCols, unitsCsv, csvCell
   };
 });

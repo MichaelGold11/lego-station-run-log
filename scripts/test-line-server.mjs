@@ -274,6 +274,25 @@ try {
     await req('PUT', '/api/line/standard', { roles: { s1: { zones: {}, source: 'drone' } } }, jsonHdr)
   ];
   check('an aspect outside 0.2 to 5, a non-number aspect or an unknown source is refused', stdAsBad.every(r => r.status === 400), stdAsBad.map(r => r.status).join());
+  const ovView = (asp, z) => ({ zones: z || { supply: { x: 0.2, y: 0.1, w: 0.3, h: 0.4 } }, aspect: asp, source: 'phone', note: 'upright', updatedAt: '2026-10-29T23:45:00.000Z' });
+  const ovPut = await req('PUT', '/api/line/standard', { roles: { s1: { zones: { supply: { x: 0.1, y: 0.2, w: 0.3, h: 0.4 } }, aspect: 1.3333, otherViews: [ovView(0.75, { supply: { x: 0.2, y: 0.1, w: 0.3, h: 0.4 }, ghost: { x: 0, y: 0, w: 0.1, h: 0.1 } })] } } }, jsonHdr);
+  const ovGot = (await req('GET', '/api/line/standard')).json.roles.s1;
+  check('otherViews round-trips through PUT then GET (aspect, source, note, updatedAt kept; unknown zone ids dropped)', ovPut.status === 200 && ovGot.otherViews && ovGot.otherViews.length === 1 && ovGot.otherViews[0].aspect === 0.75 && ovGot.otherViews[0].source === 'phone' && ovGot.otherViews[0].note === 'upright' && ovGot.otherViews[0].updatedAt === '2026-10-29T23:45:00.000Z' && ovGot.otherViews[0].zones.supply.x === 0.2 && !ovGot.otherViews[0].zones.ghost && ovGot.zones.supply.h === 0.4, JSON.stringify(ovGot));
+  const ovBad = [
+    await req('PUT', '/api/line/standard', { roles: { s1: { zones: {}, otherViews: [ovView(9)] } } }, jsonHdr),
+    await req('PUT', '/api/line/standard', { roles: { s1: { zones: {}, otherViews: [ovView(0.1)] } } }, jsonHdr),
+    await req('PUT', '/api/line/standard', { roles: { s1: { zones: {}, otherViews: [{ zones: { supply: { x: 0, y: 0, w: 0.1, h: 0.1 } } }] } } }, jsonHdr),
+    await req('PUT', '/api/line/standard', { roles: { s1: { zones: {}, otherViews: [Object.assign(ovView(0.75), { source: 'drone' })] } } }, jsonHdr),
+    await req('PUT', '/api/line/standard', { roles: { s1: { zones: {}, otherViews: 'nope' } } }, jsonHdr)
+  ];
+  check('an otherViews entry with a bad or missing aspect, an unknown source, or a non-list is refused', ovBad.every(r => r.status === 400 && /aspect|source|otherViews/.test(r.text)), ovBad.map(r => r.status).join());
+  const ov9 = await req('PUT', '/api/line/standard', { roles: { s1: { zones: {}, otherViews: Array.from({ length: 9 }, (_, i) => ovView(0.5 + i * 0.1)) } } }, jsonHdr);
+  const ov8 = await req('PUT', '/api/line/standard', { roles: { s1: { zones: {}, otherViews: Array.from({ length: 8 }, (_, i) => ovView(0.5 + i * 0.1)) } } }, jsonHdr);
+  check('9 otherViews are refused, 8 are accepted', ov9.status === 400 && ov8.status === 200, ov9.status + ' ' + ov8.status);
+  const ovEmpty = await req('PUT', '/api/line/standard', { roles: { s1: { zones: {}, otherViews: [ovView(0.75, { ghost: { x: 0, y: 0, w: 0.1, h: 0.1 } })] } } }, jsonHdr);
+  check('an otherViews entry left with no known zone is dropped', ovEmpty.status === 200 && (await req('GET', '/api/line/standard')).json.roles.s1.otherViews.length === 0);
+  const ovNone = await req('PUT', '/api/line/standard', { roles: { s1: { zones: { supply: { x: 0.1, y: 0.2, w: 0.3, h: 0.4 } } } } }, jsonHdr);
+  check('a body without otherViews still works and stores none', ovNone.status === 200 && !('otherViews' in (await req('GET', '/api/line/standard')).json.roles.s1));
   const stdBad = [
     await req('PUT', '/api/line/standard', { roles: { s9: { zones: {} } } }, jsonHdr),
     await req('PUT', '/api/line/standard', { roles: { 's5:s4': { zones: {} } } }, jsonHdr),

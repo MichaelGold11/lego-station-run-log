@@ -258,7 +258,12 @@ bin has no reason, and the yield tile says "Turn on Score the cameras to log rea
    standard** in Setup and commit that file; **Use standard setup** puts it back on a station, and
    editing then pressing **Save as standard** updates it when the mount changes. The standard is the
    zones only: calibration depends on the light that day, so each laptop calibrates itself. It is read
-   and written through `GET` and `PUT /api/line/standard`.
+   and written through `GET` and `PUT /api/line/standard`. A role keeps its main view (`zones`, `aspect`,
+   `source`, `note`, `updatedAt`) and may add `otherViews`: up to 8 entries of the same shape, each with a
+   required `aspect` (0.2 to 5), for the other shape of video (for example portrait). The page picks the
+   view nearest to the live aspect and, when the boxes still equal a standard view, swaps them to the
+   nearest view when the phone is turned (never during a session; calibration and the saved reference are
+   reset). Boxes that match no view are never touched. Landscape remains the recommended mount.
 4. With the work area empty and still, press **Calibrate empty** (2 seconds).
 5. Press **Done**. Each station's head says **Ready**, or what is missing ("Setup needed", which opens
    Setup). Recording is on for cameras and phones (Setup's **Record video**, per station, off by

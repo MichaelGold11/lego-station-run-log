@@ -489,13 +489,13 @@ button.chip:hover { border-color: var(--warn-ink); }
       } catch (e) { banner('setup', 'Setup was not saved: the local server is not answering.', 'crit'); }
     }, 400);
   }
-  // The standard setup (data/meta/wire-line-standard.json): the role's zones for the trained camera mount, no calibration.
+  // The standard setup (data/meta/wire-line-standard.json): the role's boxes, no calibration. A role has a main view and
+  // optional otherViews, one per shape of video (landscape, portrait), because zones are fractions of the frame.
   // A station uses the standard of its role, whatever its own id.
-  function stdZones(st) {
-    const r = G.standard.roles[st.cfg.role || st.cfg.id], out = {};
-    if (r && r.zones) for (const z of st.cfg.zones) { const b = r.zones[z.id]; if (b) out[z.id] = { x: b.x, y: b.y, w: b.w, h: b.h }; }
-    return out;
-  }
+  const stdRole = st => G.standard.roles[st.cfg.role || st.cfg.id];
+  const stdViews = st => LE.standardViews(stdRole(st), st.cfg.zones.map(z => z.id));
+  const stdPick = st => LE.pickStandardView(stdRole(st), st.cfg.zones.map(z => z.id), viewAspect(st));
+  const stdCopy = z => { const o = {}; for (const k of Object.keys(z)) o[k] = { x: z[k].x, y: z[k].y, w: z[k].w, h: z[k].h }; return o; };
   // The view the live video has now: width / height, and the words for it in messages.
   const viewAspect = st => (st.video && st.video.videoWidth && st.video.videoHeight ? st.video.videoWidth / st.video.videoHeight : null);
   const viewWord = a => (a < 0.9 ? 'portrait' : a > 1.1 ? 'landscape' : 'square');
@@ -505,52 +505,74 @@ button.chip:hover { border-color: var(--warn-ink); }
     return a.toFixed(2);
   }
   const viewSource = st => (st.source.type === 'phone' ? 'phone' : st.source.type === 'camera' ? 'camera' : null);
-  // Zones are fractions of the frame, so a standard drawn on another shape of view does not fit. Null when it fits or when
-  // either side is unknown; else a plain sentence for the person to read.
-  function stdMismatch(st) {
-    const r = G.standard.roles[st.cfg.role || st.cfg.id], a = viewAspect(st);
-    if (!r || !(r.aspect > 0) || !a || Math.abs(a / r.aspect - 1) <= 0.1) return null;
-    return 'The standard was set on a ' + viewWord(r.aspect) + (r.source ? ' ' + r.source : '') + ' view (' + viewRatio(r.aspect) + '); this view is ' + viewWord(a) + (viewSource(st) ? ' ' + viewSource(st) : '') + ' (' + viewRatio(a) + ').';
-  }
-  // A station with no saved zones starts from its role's standard when one is committed and it fits the view. A standard
-  // with a recorded aspect waits for the live video (the check runs again from the render until it can decide).
+  // What the person reads when the picked view was drawn on another shape than the live one.
+  const stdShapeNote = (st, v, a) => 'The boxes were set on a ' + viewWord(v.aspect) + (v.source ? ' ' + v.source : '') + ' view (' + viewRatio(v.aspect) + '); this view is ' + viewWord(a) + (viewSource(st) ? ' ' + viewSource(st) : '') + ' (' + viewRatio(a) + ').';
+  // The standard follows the picture. A station with no boxes gets the nearest view once, when the video is live. Boxes
+  // that equal one view get swapped for the nearest view when the phone is turned (a drawn or edited setup is never
+  // touched). The phone is often held upright to scan the QR code and mounted the other way after, so this runs on every
+  // change of shape, but never during a session. Cached: renderStation calls this many times a second.
   function autoStandard(st) {
-    const z = stdZones(st), r = G.standard.roles[st.cfg.role || st.cfg.id];
-    if (!Object.keys(z).length || Object.keys(st.setup.zones).length) { st.stdAuto = true; return; }
-    if (r && r.aspect > 0 && !viewAspect(st)) return;
-    const why = stdMismatch(st);
-    if (why) {    // not settled: the phone is often held upright to scan the QR code and mounted the other way after, so this keeps trying
-      const msg = why + ' Not applied: draw the zones, or press Use standard setup to apply it anyway.';
-      if (msg !== st.stdMsg) { st.stdMsg = msg; banner('std:' + st.cfg.id, esc(st.cfg.id.toUpperCase()) + ': ' + esc(msg)); }
-    } else {
+    const key = (viewAspect(st) || 0).toFixed(2) + '|' + !!G.session;
+    if (st.stdKey === key && st.stdSeen === G.standard) return;
+    st.stdKey = key; st.stdSeen = G.standard;
+    const views = stdViews(st);
+    if (!views.length) { st.stdAuto = true; return; }
+    const a = viewAspect(st), p = stdPick(st), has = Object.keys(st.setup.zones).length > 0;
+    if (!has && !st.stdAuto) {
+      if (!a && views.some(v => v.aspect)) return;    // wait for the live video, so the nearest view can be picked
       st.stdAuto = true;
-      st.setup.zones = z; st.prevGray = null; st.stdMsg = 'Standard setup applied';
+      st.setup.zones = stdCopy(p.view.zones); st.prevGray = null;
+      const why = p.fits ? '' : ' ' + stdShapeNote(st, p.view, a) + ' Check that they sit on your work area.';
+      st.stdMsg = p.fits ? 'Standard setup applied' : 'Standard setup applied.' + why;
       saveSetup(st);
-      banner('std:' + st.cfg.id, esc(st.cfg.id.toUpperCase()) + ': standard setup applied. Calibrate with the work area empty.');
-    }
-    setTimeout(() => banner('std:' + st.cfg.id, ''), 8000);
+      banner('std:' + st.cfg.id, esc(st.cfg.id.toUpperCase()) + ': ' + (p.fits ? 'standard setup applied. Calibrate with the work area empty.' : esc('Standard setup applied.' + why)));
+      setTimeout(() => banner('std:' + st.cfg.id, ''), 8000);
+    } else if (has) {
+      st.stdAuto = true;
+      const cur = a && views.find(v => LE.sameZones(st.setup.zones, v.zones));
+      if (!cur || G.session || (cur.main === p.view.main && cur.index === p.view.index)) return;
+      st.setup.zones = stdCopy(p.view.zones); st.prevGray = null; st.setup.calib = { motion: {}, bright: {} };
+      dropRef(st, 'The boxes changed with the view: press Save correct state again.');
+      st.stdMsg = 'Boxes changed to the ' + viewWord(p.view.aspect || a) + ' view. Calibrate with the work area empty.';
+      saveSetup(st);
+      banner('std:' + st.cfg.id, esc(st.cfg.id.toUpperCase() + ': ' + st.stdMsg));
+      setTimeout(() => banner('std:' + st.cfg.id, ''), 8000);
+    } else return;
     if (st.zbtns) { renderSetup(st); drawOverlay(st); }
   }
   function useStandard(st) {
-    const z = stdZones(st);
-    if (!Object.keys(z).length) return;
-    const why = stdMismatch(st);
-    if (why && !confirm(why + ' The boxes may not fit. Use the standard setup anyway?')) return;
+    const p = stdPick(st);
+    if (!p) return;
+    const a = viewAspect(st);
+    if (!p.fits && !confirm(stdShapeNote(st, p.view, a) + ' The boxes may not fit. Use the standard setup anyway?')) return;
     if (Object.keys(st.setup.zones).length && !confirm('Replace the zones on ' + st.cfg.id.toUpperCase() + ' with the standard setup? Calibration is kept.')) return;
-    st.setup.zones = z; st.prevGray = null; st.stdMsg = 'Standard setup applied';
+    st.setup.zones = stdCopy(p.view.zones); st.prevGray = null; st.stdMsg = 'Standard setup applied';
     saveSetup(st); renderSetup(st); drawOverlay(st);
   }
   async function saveStandard(st) {
     const zones = {};
     for (const zn of st.cfg.zones) if (st.setup.zones[zn.id]) zones[zn.id] = st.setup.zones[zn.id];
     if (!Object.keys(zones).length) { st.stdMsg = 'Draw the zones first.'; renderSetup(st); return; }
-    const role = st.cfg.role || st.cfg.id;
-    if (!confirm('Save these zones as the standard for ' + role.toUpperCase() + '? This changes the shared file data/meta/wire-line-standard.json, which gets committed and is used by every laptop.')) return;
+    const role = st.cfg.role || st.cfg.id, asp = viewAspect(st), src = viewSource(st), old = G.standard.roles[role] || {};
+    const shape = asp ? ' for ' + viewWord(asp) + ' (' + viewRatio(asp) + ') views' : '';
+    if (!confirm('Save these zones as the standard for ' + role.toUpperCase() + shape + '? This changes the shared file data/meta/wire-line-standard.json, which gets committed and is used by every laptop.')) return;
+    // One view per shape: replace the view that fits the live shape; else fill an empty main view; else add a view.
+    const mk = (note, withAspect) => {
+      const v = { zones, note: note || '', updatedAt: new Date().toISOString() };
+      if (withAspect && asp) v.aspect = Math.round(asp * 1000) / 1000;
+      if (src) v.source = src;
+      return v;
+    };
+    const others = (old.otherViews || []).slice(), p = asp ? LE.pickStandardView(old, st.cfg.zones.map(z => z.id), asp) : null;
+    let main;
+    if (!asp || (p && p.fits && p.view.main)) main = mk(old.note, true);
+    else if (p && p.fits) others[p.view.index] = mk(others[p.view.index].note, true);
+    else if (!Object.keys(old.zones || {}).length) main = mk(old.note, true);
+    else if (others.length >= 8) { st.stdMsg = 'Standard not saved: this role already has 8 other views.'; renderSetup(st); return; }
+    else others.push(mk('', true));
     const roles = Object.assign({}, G.standard.roles);
-    roles[role] = { zones, note: (G.standard.roles[role] && G.standard.roles[role].note) || '', updatedAt: new Date().toISOString() };
-    const asp = viewAspect(st), src = viewSource(st);
-    if (asp) roles[role].aspect = Math.round(asp * 1000) / 1000;
-    if (src) roles[role].source = src;
+    roles[role] = main || Object.assign({}, old, { zones: old.zones || {} });
+    if (others.length) roles[role].otherViews = others; else delete roles[role].otherViews;
     try {
       const r = await fetch('/api/line/standard', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ version: 1, roles }) });
       const j = await r.json();
@@ -1392,7 +1414,7 @@ button.chip:hover { border-color: var(--warn-ink); }
     // The next step lights up: Calibrate once every box is drawn, then Bulb on.
     st.el.querySelector('.calb').classList.toggle('primary', st.cfg.zones.every(z => st.setup.zones[z.id]) && !nm);
     if (st.bulbs.length) st.el.querySelector('.bon').classList.toggle('primary', nm > 0 && bulb.on == null);
-    const hasStd = Object.keys(stdZones(st)).length > 0, su = st.el.querySelector('.stdu');
+    const hasStd = stdViews(st).length > 0, su = st.el.querySelector('.stdu');
     su.disabled = !hasStd;
     su.title = hasStd ? 'Replace this station\'s zones with the saved standard for its role. Calibration is not touched.' : 'No standard is saved yet for this role. Draw the zones and press Save as standard.';
     st.el.querySelector('.stdst').textContent = st.stdMsg || '';
@@ -1697,7 +1719,7 @@ button.chip:hover { border-color: var(--warn-ink); }
   function capTake(st, reason, t) {
     const c = st.cap, url = capGrab(st.video);
     if (!url) { capWarn('a frame was too large'); return; }
-    const m = modelOf(st), role = st.cfg.role || st.cfg.id, stdAt = G.standard.roles[role] && G.standard.roles[role].updatedAt;
+    const m = modelOf(st), role = st.cfg.role || st.cfg.id, stdR = G.standard.roles[role], stdV = stdViews(st).find(v => LE.sameZones(st.setup.zones, v.zones)), stdAt = stdV ? stdV.updatedAt : stdR && stdR.updatedAt;
     const body = {
       station: st.id, role, stationName: st.cfg.name, t, reason, image: url, boxes: capBoxes(st, t),
       zones: Object.fromEntries(Object.entries(zonesOf(st) || {}).filter(([, z]) => z && typeof z === 'object')),
@@ -1957,7 +1979,7 @@ button.chip:hover { border-color: var(--warn-ink); }
     return '';
   }
   function renderStation(st, sum, t) {
-    if (!st.stdAuto) autoStandard(st);
+    autoStandard(st);
     const s = st.eng.state(), cfg = st.cfg, label = id => (cfg.substeps.find(x => x.id === id) || {}).label || id;
     const ss = sum && sum.stations[st.id], takt = G.config.taktSec, rules = st.eng.rules(), rd = readiness(st, rules);
     // head: what films the station, Ready or what is missing, and the REC readout
