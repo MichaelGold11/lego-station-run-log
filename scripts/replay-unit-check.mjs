@@ -175,23 +175,29 @@ async function* frames() {
 }
 
 const f3 = v => (v == null ? '' : (Math.round(v * 1000) / 1000).toString());
-const cols = ['t', 'closed', 'open', 'red', 'white', 'black', 'gate', 'dark', 'rings', 'angles', 'fired'];
+const cols = ['t', 'closed', 'open', 'red', 'white', 'black', 'gate', 'dark', 'rings', 'angles', 'fired', 'fired2'];
 if (opt.zoom) cols.push('zopen', 'zclosed');
 if (opt.srcLong) cols.push('hopen', 'hclosed');
 cols.push('cx', 'cy', 'cw', 'ch');
 const lines = [cols.join(',')];
 
-// Square crop of K times the connector's larger side, centered on it, shifted to stay inside the frame.
-async function zoomLook(rgb, fw, fh, cbox, K) {
-  const side0 = K * Math.max(cbox[2] * fw, cbox[3] * fh), side = Math.min(side0, fw, fh);
-  const x0 = Math.max(0, Math.min(fw - side, cbox[0] * fw - side / 2)), y0 = Math.max(0, Math.min(fh - side, cbox[1] * fh - side / 2));
-  const lb = LD.letterbox(S, S, S), sq = resize(rgb, fw, fh, x0, y0, side, side, S, S);
-  const r = await infer(sq, S, S);
-  void lb;
-  return { open: bestConf(r.dets, spec.open), closed: bestConf(r.dets, spec.closed) };
+// Experiment only (not in the engine): square crop of K times the box's larger side, centered on it, clamped into the frame.
+const SECOND_MIN_LONG = 960, SECOND_ZOOM = 4;
+function cropRect(nbox, W, H, K) {
+  const bw = (nbox[2] - nbox[0]) * W, bh = (nbox[3] - nbox[1]) * H, cx = (nbox[0] + nbox[2]) / 2 * W, cy = (nbox[1] + nbox[3]) / 2 * H;
+  const side = Math.min(K * Math.max(bw, bh), W, H);
+  return { x: Math.max(0, Math.min(W - side, cx - side / 2)), y: Math.max(0, Math.min(H - side, cy - side / 2)), side };
 }
+async function cropLook(rgb, fw, fh, nbox, K) {
+  const c = cropRect(nbox, fw, fh, K);
+  const sq = resize(rgb, fw, fh, c.x, c.y, c.side, c.side, S, S);
+  const r = await infer(sq, S, S);
+  return { dets: r.dets, open: bestConf(r.dets, spec.open), closed: bestConf(r.dets, spec.closed) };
+}
+const cboxToN = c => [c[0] - c[2] / 2, c[1] - c[3] / 2, c[0] + c[2] / 2, c[1] + c[3] / 2];
+const zoomLook = (rgb, fw, fh, cbox, K) => cropLook(rgb, fw, fh, cboxToN(cbox), K);
 
-let i = 0, nFire = 0, mismatches = 0;
+let i = 0, nFire = 0, nFire2 = 0, mismatches = 0;
 for await (const raw of frames()) {
   const t = i / opt.fps; i++;
   const rgb = opt.srcLong ? resize(raw, dec.w, dec.h, 0, 0, dec.w, dec.h, main.w, main.h) : raw;
@@ -201,8 +207,15 @@ for await (const raw of frames()) {
   const dg = diagnose(dets, px, main.w, main.h);
   if ((dg.gate === 'pass') !== !!real) { mismatches++; console.error('VERDICT MISMATCH at t=' + t.toFixed(2) + ': instrumented ' + dg.gate + ' real ' + (real ? 'fire' : 'null')); process.exit(3); }
   if (real) nFire++;
+  // Second look: only on a fired frame, only when the station has one and the full-size picture is large enough; the crop comes from the --src-long frame.
+  let fired2 = real ? 1 : 0;
+  if (real && Math.max(dec.w, dec.h) >= SECOND_MIN_LONG) {
+    const z = await cropLook(raw, dec.w, dec.h, real.nbox, opt.zoom || SECOND_ZOOM);
+    fired2 = bestConf(z.dets.filter(d => d.conf >= MIN_BOX), spec.open) < O.open ? 1 : 0;
+  }
+  if (fired2) nFire2++;
   const row = [t.toFixed(2), f3(bestConf(dets, spec.closed)), f3(bestConf(dets, spec.open)), f3(bestConf(dets, 'red_wire')), f3(bestConf(dets, 'white_wire')), f3(bestConf(dets, 'black_wire')),
-    dg.gate, f3(dg.dark), dg.rings, dg.angles, real ? 1 : 0];
+    dg.gate, f3(dg.dark), dg.rings, dg.angles, real ? 1 : 0, fired2];
   if (opt.zoom) {
     if (dg.cbox) { const z = await zoomLook(rgb, main.w, main.h, dg.cbox, opt.zoom); row.push(f3(z.open), f3(z.closed)); } else row.push('', '');
   }
@@ -214,5 +227,5 @@ for await (const raw of frames()) {
 }
 const text = lines.join('\n') + '\n';
 if (opt.out) fs.writeFileSync(opt.out, text); else process.stdout.write(text);
-console.error(path.basename(video) + ': ' + (i) + ' frames, ' + main.w + 'x' + main.h + (opt.srcLong ? ' (src ' + dec.w + 'x' + dec.h + ')' : '') + ', fired ' + nFire + ', verdict mismatches ' + mismatches);
+console.error(path.basename(video) + ': ' + (i) + ' frames, ' + main.w + 'x' + main.h + (opt.srcLong ? ' (src ' + dec.w + 'x' + dec.h + ')' : '') + ', fired ' + nFire + ', fired2 ' + nFire2 + ', verdict mismatches ' + mismatches);
 process.exit(0);

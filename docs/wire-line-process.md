@@ -285,7 +285,7 @@ bin has no reason, and the yield tile says "Turn on Score the cameras to log rea
    `connector_open` at 0.4 or more, `red_wire` and `white_wire` each with an end at the connector, and a
    dark colorless line crossing at least half of the arcs around the connector on the side the wires
    leave. That last check is pixels, not the model: the model cannot see a black wire once it is clamped
-   (best score 0.10 to 0.23 on finished units). It needs a light table. On every frame of the four S2
+   (best score 0.10 to 0.23 on finished units). On white paper or a pale sheet the model rarely sees the white wire, so a finished unit does not count (five S2 test runs on 2026-11-12); a smooth mid-tone surface such as brown card worked. On every frame of the four S2
    recordings it fired only on the two finished units and never early; the two recordings where the unit
    stayed in someone's hands never fired, so a unit has to be set down to count. Teaching the model to see a
    clamped black wire would remove the pixel check.
@@ -363,9 +363,10 @@ remade by itself when the laptop's addresses change.
 
 **Phone setup.** On each iPhone or iPad: Settings > Display & Brightness > Auto-Lock: **Never**;
 keep it plugged in; keep Safari in front on the camera page (the camera stops when Safari goes to the
-background or the screen locks); and if it is mounted flat over the table, turn on **Orientation
-Lock** in Control Center first so the picture does not turn. On Android: Settings > Display > Screen
-timeout at its longest, Chrome in front, and **Auto-rotate** off. If an Android phone cannot open the
+background or the screen locks); and if it is mounted flat over the table, hold the phone sideways
+until its picture is wide, then lay it flat. On an iPhone leave **Orientation Lock** off, because it holds
+the picture upright; on an iPad lock the rotation once the picture is wide. On Android: Settings > Display > Screen
+timeout at its longest, Chrome in front, and lock the rotation once the picture is wide. If an Android phone cannot open the
 `.local` link (older Android versions do not look up `.local` names), pick the laptop's IP address
 in the **Address** list under the QR code.
 
