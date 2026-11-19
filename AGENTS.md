@@ -59,6 +59,7 @@ CSV columns, model export contract) is [docs/wire-line-process.md](docs/wire-lin
 | Path | What it is |
 |---|---|
 | `app/line.html`, `app/line-engine.js` | The floor page (stations as cards you pan, zoom and arrange) and its config-driven engine. The screen is lean on purpose ([docs/lean-plan.md](docs/lean-plan.md)): run controls only, everything else in Setup or Edit layout |
+| Demo view (button in the `/line` header) | Only each station's camera with its name and a status strip (step, on track, defect or pass/fail); the stations, their links, anonymous operator code and level and the camera controls sit in a left panel. Remembered in `localStorage` (`wire-line:demo`). Needs a real browser and phone check |
 | `data/meta/wire-line.json` | The process: the station roles (zones, substeps, QA), fail reasons, and `models` (one entry per role) |
 | `data/meta/wire-line-layouts.json` | Saved floor layouts and the active one (station id, name, role, position). Git-ignored |
 | `app/models/` | Model files (`.onnx`) the page loads |

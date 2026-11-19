@@ -78,6 +78,11 @@ try {
   check('GET /runs serves the LEGO run log with its local runtime', runs.status === 200 && /<title>LEGO Station Run Log<\/title>/.test(runs.text) && /\/local-runtime\.js/.test(runs.text));
   check('npm start prints the wire line first and the run log second', /Wire line: http:\/\/localhost:\d+\/line\n[^]*LEGO run log \(archived\): http:\/\/localhost:\d+\/runs/.test(log), log.split('\n').slice(0, 2).join(' | '));
 
+  const lineP = await req('GET', '/line'), insP = await req('GET', '/insights');
+  check('GET /line has the Insights link and the Demo view toggle with its station tiles container', lineP.status === 200 && /href="\/insights"/.test(lineP.text) && /id="btnDemo"/.test(lineP.text) && /id="demoGrid"/.test(lineP.text) && /id="demoSide"/.test(lineP.text));
+  check('GET /insights serves the manager page', insP.status === 200 && /Insights/.test(insP.text));
+  check('line.html script has the Demo view wiring: remembered toggle, stages move into tiles, status strip, no names', /wire-line:demo/.test(lineP.text) && /function buildDemo/.test(lineP.text) && /function renderDemoStrips/.test(lineP.text) && /anonymous codes/.test(lineP.text));
+
   console.log('config and setup');
   const cfg = await req('GET', '/api/line/config');
   check('GET /api/line/config falls back to the repo config (4 stations)', cfg.status === 200 && cfg.json.stations.length === 4);
