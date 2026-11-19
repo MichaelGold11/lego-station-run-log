@@ -177,6 +177,9 @@ async function handle(req, res) {
     return fail(res, 404, 'not_found', 'No such model file.');
   }
   if (p === '/dashboard') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'dashboard.html')), 'text/html; charset=utf-8');
+  if (p === '/insights') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'insights.html')), 'text/html; charset=utf-8');
+  if (p === '/insights-lib.js') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'insights-lib.js')), 'text/javascript; charset=utf-8');
+  if (p === '/api/insights') return insightsApi(req, res);
   if (p === '/line') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'line.html')), 'text/html; charset=utf-8', ISOLATE);
   if (p === '/pool') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'pool.html')), 'text/html; charset=utf-8', ISOLATE);
   if (p === '/collect') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'collect.html')), 'text/html; charset=utf-8', ISOLATE);
@@ -587,6 +590,37 @@ function cleanEvent(e, ids) {
   if (e.type === 'operator' && (e.station == null || cleanOperator({ code: e.code, level: e.level }) === undefined)) return 'needs a station, a code like Op-07 and a level (no names)';
   if (JSON.stringify(e).length > 4000) return 'is too long';
   return null;
+}
+
+// ---------- Assembly Insights (/insights): manager view of the recorded sessions ----------
+// GET /api/insights: one digest per session (cycles per station, observations with photo links) and the review
+// decisions people made on /insights (data/insights-reviews/<observation id>.json, written through /api/db). The page
+// runs InsightsLib.rollup over these, so every number on every page comes from one calculation. Digests are cached
+// per session until its events.jsonl or captures.jsonl changes.
+const InsightsLib = (() => { const mod = { exports: {} }; new Function('module', fs.readFileSync(path.join(ROOT, 'app', 'insights-lib.js'), 'utf8'))(mod); return mod.exports; })();
+const INSIGHTS_REVIEWS = path.join(DATA, 'insights-reviews');
+const DIGESTS = new Map();
+function sessionDigest(id) {
+  const dir = path.join(SESSIONS, id), stamp = ['events.jsonl', 'captures.jsonl', 'session.json'].map(n => { try { return fs.statSync(path.join(dir, n)).mtimeMs; } catch (e) { return 0; } }).join('|');
+  const hit = DIGESTS.get(id);
+  if (hit && hit.stamp === stamp) return hit.digest;
+  const doc = SESS.has(id) ? SESS.get(id).doc : readJson(sessionFile(id));
+  const digest = InsightsLib.digestSession({ id, doc, events: readEvents(id), captures: readCaptures(id), config: sessionConfig(doc) }, LineEngine);
+  DIGESTS.set(id, { stamp, digest });
+  return digest;
+}
+function insightsApi(req, res) {
+  if (req.method !== 'GET') return fail(res, 405, 'invalid_argument', 'Method not allowed.');
+  const digests = [], skipped = [];
+  if (fs.existsSync(SESSIONS)) for (const id of fs.readdirSync(SESSIONS).filter(n => SESSION_ID.test(n)).sort()) {
+    try { digests.push(sessionDigest(id)); } catch (e) { skipped.push(id); }
+  }
+  const reviews = {};
+  if (fs.existsSync(INSIGHTS_REVIEWS)) for (const n of fs.readdirSync(INSIGHTS_REVIEWS).filter(n => n.endsWith('.json'))) {
+    try { reviews[n.slice(0, -5)] = readJson(path.join(INSIGHTS_REVIEWS, n)); } catch (e) { /* a torn file */ }
+  }
+  const cfg = lineConfig();
+  return send(res, 200, { generatedAt: Date.now(), digests, reviews, skipped, config: cfg ? { name: cfg.name, stations: cfg.stations, failReasons: cfg.failReasons } : null });
 }
 
 // ---------- wire line: captures, review and the training set ----------

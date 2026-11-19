@@ -93,6 +93,11 @@ try {
   check('GET /dashboard serves the dashboard page as text/html', dash.status === 200 && /text\/html/.test(dash.headers['content-type']) && /Wire Line Dashboard/.test(dash.text));
   const dashBad = await req('GET', '/dashboard', null, { Host: 'evil.example' });
   check('GET /dashboard with a foreign Host gets 403', dashBad.status === 403);
+  const ins = await req('GET', '/insights');
+  check('GET /insights serves the Assembly Insights page', ins.status === 200 && /text\/html/.test(ins.headers['content-type']) && /Assembly Insights/.test(ins.text));
+  const insApi = await req('GET', '/api/insights');
+  check('GET /api/insights answers with digests and reviews', insApi.status === 200 && Array.isArray(insApi.json.digests) && insApi.json.reviews && typeof insApi.json.reviews === 'object', insApi.text.slice(0, 160));
+  check('GET /api/insights with a foreign Host gets 403', (await req('GET', '/api/insights', null, { Host: 'evil.example' })).status === 403);
   const setup = { s1: { zones: { supply: { x: 0.1, y: 0.1, w: 0.2, h: 0.3 }, ghost: { x: 0, y: 0, w: 0.1, h: 0.1 } }, calib: { motion: { supply: 0.02 }, bright: { supply: { off: 80 } } } } };
   const put = await req('PUT', '/api/line/setup', setup, jsonHdr);
   check('PUT /api/line/setup saves zones and calibration', put.status === 200, put.text);

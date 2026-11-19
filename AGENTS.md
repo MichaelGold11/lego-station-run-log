@@ -7,6 +7,7 @@ People: start with `README.md`.
 |---|---|
 | `/line` (`/` opens it) | The wire line, the team's main tool (section "Wire line platform" below) |
 | `/phone` on port 4174 | A station's phone or tablet camera page (HTTPS) |
+| `/insights` | Assembly Insights: the plant manager view of the recorded runs (Overview, Stations, Trends, flag review). `app/insights.html`, `app/insights-lib.js`, `GET /api/insights`; review decisions in `data/insights-reviews/`. Camera Testing reads real sessions, Simulation runs a made-up week through the same calculation |
 | `/runs` | Archived: the LEGO run log this section and "Analyze runs" are about ([docs/lego-run-log.md](docs/lego-run-log.md)) |
 | `/live` | Archived: the LEGO single-station live prototype |
 
