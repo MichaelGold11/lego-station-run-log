@@ -26,3 +26,8 @@ Copy `best.onnx` here as `lego-parts.onnx`. The page reads the input size from t
 `models` in `data/meta/wire-line.json` (see "For the model team" in `docs/wire-line-process.md`). The page
 checks the file's class count against the config's class list and falls back to zones for a station that
 does not match.
+
+## Wire line model versions
+
+- S3 runs `s3-connector-new.onnx` (Ruza, PR #8, 2026-11-19; same classes and 640 px input as before). `s3-connector.onnx` is the previous version, kept in place.
+- S2 runs `s2-connector.onnx` (2026-11-05 retrain on 52 videos). `s2-connector-v1.onnx` is a different file with the same classes and size; it is not wired in.
