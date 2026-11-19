@@ -264,7 +264,7 @@ try {
 
   console.log('standard setup per role');
   const std0 = await req('GET', '/api/line/standard');
-  check('GET /api/line/standard returns the committed file (roles with no zones yet)', std0.status === 200 && std0.json.version === 1 && std0.json.roles && std0.json.roles.s1 && Object.keys(std0.json.roles.s1.zones).length === 0, std0.text.slice(0, 200));
+  check('GET /api/line/standard returns the committed file (version 1, every role present)', std0.status === 200 && std0.json.version === 1 && std0.json.roles && std0.json.roles.s1 && std0.json.roles.s4 && Object.keys(std0.json.roles.s1.zones).length > 0, std0.text.slice(0, 200));
   const stdPut = await req('PUT', '/api/line/standard', { roles: { s1: { zones: { supply: { x: 0.1, y: 0.2, w: 0.3, h: 0.4 }, ghost: { x: 0, y: 0, w: 0.1, h: 0.1 } }, note: 'trained mount' } } }, jsonHdr);
   const stdGot = (await req('GET', '/api/line/standard')).json;
   check('PUT /api/line/standard saves a role\'s zones; zones the role does not have are dropped', stdPut.status === 200 && stdGot.roles.s1.zones.supply.h === 0.4 && !stdGot.roles.s1.zones.ghost && stdGot.roles.s1.note === 'trained mount', JSON.stringify(stdGot));
