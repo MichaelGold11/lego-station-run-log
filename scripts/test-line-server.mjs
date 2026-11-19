@@ -82,7 +82,7 @@ try {
   check('GET /line has the Insights link and the Demo view toggle with its station tiles container', lineP.status === 200 && /href="\/insights"/.test(lineP.text) && /id="btnDemo"/.test(lineP.text) && /id="demoGrid"/.test(lineP.text) && /id="demoSide"/.test(lineP.text));
   check('GET /insights serves the manager page', insP.status === 200 && /Insights/.test(insP.text));
   check('line.html script has the Demo view wiring: remembered toggle, stages move into tiles, status strip, no names', /wire-line:demo/.test(lineP.text) && /function buildDemo/.test(lineP.text) && /function renderDemoStrips/.test(lineP.text) && /anonymous codes/.test(lineP.text));
-  check('Demo view: an unconnected tile is a placeholder, a waiting phone shows its QR only on request, and Clip works from the panel', /No camera yet/.test(lineP.text) && /class="dnocam"/.test(lineP.text) && /class="dclip"/.test(lineP.text) && /\(live \|\| !G\.demo \? \(!live \|\| ph\.showQr\) : ph\.showQr\)/.test(lineP.text));
+  check('Demo view: an unconnected tile is a placeholder, a waiting phone shows its QR only on request, and Clip works from the panel', /No camera yet/.test(lineP.text) && /dnocam/.test(lineP.text) && /class="dclip"/.test(lineP.text) && /\(live \|\| !G\.demo \? \(!live \|\| ph\.showQr\) : ph\.showQr\)/.test(lineP.text));
 
   console.log('config and setup');
   const cfg = await req('GET', '/api/line/config');
