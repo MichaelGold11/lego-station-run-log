@@ -1,0 +1,18 @@
+time,cycle,step,event,message,confidence,step_seconds,cycle_seconds
+2026-10-14T20:26:47,1,1,review,Plate is turned. Turn it back the way it was calibrated.,0.88,,
+2026-10-14T20:26:51,1,1,verified,Step 1 verified,0.90,0.0,
+2026-10-14T20:26:57,1,2,verified,Step 2 verified,0.82,5.9,
+2026-10-14T20:27:02,1,2,error,Pink brick turned the wrong way,0.84,,
+2026-10-14T20:27:24,1,2,error,Pink brick is missing (step 2),0.00,,
+2026-10-14T20:27:35,1,2,error,Pink brick in the wrong position,0.77,,
+2026-10-14T20:27:54,2,1,verified,Step 1 verified,0.90,10.8,
+2026-10-14T20:28:00,2,2,verified,Step 2 verified,0.84,5.9,
+2026-10-14T20:28:06,2,2,error,Pink brick turned the wrong way,0.85,,
+2026-10-14T20:28:21,2,2,error,Pink brick is missing (step 2),0.00,,
+2026-10-14T20:28:33,2,2,error,Pink brick is missing (step 2),0.00,,
+2026-10-14T20:28:39,2,2,error,Pink brick is missing (step 2),0.00,,
+2026-10-14T20:28:44,3,1,verified,Step 1 verified,0.91,3.2,
+2026-10-14T20:28:53,3,2,verified,Step 2 verified,0.82,9.7,
+2026-10-14T20:29:04,3,3,complete,Assembly complete in 24.0 s. Remove the build to start the next one.,0.79,11.1,24.0
+2026-10-14T20:29:15,3,2,error,Pink brick turned the wrong way,0.86,,
+2026-10-14T20:29:17,3,2,error,Pink brick turned the wrong way,0.86,,
