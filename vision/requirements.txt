@@ -1,0 +1,5 @@
+# Live step checker (Phase 4). Install with:  python -m pip install -r vision/requirements.txt
+ultralytics>=8.3      # YOLO (brings PyTorch and OpenCV with it)
+opencv-python>=4.9    # camera, drawing boxes and messages
+mediapipe>=0.10.14    # hand detection for the "clear view" trigger
+numpy>=1.26
