@@ -159,6 +159,13 @@ view for `departMs`), `new_unit` (the next unit's arrival step fired while the f
 view) or `session_stopped`. A unit that ends before the step checker closed its cycle is `incomplete`,
 `needsReview`, and never counted as done.
 
+- **One unit, one number (`newUnitNeedsEmpty`).** A finished unit's own wires are still in view, so the step
+  engine restarts its cycle and fires the arrival step again. With `newUnitNeedsEmpty: true` (S2 and S3) that
+  arrival is ignored while the finished unit is in view: the next unit starts only after the previous one left
+  (nothing in view and no hand for `departMs`). Off: the arrival ends the finished unit as `new_unit` and starts
+  the next one at once (the old behavior). Replay of the six S2 recordings counts one unit each. There is no
+  hold-time key for "complete": the checker already holds `unit_complete` for `holdFrames`, and the replay
+  showed no flicker in it.
 - **Numbering.** The number is given at arrival: the station's arrival substep, or a unit in view for
   `enterMs` (counted from when it showed). With `startNeedsEmpty` a unit already in view at Start waits for
   one empty frame first.
@@ -170,7 +177,7 @@ view) or `session_stopped`. A unit that ends before the step checker closed its 
   from its steps (new connector, black wire inserted; zones only for the last step), then held through the
   same `departMs`. S3 has no complete detector of its own and is unverified on real footage.
 - **Config** (validated by `checkConfig`): `enabled`, `from` (a station with the tracker enabled), `departMs`
-  and `enterMs` (0 to 60000), `presentConf` (0 to 1), `startNeedsEmpty`, `presenceClasses`. S1 and S4: off.
+  and `enterMs` (0 to 60000), `presentConf` (0 to 1), `startNeedsEmpty`, `newUnitNeedsEmpty`, `presenceClasses`. S1 and S4: off.
 - **Events:** `{type:"unit", station, action:"start"|"end", no, unit, ...}`; end carries start, end, steps,
   mistakes, reviews, result, ended, reset, unlinked, from. Key presses (`manual`) are matched by count and
   shown as a disagreement count.

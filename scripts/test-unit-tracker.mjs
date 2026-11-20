@@ -84,9 +84,9 @@ console.log('unit tracker: two units back to back');
   check('per-unit numbers advance and times do not overlap', e[1].start >= e[0].end);
 }
 
-console.log('unit tracker: new unit enters while the old one is still in view');
+console.log('unit tracker: new unit enters while the old one is still in view (newUnitNeedsEmpty off, the old behavior)');
 {
-  const r = rig(); r.run(500, false);
+  const r = rig({ newUnitNeedsEmpty: false }); r.run(500, false);
   normalUnit(r);
   r.run(300, true).arrive().run(500, true);           // new wires arrive, the old unit never left the view
   const e = r.ends();
@@ -185,6 +185,49 @@ console.log('unit tracker: S2 to S3 hand-off (one number down the line)');
   const csv = LE.trackedUnitsCsv(evs, SHIPPED, { id: 'x', crew: 'A', shift: 'Day' }).trim().split('\n');
   check('the per-unit export has one row per unit with S2 and S3 columns', /s2_arrive_ts/.test(csv[0]) && /s3_end_ts/.test(csv[0]) && /#001,1,0,/.test(csv[1]) && csv.some(l => /\?01/.test(l)), csv.slice(0, 3).join(' / '));
   check('every row has the same number of cells as the header', csv.every(l => l.split(',').length === csv[0].split(',').length));
+}
+
+console.log('unit tracker: newUnitNeedsEmpty (a finished unit\'s own wires do not start a new unit)');
+{
+  check('the shipped S2 and S3 set newUnitNeedsEmpty', S2.unitTracker.newUnitNeedsEmpty === true && SHIPPED.stations.find(x => x.id === 's3').unitTracker.newUnitNeedsEmpty === true);
+  const r = rig(); r.run(500, false);
+  normalUnit(r);
+  r.run(300, true).arrive().run(500, true).step('s2_open').run(500, true).arrive().run(1000, true);   // the finished unit's wires fire the arrival again, twice
+  check('still one unit, still complete, no new start', r.starts().length === 1 && r.ends().length === 0 && r.ut.state().phase === 'complete' && r.ut.state().no === '#001', JSON.stringify(r.ut.state().phase));
+  check('the arrival inside the finished unit is not logged as a step of it', r.ut.state().current.steps.filter(x => x.id === 's2_arrive').length === 1);
+  r.run(1000, false);
+  check('a hand over the table keeps the unit from having left', r.ut.state().phase === 'complete'); r.run(500, false, true).run(1500, false, true);
+  check('with a hand still in view it has not left', r.ends().length === 0);
+  r.run(3000, false);
+  check('it leaves after departMs of nothing in view, as departed', r.ends().length === 1 && r.ends()[0].ended === 'departed' && r.ends()[0].result === 'complete');
+  r.run(500, true).arrive().run(500, true);
+  check('the next arrival after it left is #002', r.starts().length === 2 && r.ut.state().no === '#002');
+  const off = rig({ newUnitNeedsEmpty: false }); off.run(500, false); normalUnit(off); off.run(300, true).arrive().run(500, true);
+  check('switched off, the old behavior holds (new_unit)', off.ends().length === 1 && off.ends()[0].ended === 'new_unit');
+  const bad = JSON.parse(JSON.stringify(SHIPPED)); bad.stations.find(x => x.id === 's2').unitTracker.newUnitNeedsEmpty = 'yes';
+  check('a bad newUnitNeedsEmpty is reported', LE.checkConfig(bad).some(m => /newUnitNeedsEmpty/.test(m)));
+}
+
+console.log('unit tracker: synthetic S2 to S3 run, two units, wires still in view when the arrival re-fires');
+{
+  const S3 = SHIPPED.stations.find(x => x.id === 's3');
+  const link = LE.createUnitLink(SHIPPED), u2 = LE.createUnitTracker(S2, { link }), u3 = LE.createUnitTracker(S3, { link });
+  let t = 0; const out = { s2: [], s3: [] };
+  const fr = (id, ms, present, evs) => { const ut = id === 's2' ? u2 : u3; for (let k = 0; k < Math.round(ms / 125); k++) { t += 125; out[id].push(...ut.update({ t, present, hand: false, events: k === 0 && evs ? evs.map(e => Object.assign({ station: id, t, source: 'model' }, e)) : [] })); } };
+  const ev2 = (substep, extra) => [Object.assign({ type: 'substep', substep, move: 'next' }, {})].concat(extra || []);
+  const s2unit = () => { fr('s2', 1000, true, [{ type: 'substep', substep: 's2_arrive', move: 'start' }]); fr('s2', 1000, true, ev2('s2_close', [{ type: 'cycle_end' }])); fr('s2', 500, true, [{ type: 'substep', substep: 's2_arrive', move: 'start' }]); fr('s2', 500, true); fr('s2', 2500, false); };
+  fr('s2', 500, false); fr('s3', 500, false);
+  s2unit(); s2unit();
+  const st = out.s2.filter(e => e.action === 'start'), en = out.s2.filter(e => e.action === 'end');
+  check('S2: two units #001 and #002, both complete, both departed (no extra unit from the re-fired arrival)', st.length === 2 && en.length === 2 && en.every(e => e.ended === 'departed' && e.result === 'complete'), JSON.stringify(en.map(e => [e.no, e.ended])));
+  const s3unit = (g) => { fr('s3', 1000, true, [{ type: 'substep', substep: 's3_arrive', move: 'start' }]); fr('s3', 1000, true, [{ type: 'substep', substep: 's3_insert', move: 'next' }, { type: 'cycle_end' }]); fr('s3', 500, true, [{ type: 'substep', substep: 's3_arrive', move: 'start' }]); fr('s3', 2500, false); };
+  s3unit(); s3unit();
+  const s3s = out.s3.filter(e => e.action === 'start'), s3e = out.s3.filter(e => e.action === 'end');
+  check('S3 gets #001 then #002, the same numbers, linked', s3s.length === 2 && s3s[0].no === '#001' && s3s[1].no === '#002' && s3s.every(e => e.from === 's2' && !e.unlinked), JSON.stringify(s3s.map(e => e.no)));
+  check('S3 ends both complete', s3e.length === 2 && s3e.every(e => e.result === 'complete'));
+  s3unit();
+  const s3n = out.s3.filter(e => e.action === 'start');
+  check('a third S3 arrival with nothing queued stays unlinked (?01)', s3n.length === 3 && s3n[2].no === '?01' && s3n[2].unlinked && s3n[2].unit === null, JSON.stringify(s3n[2]));
 }
 
 console.log('\n' + passes + ' passed, ' + fails + ' failed');

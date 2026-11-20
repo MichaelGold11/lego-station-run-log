@@ -48,7 +48,7 @@
       "label": "Arrange and clamp",
       "output": "the three wires closed in lever connector 1, red top, white middle, black bottom",
       "assembly": { "class": "unit_complete", "closed": "connector_closed", "open": "connector_open", "wires": ["red_wire", "white_wire"], "darkWire": "black_wire" },
-      "unitTracker": { "enabled": true, "departMs": 2000, "enterMs": 500, "presentConf": 0.35, "startNeedsEmpty": true, "presenceClasses": ["connector_closed", "connector_open", "red_wire", "white_wire", "black_wire", "unit_complete"] },
+      "unitTracker": { "enabled": true, "departMs": 2000, "enterMs": 500, "presentConf": 0.35, "startNeedsEmpty": true, "newUnitNeedsEmpty": true, "presenceClasses": ["connector_closed", "connector_open", "red_wire", "white_wire", "black_wire", "unit_complete"] },
       "zones": [
         { "id": "connectors", "label": "Lever connectors" },
         { "id": "wires", "label": "Cut wires" },
@@ -75,7 +75,7 @@
       ],
       "cycleEnds": "s3_insert",
       "arrival": "s3_arrive",
-      "unitTracker": { "enabled": true, "from": "s2", "departMs": 2000, "enterMs": 500, "presentConf": 0.35, "startNeedsEmpty": true, "presenceClasses": ["red_wire", "black_wire", "connector_open", "connector_closed"] },
+      "unitTracker": { "enabled": true, "from": "s2", "departMs": 2000, "enterMs": 500, "presentConf": 0.35, "startNeedsEmpty": true, "newUnitNeedsEmpty": true, "presenceClasses": ["red_wire", "black_wire", "connector_open", "connector_closed"] },
       "substeps": [
         { "id": "s3_arrive", "label": "Unit arrives from S2", "zones": { "zone": "work", "signal": "activity" }, "model": { "zone": "work", "class": "red_wire" } },
         { "id": "s3_add_connector", "label": "Add a new lever connector to the other end of the red wire", "zones": { "zone": "connectors", "signal": "activity" }, "model": { "zone": "work", "class": "connector_open" } },

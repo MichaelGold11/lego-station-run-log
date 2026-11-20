@@ -121,6 +121,7 @@
           for (const k of ['departMs', 'enterMs']) if (ut[k] != null && !(isNum(ut[k]) && ut[k] >= 0 && ut[k] <= 60000)) errs.push(st.id + ': unitTracker ' + k + ' must be a number of milliseconds from 0 to 60000.');
           if (ut.presentConf != null && !(isNum(ut.presentConf) && ut.presentConf > 0 && ut.presentConf <= 1)) errs.push(st.id + ': unitTracker presentConf must be a number above 0 and at most 1.');
           if (ut.startNeedsEmpty != null && typeof ut.startNeedsEmpty !== 'boolean') errs.push(st.id + ': unitTracker startNeedsEmpty must be true or false.');
+          if (ut.newUnitNeedsEmpty != null && typeof ut.newUnitNeedsEmpty !== 'boolean') errs.push(st.id + ': unitTracker newUnitNeedsEmpty must be true or false.');
           if (ut.presenceClasses != null && (!Array.isArray(ut.presenceClasses) || ut.presenceClasses.some(c => typeof c !== 'string' || !c))) errs.push(st.id + ': unitTracker presenceClasses must be a list of class names.');
           if (ut.enabled && !st.arrival) errs.push(st.id + ': unitTracker needs the station to name its arrival substep.');
           if (ut.from != null) {
@@ -905,7 +906,7 @@
   // A unit that leaves before it is complete is recorded as incomplete and flagged needsReview; it is never counted as done.
   // Pure: no clock, no page. The page feeds it the signals it already has. The key presses stay the ground truth;
   // manual() records them so the tracker can show how often it disagrees. Config: station.unitTracker (see UNIT_TRACKER).
-  const UNIT_TRACKER = { enabled: false, departMs: 2000, enterMs: 500, presentConf: 0.35, startNeedsEmpty: true, presenceClasses: [], from: null };
+  const UNIT_TRACKER = { enabled: false, departMs: 2000, enterMs: 500, presentConf: 0.35, startNeedsEmpty: true, newUnitNeedsEmpty: false, presenceClasses: [], from: null };
   const unitNo = n => '#' + String(n).padStart(3, '0');
   const unlinkedNo = n => '?' + String(n).padStart(2, '0');
   const unitTrackerOn = st => !!(st && st.unitTracker && st.unitTracker.enabled);
@@ -980,7 +981,11 @@
       for (const e of events || []) {
         if (!e || (e.station != null && e.station !== sid)) continue;
         if (e.type === 'substep' && e.source !== 'manual') {
-          if (arrival && e.substep === arrival && e.move !== 'repeat' && phase === 'complete' && e.t > (cur.completeT || 0)) { arrived = true; continue; }
+          if (arrival && e.substep === arrival && e.move !== 'repeat' && phase === 'complete' && e.t > (cur.completeT || 0)) {
+            // newUnitNeedsEmpty: the finished unit's own wires are still in view, so this arrival is not a new unit; the next one starts only after it left.
+            if (!o.newUnitNeedsEmpty) arrived = true;
+            continue;
+          }
           if (cur && e.move !== 'repeat') cur.steps.push({ id: e.substep, t: e.t });
         } else if (e.type === 'cycle_end' && e.source !== 'manual' && cur && phase === 'in_progress') markComplete(e.t);
         else if (e.type === 'verdict' && cur && (e.kind === 'mistake' || e.kind === 'review')) cur[e.kind === 'mistake' ? 'mistakes' : 'reviews']++;

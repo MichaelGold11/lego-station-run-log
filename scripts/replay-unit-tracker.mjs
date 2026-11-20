@@ -82,7 +82,7 @@ for (const dir of dirs) {
   const setup = (sess.setup && sess.setup.s2) || {};
   const zones = setup.zones || {}, calib = setup.calib || { motion: {}, bright: {} };
   const vid = probe(video), main = fitLong(vid.w, vid.h, S);
-  const eng = LE.createStation(stn, { holdFrames: cfg.holdFrames, defaults: cfg.defaults, qaGraceSec: cfg.qaGraceSec });
+  const eng = LE.createStation(stn, { holdFrames: cfg.holdFrames, defaults: cfg.defaults, qaGraceSec: cfg.qaGraceSec, modelClasses: track });
   const chk = LE.createChecker(stn); chk.setRef(setup.ref || null);
   const ut = LE.createUnitTracker(stn, { link: LE.createUnitLink(cfg) });
   const ff = spawn('ffmpeg', ['-v', 'error', '-i', video, '-vf', 'fps=' + fps + ',scale=' + main.w + ':' + main.h + ':flags=area', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { stdio: ['ignore', 'pipe', 'inherit'] });
