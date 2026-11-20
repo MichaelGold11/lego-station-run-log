@@ -47,7 +47,7 @@
       "id": "s2",
       "label": "Arrange and clamp",
       "output": "the three wires closed in lever connector 1, red top, white middle, black bottom",
-      "assembly": { "class": "unit_complete", "closed": "connector_closed", "open": "connector_open", "wires": ["red_wire", "white_wire"], "darkWire": "black_wire" },
+      "assembly": { "class": "unit_complete", "closed": "connector_closed", "open": "connector_open", "wires": ["red_wire"], "darkWire": "black_wire" },
       "unitTracker": { "enabled": true, "departMs": 2000, "enterMs": 500, "presentConf": 0.35, "startNeedsEmpty": true, "newUnitNeedsEmpty": true, "presenceClasses": ["connector_closed", "connector_open", "red_wire", "white_wire", "black_wire", "unit_complete"] },
       "zones": [
         { "id": "connectors", "label": "Lever connectors" },

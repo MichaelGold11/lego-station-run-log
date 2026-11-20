@@ -316,13 +316,18 @@ bin has no reason, and the yield tile says "Turn on Score the cameras to log rea
    **When a unit counts as done (S2).** The connector has three levers and looks closed between wires,
    so "closed" alone ended units early. S2's `assembly` setting asks for all of this in one model
    result, and the tracker then holds it for its usual frames: `connector_closed` at 0.6 or more, no
-   `connector_open` at 0.4 or more, `red_wire` and `white_wire` each with an end at the connector, and a
+   `connector_open` at 0.4 or more, `red_wire` with an end at the connector, and a
    dark colorless line crossing at least half of the arcs around the connector on the side the wires
    leave. That last check is pixels, not the model: the model cannot see a black wire once it is clamped
-   (best score 0.10 to 0.23 on finished units). It needs a light table. On every frame of the four S2
-   recordings it fired only on the two finished units and never early; the two recordings where the unit
-   stayed in someone's hands never fired, so a unit has to be set down to count. Teaching the model to see a
-   clamped black wire would remove the pixel check.
+   (best score 0.10 to 0.23 on finished units). It needs a light table. The white wire is left out
+   (2026-11-19): on finished units both S2 models score it 0.06 to 0.31 (median per recording), under
+   the 0.4 bar, so with it the 2 fps model marked no unit done on any of the six recordings. Without it,
+   that model marks all five recorded units done (the sixth recording starts with parts already on the
+   table, so `startNeedsEmpty` never starts a unit): three within a few seconds of the true time, two
+   about 12 s before the unit was shown off, while it was still in hand with all three wires already in.
+   The cost: a unit missing only its white wire can count as done; QA still checks it. Putting
+   `"white_wire"` back in `assembly.wires` restores the old rule once the model sees white reliably.
+   Teaching the model to see a clamped black wire would remove the pixel check.
 6. A normal run needs nothing pressed: the cameras log cycles, substeps, QA arrivals and
    mistakes. **Score the cameras** is on by default (Setup turns it off, saved per laptop). Then a
    bar at the bottom holds the answer key and one person keys it: a station's number (its place in

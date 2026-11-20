@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Replay harness for the Station 2 "unit complete" check (LineEngine.unitCheck).
-//   node scripts/replay-unit-check.mjs <video> [--fps 3] [--long 640] [--out file.csv] [--zoom 4] [--src-long 1920]
+//   node scripts/replay-unit-check.mjs <video> [--fps 3] [--long 640] [--out file.csv] [--zoom 4] [--src-long 1920] [--model other.onnx]
 // Decodes the video with one ffmpeg process (rgb24 pipe), runs the S2 model with the page's own letterbox and decoder
 // (LiveDetect), then calls the real unitCheck with a pixel reader built the way app/line.html builds it: it reads the
 // 640x640 letterboxed model canvas, at Math.round(y * scale + padY), Math.round(x * scale + padX), and returns null outside the frame.
@@ -24,7 +24,7 @@ const FLOOR = 0.05, MIN_BOX = 0.25, IOU = 0.7, ZOOM_MIN = 0.3;
 
 // ---------- args ----------
 const argv = process.argv.slice(2);
-const opt = { fps: 3, long: 640, zoom: 0, srcLong: 0, out: '' };
+const opt = { fps: 3, long: 640, zoom: 0, srcLong: 0, out: '', model: '' };
 let video = '';
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
@@ -33,9 +33,10 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--zoom') opt.zoom = +argv[++i];
   else if (a === '--src-long') opt.srcLong = +argv[++i];
   else if (a === '--out') opt.out = argv[++i];
+  else if (a === '--model') opt.model = argv[++i];
   else if (!video) video = a;
 }
-if (!video) { console.error('Usage: node scripts/replay-unit-check.mjs <video> [--fps 3] [--long 640] [--out file.csv] [--zoom 4] [--src-long 1920]'); process.exit(2); }
+if (!video) { console.error('Usage: node scripts/replay-unit-check.mjs <video> [--fps 3] [--long 640] [--out file.csv] [--zoom 4] [--src-long 1920] [--model other.onnx]'); process.exit(2); }
 
 // ---------- video geometry ----------
 function probe(file) {
@@ -82,7 +83,7 @@ function resize(src, sw, sh, x0, y0, cw, ch, dw, dh) {
 const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data/meta/wire-line.json'), 'utf8'));
 const mcfg = cfg.models.s2, stn = cfg.stations.find(s => s.id === 's2'), spec = stn.assembly;
 const S = mcfg.imgsz || 640;
-const m = await openOnnx(path.join(ROOT, 'app', mcfg.file.replace(/^\//, '')), mcfg.classes, S);
+const m = await openOnnx(opt.model ? path.resolve(opt.model) : path.join(ROOT, 'app', mcfg.file.replace(/^\//, '')), mcfg.classes, S);
 const inName = m.sess.inputNames[0], outName = m.sess.outputNames[0];
 
 // Letterboxes an RGB frame the way the page does (gray 114 canvas, frame drawn at padX, padY) and runs the model.

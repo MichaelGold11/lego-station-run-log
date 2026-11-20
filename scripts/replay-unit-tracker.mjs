@@ -113,7 +113,7 @@ for (const dir of dirs) {
   const live = liveFacts(dir), complete = ends.filter(u => u.result === 'complete').length;
   results.push({ session: path.basename(dir), sec: +(last / 1000).toFixed(1), frames: i, units: ends.length, complete, incomplete: ends.length - complete,
     replayCycleEnds: events.filter(e => e.type === 'cycle_end').length, live,
-    list: ends.map(u => ({ no: u.no, start: +(u.start / 1000).toFixed(1), end: +(u.end / 1000).toFixed(1), result: u.result, ended: u.ended, steps: u.steps.length, mistakes: u.mistakes })) });
+    list: ends.map(u => ({ no: u.no, start: +(u.start / 1000).toFixed(1), end: +(u.end / 1000).toFixed(1), result: u.result, done: u.completeT == null ? null : +(u.completeT / 1000).toFixed(1), ended: u.ended, steps: u.steps.length, mistakes: u.mistakes })) });
   const r0 = results[results.length - 1];
   console.error(r0.session + ': ' + r0.sec + ' s, units ' + r0.units + ' (' + r0.complete + ' complete, ' + r0.incomplete + ' incomplete), live cycle_end ' + live.cycleEnd + ', manual ' + live.manual);
 }

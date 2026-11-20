@@ -67,7 +67,12 @@ Test B leans toward the live model: it probably trained on these same videos.
 - The Chrome upload tool takes files under 10 MB, so the zip goes through Drive, not the page.
 - Colab runs on Michael's account; he already accepted the Colab terms (2026-11-19).
 
-## Result of the 2026-11-19 run (22:43): not swapped
+## Result of the 2026-11-19 run (22:43)
+
+By the swap rule below this was "do not swap". Michael chose to swap anyway (2026-11-19): the 2 fps model
+is `app/models/s2-connector.onnx`, the old one is kept as `s2-connector-2026-11-05.onnx`. Its weak class is
+white (mAP50 0.615): on real S2 recordings of finished units it scores white 0.06 to 0.31, so the done
+check no longer requires white (docs/wire-line-process.md, "When a unit counts as done").
 
 Colab: 1,076 frames, train 898 / check 169, mAP50 0.722, mAP50-95 0.55. Per class mAP50: red 0.841,
 white 0.615, black 0.387, open 0.909, closed 0.859. Model in Drive `s2-model-2fps/` (not in the app).
