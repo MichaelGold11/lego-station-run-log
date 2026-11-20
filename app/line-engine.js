@@ -17,7 +17,7 @@
   const MOTION = { noise: 6, scale: 32 };      // per-pixel gray diff noise floor, and the mean diff that counts as motion 1.0
   const BRIGHT_SPAN = 60;                        // without a "Bulb on" calibration, a rise of 60 gray levels counts as bright 1.0
   const MISMATCH_NOTE = 'quality mismatch, review the video';
-  const EVENT_TYPES = ['substep', 'cycle_end', 'qa_result', 'flag', 'manual', 'session_start', 'session_end', 'source_change', 'verdict', 'operator'];
+  const EVENT_TYPES = ['substep', 'cycle_end', 'qa_result', 'flag', 'manual', 'session_start', 'session_end', 'source_change', 'verdict', 'operator', 'unit'];
   const CYCLE_ACTIONS = { cycle_done: 'unknown', pass: 'pass', fail: 'fail' };   // manual actions that close a manual cycle
 
   const clamp01 = v => Math.max(0, Math.min(1, v));
@@ -113,6 +113,24 @@
       }
       if (st.cycleEnds && !st.substeps.some(s => s.id === st.cycleEnds)) errs.push(st.id + ': cycleEnds "' + st.cycleEnds + '" is not one of its substeps.');
       if (st.perUnit != null && !(Number.isInteger(st.perUnit) && st.perUnit >= 1)) errs.push(st.id + ': perUnit must be a whole number of 1 or more (cycles per unit).');
+      const ut = st.unitTracker;
+      if (ut != null) {
+        if (typeof ut !== 'object' || Array.isArray(ut)) errs.push(st.id + ': unitTracker must look like { "enabled": true, "departMs": 2000 }.');
+        else {
+          if (ut.enabled != null && typeof ut.enabled !== 'boolean') errs.push(st.id + ': unitTracker enabled must be true or false.');
+          for (const k of ['departMs', 'enterMs']) if (ut[k] != null && !(isNum(ut[k]) && ut[k] >= 0 && ut[k] <= 60000)) errs.push(st.id + ': unitTracker ' + k + ' must be a number of milliseconds from 0 to 60000.');
+          if (ut.presentConf != null && !(isNum(ut.presentConf) && ut.presentConf > 0 && ut.presentConf <= 1)) errs.push(st.id + ': unitTracker presentConf must be a number above 0 and at most 1.');
+          if (ut.startNeedsEmpty != null && typeof ut.startNeedsEmpty !== 'boolean') errs.push(st.id + ': unitTracker startNeedsEmpty must be true or false.');
+          if (ut.presenceClasses != null && (!Array.isArray(ut.presenceClasses) || ut.presenceClasses.some(c => typeof c !== 'string' || !c))) errs.push(st.id + ': unitTracker presenceClasses must be a list of class names.');
+          if (ut.enabled && !st.arrival) errs.push(st.id + ': unitTracker needs the station to name its arrival substep.');
+          if (ut.from != null) {
+            const up = (cfg.stations || []).find(x => x && x.id === ut.from);
+            if (typeof ut.from !== 'string' || ut.from === st.id) errs.push(st.id + ': unitTracker from must name another station.');
+            else if (!up) errs.push(st.id + ': unitTracker from "' + ut.from + '" is not a station in this config.');
+            else if (ut.enabled && !(up.unitTracker && up.unitTracker.enabled)) errs.push(st.id + ': unitTracker from "' + ut.from + '" needs that station\'s unitTracker enabled too.');
+          }
+        }
+      }
       if (st.arrival != null && !st.substeps.some(s => s.id === st.arrival)) errs.push(st.id + ': arrival "' + st.arrival + '" is not one of its substeps.');
       if (st.qa) {
         for (const k of ['lightSubstep', 'sortSubstep']) if (st.qa[k] && !st.substeps.some(s => s.id === st.qa[k])) errs.push(st.id + ': qa.' + k + ' "' + st.qa[k] + '" is not one of its substeps.');
@@ -880,6 +898,188 @@
     };
   }
 
+  // ---------- unit tracker: one live state machine per station ----------
+  // Counts units as they pass through a station, by order (unit k is the k-th unit in; no marker on the unit).
+  // waiting (work area empty) -> in_progress (a unit arrived: it takes the next number, #001, #002, ...) -> complete (the step
+  // checker closed its cycle) -> the unit leaves (out of view for departMs) or the next unit arrives -> waiting / in_progress.
+  // A unit that leaves before it is complete is recorded as incomplete and flagged needsReview; it is never counted as done.
+  // Pure: no clock, no page. The page feeds it the signals it already has. The key presses stay the ground truth;
+  // manual() records them so the tracker can show how often it disagrees. Config: station.unitTracker (see UNIT_TRACKER).
+  const UNIT_TRACKER = { enabled: false, departMs: 2000, enterMs: 500, presentConf: 0.35, startNeedsEmpty: true, presenceClasses: [], from: null };
+  const unitNo = n => '#' + String(n).padStart(3, '0');
+  const unlinkedNo = n => '?' + String(n).padStart(2, '0');
+  const unitTrackerOn = st => !!(st && st.unitTracker && st.unitTracker.enabled);
+  // The hand-off between stations (S2 -> S3): a unit keeps ONE number down the line. A station whose unitTracker names `from` does not
+  // number its own units: each arrival takes the next unit that left the `from` station, in order (a FIFO queue, no marker on the unit).
+  // An arrival with nothing queued is an unlinked unit (?01, ?02, ...): flagged for review, and the order of the real numbers is not touched.
+  function createUnitLink(config) {
+    const from = {}, up = {};
+    for (const st of (config && config.stations) || []) if (unitTrackerOn(st) && st.unitTracker.from) { from[st.id] = st.unitTracker.from; up[st.unitTracker.from] = true; }
+    let queue = {}, cur = {};
+    return {
+      from, up,
+      reset(id) { queue[id] = []; cur[id] = null; },
+      watch(id, c) { cur[id] = c; },
+      // Upstream: a unit left (it is waiting for the next station). A unit the downstream station already claimed is not queued twice.
+      push(id, u) { if (!u.claimed) (queue[id] = queue[id] || []).push(u); },
+      // Downstream: the next unit from `id`. When the queue is empty, a finished unit still debouncing its departure upstream is claimed
+      // (the unit already reached the next station: S2 only has not decided it left yet).
+      claim(id) {
+        const q = queue[id] || [];
+        if (q.length) return q.shift();
+        const c = cur[id];
+        if (c && c.done && !c.claimed) { c.claimed = true; return { unit: c.unit, no: c.no, result: 'complete', needsReview: false }; }
+        return null;
+      },
+      length(id) { return (queue[id] || []).length; },
+      peek(id) { const q = queue[id] || []; return q.length ? q[0] : null; }
+    };
+  }
+  // input: { t, present (a unit is in view; null = unknown, keep the last answer), hand (true while a hand is in view), complete (true while the
+  // unit-complete signal holds), events (what the tracker and checker emitted since the last call) }. Returns unit events.
+  // Complete = the step checker closed its cycle (cycle_end); on S2 that is the unit_complete detector, on S3 all its steps done. The
+  // departure debounce (departMs) then decides when it left. opts.link: a createUnitLink() shared by the stations of one line.
+  function createUnitTracker(station, opts) {
+    const o = Object.assign({}, UNIT_TRACKER, station && station.unitTracker, opts || {});
+    const link = o.link || null, arrival = station && station.arrival;
+    let phase = 'waiting', n = 0, cur = null, units = [], needEmpty = !!o.startNeedsEmpty, lastPresent = false, unlinkedN = 0;
+    let presentSince = null, absentSince = null, manual = [], t0 = null;
+    const sid = station && station.id;
+    const upId = link && link.from[sid] || null, isUp = !!(link && link.up[sid]);
+    if (link) link.reset(sid);
+    const base = (action, t, extra) => Object.assign({ type: 'unit', station: sid, action, t, unit: cur ? cur.unit : n, no: cur ? cur.no : unitNo(n) }, extra);
+    function begin(t, out) {
+      n++;
+      let unit = n, no = unitNo(n), unlinked = false, fromResult = null;
+      if (upId) {
+        const u = link.claim(upId);
+        if (u) { unit = u.unit; no = u.no; fromResult = u.result || null; }
+        else { unlinkedN++; unit = null; no = unlinkedNo(unlinkedN); unlinked = true; }
+      }
+      cur = { unit, no, station: sid, start: t, end: null, completeT: null, steps: [], mistakes: 0, reviews: 0, result: null, needsReview: unlinked, ended: null, unlinked, fromResult, done: false, claimed: false };
+      if (isUp) link.watch(sid, cur);
+      phase = 'in_progress'; presentSince = null; absentSince = null;
+      out.push(base('start', t, upId ? { from: upId, unlinked } : {}));
+    }
+    function markComplete(t) { phase = 'complete'; cur.completeT = t; cur.done = true; }
+    function finish(t, ended, out, reset) {
+      const complete = phase === 'complete';
+      cur.end = t; cur.ended = ended; cur.result = complete ? 'complete' : 'incomplete'; cur.needsReview = cur.unlinked || !complete;
+      const steps = cur.steps.map((s, i) => ({ id: s.id, t: s.t, sec: round(((i + 1 < cur.steps.length ? cur.steps[i + 1].t : (cur.completeT != null ? cur.completeT : t)) - s.t) / 1000, 3) }));
+      cur.steps = steps;
+      const rec = Object.assign({}, cur);
+      units.push(rec);
+      // A unit that left upstream waits in the queue for the next station (unless the session ended with it still on the bench).
+      if (isUp && ended !== 'session_stopped') link.push(sid, { unit: rec.unit, no: rec.no, result: rec.result, needsReview: rec.needsReview, claimed: cur.claimed });
+      if (isUp) link.watch(sid, null);
+      out.push(base('end', t, { start: rec.start, end: rec.end, sec: round((rec.end - rec.start) / 1000, 3), completeT: rec.completeT, result: rec.result, needsReview: rec.needsReview, ended, steps, mistakes: rec.mistakes, reviews: rec.reviews, reset: !!reset, unlinked: rec.unlinked, from: upId, fromResult: rec.fromResult }));
+      cur = null; phase = 'waiting'; presentSince = null; absentSince = null;
+    }
+    function take(events) {
+      let arrived = false;
+      for (const e of events || []) {
+        if (!e || (e.station != null && e.station !== sid)) continue;
+        if (e.type === 'substep' && e.source !== 'manual') {
+          if (arrival && e.substep === arrival && e.move !== 'repeat' && phase === 'complete' && e.t > (cur.completeT || 0)) { arrived = true; continue; }
+          if (cur && e.move !== 'repeat') cur.steps.push({ id: e.substep, t: e.t });
+        } else if (e.type === 'cycle_end' && e.source !== 'manual' && cur && phase === 'in_progress') markComplete(e.t);
+        else if (e.type === 'verdict' && cur && (e.kind === 'mistake' || e.kind === 'review')) cur[e.kind === 'mistake' ? 'mistakes' : 'reviews']++;
+      }
+      return arrived;
+    }
+    // The arrival substep of this station (a non-repeat one) in a batch of events: the unit has arrived, whatever the presence says yet.
+    const arrivalIn = events => { for (const e of events || []) if (e && e.type === 'substep' && e.source !== 'manual' && (e.station == null || e.station === sid) && arrival && e.substep === arrival && e.move !== 'repeat') return e; return null; };
+    function update(input) {
+      const x = input || {}, t = x.t, out = [];
+      if (t0 == null) t0 = t;
+      if (x.present != null) lastPresent = !!x.present;
+      const present = lastPresent, occupied = present || !!x.hand;
+      if (phase === 'waiting') {
+        if (needEmpty) { if (!present) needEmpty = false; return out; }
+        // The number is given the moment the unit arrives: the arrival step, or the unit staying in view for enterMs (counted from when it showed).
+        const arr = arrivalIn(x.events);
+        if (present) { if (presentSince == null) presentSince = t; } else presentSince = null;
+        if (arr || (present && t - presentSince >= o.enterMs)) { begin(arr ? Math.min(arr.t, presentSince == null ? arr.t : presentSince) : presentSince, out); take(x.events); }
+        if (cur && x.complete && phase === 'in_progress') markComplete(t);
+        return out;
+      }
+      const arrived = take(x.events);
+      if (phase === 'in_progress' && x.complete && cur.completeT == null) markComplete(t);
+      if (arrived) {          // the next unit's wires came in while the finished one was still in view
+        finish(t, 'new_unit', out, false);
+        begin(t, out); cur.steps.push({ id: arrival, t });
+        return out;
+      }
+      if (occupied) absentSince = null;
+      else {
+        if (absentSince == null) absentSince = t;
+        if (t - absentSince >= o.departMs) finish(absentSince, 'departed', out, true);
+      }
+      return out;
+    }
+    // The session stopped: close the open unit (complete if it was done, else incomplete and flagged).
+    function stop(t) { const out = []; if (cur) finish(t, 'session_stopped', out, false); return out; }
+    // A key press (the answer key): the k-th press is matched to the k-th complete unit.
+    function noteManual(t) { manual.push(t); }
+    function state() {
+      const done = units.filter(u => u.result === 'complete').length + (phase === 'complete' ? 1 : 0);
+      const inc = units.filter(u => u.result === 'incomplete').length;
+      const nx = upId ? link.peek(upId) : null;
+      return { phase, unit: cur ? cur.unit : null, no: cur ? cur.no : null, next: upId ? (nx ? nx.no : null) : unitNo(n + 1), counted: n, completed: done, incomplete: inc,
+        manual: manual.length, disagreements: Math.abs(done - manual.length), needsReview: units.filter(u => u.needsReview).length,
+        start: cur ? cur.start : null, units: units.slice(), current: cur ? Object.assign({}, cur) : null, waitingEmpty: needEmpty,
+        from: upId, queue: isUp ? link.length(sid) : 0, queueFrom: upId ? link.length(upId) : 0, unlinked: unlinkedN, unlinkedNow: !!(cur && cur.unlinked) };
+    }
+    function restart() { phase = 'waiting'; n = 0; unlinkedN = 0; cur = null; units = []; needEmpty = !!o.startNeedsEmpty; lastPresent = false; presentSince = null; absentSince = null; manual = []; if (link) link.reset(sid); }
+    return { update, stop, noteManual, state, restart, config: o };
+  }
+  // Presence for the live page and the replay: a unit is in view when a presence class is detected anywhere at presentConf or more.
+  function unitPresent(dets, cfg) {
+    const c = cfg || {}, min = isNum(c.presentConf) ? c.presentConf : UNIT_TRACKER.presentConf, set = c.presenceClasses || [];
+    return (dets || []).some(d => d && set.indexOf(d.cls) >= 0 && d.conf >= min);
+  }
+  // The unit events of a session for one station, as rows: the end events, plus a still-open start as an unfinished row.
+  function trackedUnits(events, stationId) {
+    const sorted = sortEvents(events), out = [], open = {};
+    for (const e of sorted) {
+      if (e.type !== 'unit' || (stationId && e.station !== stationId)) continue;
+      if (e.action === 'start') open[e.station] = e;
+      else if (e.action === 'end') { delete open[e.station]; out.push(e); }
+    }
+    for (const e of Object.values(open)) out.push({ type: 'unit', station: e.station, action: 'open', t: e.t, unit: e.unit, no: e.no, start: e.t, end: null, result: null, needsReview: true, ended: null, steps: [], mistakes: 0, reviews: 0 });
+    return out.sort((a, b) => (a.start - b.start) || ((a.unit || 0) - (b.unit || 0)));
+  }
+  // One row per unit for the whole line: the unit's number is the key, and each tracked station adds its own columns (arrival, end, steps,
+  // mistakes), so S2 and S3 sit on one row. Unlinked units (an S3 arrival with nothing from S2) get their own rows, numbered ?01, ?02.
+  const STATION_UNIT_COLS = ['arrive_ts', 'end_ts', 'dur_s', 'complete_ts', 'result', 'ended', 'steps', 'mistakes', 'reviews'];
+  const TRACKED_COLS = ['session_id', 'crew', 'shift', 'unit_no', 'unit', 'needs_review'];
+  const trackedCols = config => TRACKED_COLS.concat([].concat(...config.stations.filter(unitTrackerOn).map(st => STATION_UNIT_COLS.map(c => st.id + '_' + c))));
+  function unitRows(events, config) {
+    const sorted = sortEvents(events), tr = config.stations.filter(unitTrackerOn), byNo = {}, order = [];
+    for (const st of tr) for (const u of trackedUnits(sorted, st.id)) {
+      const key = u.unit != null ? 'n' + u.unit : 'u' + u.no + ':' + st.id;
+      if (!byNo[key]) { byNo[key] = { no: u.no, unit: u.unit, at: u.start, stations: {} }; order.push(byNo[key]); }
+      byNo[key].stations[st.id] = u;
+      if (u.start < byNo[key].at) byNo[key].at = u.start;
+    }
+    return order.sort((a, b) => (a.unit != null && b.unit != null ? a.unit - b.unit : a.unit != null ? -1 : b.unit != null ? 1 : a.at - b.at));
+  }
+  function trackedUnitsCsv(events, config, meta) {
+    const m = meta || {}, sorted = sortEvents(events), base = timeBase(sorted, m), ts = t => (t == null ? null : round((t - base) / 1000, 3));
+    const tr = config.stations.filter(unitTrackerOn), lines = [trackedCols(config).join(',')];
+    for (const r of unitRows(sorted, config)) {
+      const review = tr.some(st => r.stations[st.id] && r.stations[st.id].needsReview);
+      const cells = [m.id, m.crew, m.shift, r.no, r.unit, review];
+      for (const st of tr) {
+        const u = r.stations[st.id];
+        if (!u) { cells.push(...STATION_UNIT_COLS.map(() => null)); continue; }
+        cells.push(ts(u.start), ts(u.end), u.end != null ? round((u.end - u.start) / 1000, 3) : null, ts(u.completeT), u.result || 'open', u.ended, (u.steps || []).map(x => x.id + ':' + x.sec).join('|'), u.mistakes, u.reviews);
+      }
+      lines.push(csvLine(cells));
+    }
+    return lines.join('\n') + '\n';
+  }
+
   // ---------- metrics over an event list ----------
   function sortEvents(events) {
     return (events || []).map((e, i) => [e, i]).filter(x => x[0] && isNum(x[0].t)).sort((a, b) => (a[0].t - b[0].t) || (a[1] - b[1])).map(x => x[0]);
@@ -1166,6 +1366,9 @@
     const cols = ['session_id', 'crew', 'shift', 'unit', 'status'];
     for (const st of config.stations) cols.push(st.id + '_basis', st.id + '_cycles', st.id + '_start_ts', st.id + '_end_ts', st.id + '_work_s', st.id + '_wait_s', st.id + '_mistakes', st.id + '_reviews', st.id + '_video_file', st.id + '_video_t');
     cols.push('result', 'reason', 'cause_station', 'defect', 'lead_s');
+    // Appended (older readers ignore them): the auto unit number and what the unit tracker saw, for stations that have a tracker.
+    const tr = config.stations.filter(unitTrackerOn);
+    if (tr.length) { cols.push('unit_no'); for (const st of tr) cols.push(st.id + '_unit_no', st.id + '_unit_result', st.id + '_unit_ended', st.id + '_unit_review'); }
     return cols;
   }
 
@@ -1173,6 +1376,8 @@
   function unitsCsv(events, config, meta) {
     const m = meta || {}, sorted = sortEvents(events), base = timeBase(sorted, m), ts = t => (t == null ? null : round((t - base) / 1000, 3));
     const lines = [unitCols(config).join(',')];
+    const tr = config.stations.filter(unitTrackerOn), done = {};
+    for (const st of tr) done[st.id] = trackedUnits(sorted, st.id).filter(x => x.result === 'complete');
     for (const u of linkUnits(sorted, config)) {
       const row = [m.id, m.crew, m.shift, u.unit, u.status];
       for (const st of config.stations) {
@@ -1181,6 +1386,11 @@
       }
       const info = u.result === 'fail' ? reasonInfo(config, u.reason) : null;
       row.push(u.result, u.reason, info ? info.cause : null, info ? info.defect : null, u.leadSec);
+      if (tr.length) {
+        const recs = tr.map(st => done[st.id][u.unit - 1] || null), first = recs.find(Boolean);
+        row.push(first ? first.no : null);
+        for (const r of recs) row.push(r ? r.no : null, r ? r.result : null, r ? r.ended : null, r ? !!r.needsReview : null);
+      }
       lines.push(csvLine(row));
     }
     return lines.join('\n') + '\n';
@@ -1246,7 +1456,7 @@
     DEFAULTS, MOTION, MISMATCH_NOTE, EVENT_TYPES, CYCLE_ACTIONS, SUBSTEP_COLS, CYCLE_COLS, VERDICT_COLS, CHECK, LEVELS, OPERATOR_CODE, FLOOR, CLASS_TEST,
     members, activeRule, evalRule, missingOf, ruleText, checkConfig, captureDefaults, CAPTURE_DEFAULTS, captureWanted, nextSampleDue, modelFor, checkModelOutput, e2eBadClass, qaDecide, createStation,
     operatorCode, defaultName, shortName, classTestLayout, setupKey, nextStationId, freeSpot, saveScheduler, applyLayout,
-    zoneSignals, calibrationFrom, classSignals, trackedClasses, unitCheck, ASSEMBLY, handPresence, steadyClasses, mergeSignals, createChecker,
+    zoneSignals, calibrationFrom, classSignals, trackedClasses, unitCheck, ASSEMBLY, handPresence, steadyClasses, mergeSignals, createChecker, createUnitTracker, createUnitLink, unitRows, unitPresent, unitNo, unitTrackerOn, UNIT_TRACKER, trackedUnits, trackedUnitsCsv, TRACKED_COLS,
     standardViews, pickStandardView, sameZones, sortEvents, ruleZones, unobserved, NO_DATA, detectedCycles, manualCycles, summarize, substepsCsv, cyclesCsv, verdictsCsv, linkUnits, unitCols, unitsCsv, csvCell
   };
 });

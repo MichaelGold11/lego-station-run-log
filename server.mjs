@@ -1157,7 +1157,7 @@ function parseCsv(t) {
   const head = rows[0];
   return rows.slice(1).map(r => { const o = {}; head.forEach((h, i) => { o[h] = r[i] == null ? '' : r[i]; }); return o; });
 }
-const RUN_CSVS = { 'substeps.csv': 'substepsCsv', 'cycles.csv': 'cyclesCsv', 'verdicts.csv': 'verdictsCsv', 'units.csv': 'unitsCsv' };
+const RUN_CSVS = { 'substeps.csv': 'substepsCsv', 'cycles.csv': 'cyclesCsv', 'verdicts.csv': 'verdictsCsv', 'units.csv': 'unitsCsv', 'tracked-units.csv': 'trackedUnitsCsv' };
 function runTables(id, doc, events) {
   const meta = { id, crew: doc.crew, shift: doc.shift, startedAtMs: doc.startedAtMs }, cfg = sessionConfig(doc), csv = {}, rows = {};
   for (const [name, fn] of Object.entries(RUN_CSVS)) {
@@ -1177,7 +1177,7 @@ function runJson(id, doc, events, tables) {
   return {
     version: 1, exportedAt: new Date().toISOString(), sessionId: id,
     session, config: tables.cfg, summary, events,
-    cycles: tables.rows['cycles.csv'], substeps: tables.rows['substeps.csv'], verdicts: tables.rows['verdicts.csv'], units: tables.rows['units.csv'],
+    cycles: tables.rows['cycles.csv'], substeps: tables.rows['substeps.csv'], verdicts: tables.rows['verdicts.csv'], units: tables.rows['units.csv'], trackedUnits: tables.rows['tracked-units.csv'],
     captures: capturesWithReviews(id)
   };
 }
@@ -1421,10 +1421,10 @@ async function sessionsApi(req, res, p, url) {
     if (what === 'events.jsonl' && req.method === 'GET') {
       return send(res, 200, fs.readFileSync(path.join(dir, 'events.jsonl')), 'application/x-ndjson; charset=utf-8', { 'Content-Disposition': `attachment; filename="${id}-events.jsonl"` });
     }
-    if ((what === 'substeps.csv' || what === 'cycles.csv' || what === 'verdicts.csv' || what === 'units.csv') && req.method === 'GET') {
+    if ((what === 'substeps.csv' || what === 'cycles.csv' || what === 'verdicts.csv' || what === 'units.csv' || what === 'tracked-units.csv') && req.method === 'GET') {
       const meta = { id, crew: doc.crew, shift: doc.shift, startedAtMs: doc.startedAtMs };
       const cfg = sessionConfig(doc);
-      const fn = { 'substeps.csv': LineEngine.substepsCsv, 'cycles.csv': LineEngine.cyclesCsv, 'verdicts.csv': LineEngine.verdictsCsv, 'units.csv': LineEngine.unitsCsv }[what];
+      const fn = { 'substeps.csv': LineEngine.substepsCsv, 'cycles.csv': LineEngine.cyclesCsv, 'verdicts.csv': LineEngine.verdictsCsv, 'units.csv': LineEngine.unitsCsv, 'tracked-units.csv': LineEngine.trackedUnitsCsv }[what];
       const csv = fn(readEvents(id), cfg, meta);
       return send(res, 200, csv, 'text/csv; charset=utf-8', { 'Content-Disposition': `attachment; filename="${id}-${what}"` });
     }
