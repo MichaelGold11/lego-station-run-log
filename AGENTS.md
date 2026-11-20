@@ -90,6 +90,7 @@ Rules for the wire line:
 - Two intake paths feed one shared pool: A (home footage, `ingest-footage.mjs`) and B (group run-throughs). Split by session or contribution, never by frame; hold a whole contributor out as test with `?holdout=<code>` on the snapshot.
 - The phone port serves only the phone page, `/ca.crt` and `/phone/*`. Keep everything else
   (data, sessions, models, `/api/*`) on the localhost server.
+- The unit tracker is config-driven (`unitTracker` per station, S2 and S3 on). Unit numbers come from order, never from a marker: S3 takes S2's numbers in FIFO order. Do not hard-code a station id in the tracker. Details: [docs/wire-line-process.md](docs/wire-line-process.md), "Unit tracker".
 - Run `npm run test:line` before committing; it must pass. Share changes on a branch with a pull
   request.
 

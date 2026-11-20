@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Replay the S2 unit tracker over recorded sessions: decode the video, run the S2 model with the page's letterbox, then feed
+// Replay the S2 unit tracker (S2 only: no S3 recording exists in this repo; S3 is covered by synthetic tests) over recorded sessions: decode the video, run the S2 model with the page's letterbox, then feed
 // the real engine, checker and unit tracker in the page's order (engine update, checker update, tracker update, reset on a
 // departed unit). Hands are not run here (the page's hand model is a browser worker), so the tracker sees presence only.
 //   node scripts/replay-unit-tracker.mjs <session dir> [more dirs] [--fps 4] [--json out.json]
@@ -84,7 +84,7 @@ for (const dir of dirs) {
   const vid = probe(video), main = fitLong(vid.w, vid.h, S);
   const eng = LE.createStation(stn, { holdFrames: cfg.holdFrames, defaults: cfg.defaults, qaGraceSec: cfg.qaGraceSec });
   const chk = LE.createChecker(stn); chk.setRef(setup.ref || null);
-  const ut = LE.createUnitTracker(stn);
+  const ut = LE.createUnitTracker(stn, { link: LE.createUnitLink(cfg) });
   const ff = spawn('ffmpeg', ['-v', 'error', '-i', video, '-vf', 'fps=' + fps + ',scale=' + main.w + ':' + main.h + ':flags=area', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { stdio: ['ignore', 'pipe', 'inherit'] });
   const fb = main.w * main.h * 3;
   const events = [], emit = e => events.push(e);

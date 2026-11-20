@@ -151,6 +151,33 @@ logs one, so `events.jsonl` alone says who was where. The server refuses an oper
 session whose code is not `Op-<digits>` or whose level is not one of the three, and keeps only
 station, code and level of the event. No names.
 
+## Unit tracker (S2 and S3, `unitTracker`)
+
+A per-station state machine (`LineEngine.createUnitTracker`, pure; the page feeds it) that numbers units
+as they pass through. States: waiting, in progress, complete; a unit ends as `departed` (no unit or hand in
+view for `departMs`), `new_unit` (the next unit's arrival step fired while the finished one was still in
+view) or `session_stopped`. A unit that ends before the step checker closed its cycle is `incomplete`,
+`needsReview`, and never counted as done.
+
+- **Numbering.** The number is given at arrival: the station's arrival substep, or a unit in view for
+  `enterMs` (counted from when it showed). With `startNeedsEmpty` a unit already in view at Start waits for
+  one empty frame first.
+- **S2 to S3.** `unitTracker.from: "s2"` on S3 means S3 takes its numbers from S2's departed units in a FIFO
+  queue (`LineEngine.createUnitLink`, one per line). A finished unit S2 has not yet decided left is claimed
+  directly. An S3 arrival with an empty queue is unlinked: `?01`, `?02`, `needsReview`, numbers untouched.
+  `state().queue` is the length waiting between S2 and S3.
+- **Complete** is the step checker's `cycle_end`: on S2 that comes from the `unit_complete` detector, on S3
+  from its steps (new connector, black wire inserted; zones only for the last step), then held through the
+  same `departMs`. S3 has no complete detector of its own and is unverified on real footage.
+- **Config** (validated by `checkConfig`): `enabled`, `from` (a station with the tracker enabled), `departMs`
+  and `enterMs` (0 to 60000), `presentConf` (0 to 1), `startNeedsEmpty`, `presenceClasses`. S1 and S4: off.
+- **Events:** `{type:"unit", station, action:"start"|"end", no, unit, ...}`; end carries start, end, steps,
+  mistakes, reviews, result, ended, reset, unlinked, from. Key presses (`manual`) are matched by count and
+  shown as a disagreement count.
+- **Export:** `tracked-units.csv`: `session_id, crew, shift, unit_no, unit, needs_review`, then per station
+  `<id>_arrive_ts, end_ts, dur_s, complete_ts, result, ended, steps, mistakes, reviews`. `units.csv` gains
+  appended `unit_no` and `<id>_unit_no/result/ended/review`. Replay: `scripts/replay-unit-tracker.mjs`.
+
 ## Mistake alerts (step checker)
 
 Each station runs the step checker from Ruza's `vision/live_check.py` (branch

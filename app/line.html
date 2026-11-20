@@ -300,6 +300,11 @@ button.chip:hover { border-color: var(--warn-ink); }
 .sessions td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .sessions td a { color: var(--accent-2); margin-right: 8px; white-space: nowrap; }
 .sessions .tbl { max-height: 320px; overflow: auto; }
+  .unitbox { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; font-size: 12.5px }
+  .unitbox .ubar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center }
+  .unitbox .urow { display: grid; grid-template-columns: 3.4em 4.5em minmax(0, 1fr); gap: 6px; padding: 2px 6px; border-radius: 4px; background: color-mix(in srgb, currentColor 6%, transparent) }
+  .unitbox .urow.review { outline: 1px solid var(--crit, #c0392b) }
+  .unitchip { font-weight: 700 }
 </style>
 </head>
 <body>
@@ -629,6 +634,9 @@ button.chip:hover { border-color: var(--warn-ink); }
   // ---------- stations: one card per layout entry, placed on the floor ----------
   const roleLabel = id => (G.roles.find(r => r.id === id) || {}).label || id;
   const opOk = o => !!(o && LE.OPERATOR_CODE.test(String(o.code)) && LE.LEVELS.some(l => l.id === o.level));
+  // One hand-off for the whole line (S2 to S3), made from the config the first time a station asks.
+  let UNIT_LINK = null;
+  function unitLink() { return UNIT_LINK || (UNIT_LINK = LE.createUnitLink(G.config)); }
   function makeStation(cfg, idx) {
     const isQa = !!cfg.qa, bulbs = bulbZones(cfg), skey = LE.setupKey(cfg.id, cfg.role), saved = store.get('wire-line:operator:' + cfg.id);
     const st = {
@@ -638,7 +646,7 @@ button.chip:hover { border-color: var(--warn-ink); }
       setup: normSetup(cfg, G.setup[skey]), prevGray: null, sig: null, lastProc: 0, lastCT: 0, fps: 0, fpsN: 0, fpsT: now(), fresh: false,
       mdl: null, dets: null, detsPrev: null, detT: 0, hands: null, handsT: 0, modelN: 0, modelFps: 0, modelT: now(),
       manualN: 0, setupOn: false, drawZone: null, drag: null, calib: null, err: '', clearArm: 0, lastCheck: '', token: 0,
-      chk: LE.createChecker(cfg), mute: store.get('wire-line:mute:' + cfg.id) === true, detSeq: 0, detCapT: 0, driven: false, lastCard: '', refMsg: '', px: 1,
+      chk: LE.createChecker(cfg), ut: LE.unitTrackerOn(cfg) ? LE.createUnitTracker(cfg, { link: unitLink() }) : null, unitKey: '', mute: store.get('wire-line:mute:' + cfg.id) === true, detSeq: 0, detCapT: 0, driven: false, lastCard: '', refMsg: '', px: 1,
       phone: null, phoneKey: '', lastChip: '', cap: capFresh()
     };
     st.chk.setRef(st.setup.ref || null);
@@ -673,6 +681,7 @@ button.chip:hover { border-color: var(--warn-ink); }
           <div class="phonep" hidden></div><div class="pchip" hidden></div>
           <div class="vcard" hidden role="status" aria-live="assertive"><div class="vc-top"><b class="vc-title"></b><span class="vc-st"></span></div><div class="vc-msg"></div></div></div>
         <div class="info">
+          <div class="unitbox" hidden></div>
           <div class="nowbox"><div><div class="eyebrow nowlab">Now</div><div class="cur">Waiting for the first step</div></div><div class="big mono"></div></div>
           <div class="kv mono"></div>
           <div class="qa"${isQa ? '' : ' hidden'}></div>
@@ -697,7 +706,7 @@ button.chip:hover { border-color: var(--warn-ink); }
     Object.assign(st, {
       el, video: q('video'), canvas: q('canvas'), stage: q('.stage'), nosrc: q('.nosrc'), sel: q('.src'), recBox: q('.rec'),
       elSrc: q('.srcst'), elRdy: q('.rdy'), needBtn: q('.needb'), elRec: q('.recst'), capBtn: q('.capb'),
-      elNow: q('.nowbox'), elNowLab: q('.nowlab'), elCur: q('.cur'), elBig: q('.big'), elKv: q('.kv'), elQa: q('.qa'), elCheck: q('.check'),
+      elUnit: q('.unitbox'), elNow: q('.nowbox'), elNowLab: q('.nowlab'), elCur: q('.cur'), elBig: q('.big'), elKv: q('.kv'), elQa: q('.qa'), elCheck: q('.check'),
       elMeta: q('.diag'), elMsg: q('.stmsg'), setupPanel: q('.setup-panel'), zbtns: q('.zbtns'), calst: q('.calst'),
       vcard: q('.vcard'), vcTitle: q('.vc-title'), vcMsg: q('.vc-msg'), refst: q('.refst'), phoneEl: q('.phonep'), pchip: q('.pchip'), qrBtn: q('.pqr'),
       con: { btn: q('.conb'), opts: q('.con-opts'), list: q('.con-list'), msg: q('.con-msg'), back: q('.con-x'), step: null },
@@ -972,7 +981,8 @@ button.chip:hover { border-color: var(--warn-ink); }
     st.sig = LE.mergeSignals(r.signals, cls, hp);
     let evs = [];
     if (tracking(st)) { evs = st.eng.update(st.sig, t); evs.forEach(emit); } else st.eng.idle(st.sig, t);
-    runChecker(st, evs, zoneMotion(r.signals), t);
+    const vds = runChecker(st, evs, zoneMotion(r.signals), t);
+    runUnitTracker(st, evs, vds, t);
     st.fpsN++;
     if (t - st.fpsT >= 1000) { st.fps = st.fpsN * 1000 / (t - st.fpsT); st.fpsN = 0; st.fpsT = t; }
     st.fresh = true;
@@ -1006,7 +1016,22 @@ button.chip:hover { border-color: var(--warn-ink); }
     const hands = 'hands' in o ? o.hands : G.handsOn && H.status === 'ready' && st.hands && t - st.handsT < HANDS_FRESH ? st.hands.length > 0 : null;
     const modelOn = 'modelOn' in o ? o.modelOn : !!(G.modelOn && st.mdl);
     const frame = 'frame' in o ? o.frame : modelOn && st.dets ? { id: st.detSeq, t: st.detCapT, dets: st.dets } : null;
-    for (const v of st.chk.update({ t, events: evs, state: st.eng.state(), modelOn, frame, zones: zonesOf(st), hands, motion, idle: !G.session })) { emit(v); playVerdict(st, v.kind); }
+    const out = st.chk.update({ t, events: evs, state: st.eng.state(), modelOn, frame, zones: zonesOf(st), hands, motion, idle: !G.session });
+    for (const v of out) { emit(v); playVerdict(st, v.kind); }
+    return out;
+  }
+  // Unit tracker (S2 first): numbers the units as they pass through, from the signals above. It reads, never writes, the step
+  // checker's events; when a unit ends it asks for a fresh cycle (reset) so the next unit starts clean. Key presses stay the answer key.
+  function runUnitTracker(st, evs, verdicts, t) {
+    if (!st.ut) return;
+    if (!tracking(st) || !G.modelOn || !st.mdl) { if (!G.session) st.ut.restart(); return; }
+    const hands = G.handsOn && H.status === 'ready' && st.hands && t - st.handsT < HANDS_FRESH ? st.hands.length > 0 : false;
+    const fresh = st.dets && t - st.detT < 3000;
+    const out = st.ut.update({ t, present: fresh ? LE.unitPresent(st.dets, st.cfg.unitTracker) : null, hand: hands, events: (evs || []).concat(verdicts || []) });
+    for (const e of out) {
+      emit(e);
+      if (e.action === 'end' && e.reset) { st.eng.abandon(t).forEach(emit); st.chk.restart(); }
+    }
   }
   // live_check.py beep(): mistake 3 x 880 Hz for 220 ms, review 600 Hz for 300 ms, verified 1320 Hz for 120 ms. One per new verdict.
   const TONES = { mistake: [880, 220, 3], review: [600, 300, 1], verified: [1320, 120, 1] };
@@ -1627,7 +1652,9 @@ button.chip:hover { border-color: var(--warn-ink); }
   function needSession() { if (G.session) return false; hint('Press Start session first: nothing counts until then.'); return true; }
   function manualCycle(st) {
     if (needSession()) return;
-    emit({ type: 'manual', station: st.id, action: 'cycle_done', source: 'manual', t: now(), cycle: ++st.manualN });
+    const mt = now();
+    emit({ type: 'manual', station: st.id, action: 'cycle_done', source: 'manual', t: mt, cycle: ++st.manualN });
+    if (st.ut) st.ut.noteManual(mt);
     flashKey(st.id, st);
     G.evSeen = -1;
   }
@@ -1883,7 +1910,7 @@ button.chip:hover { border-color: var(--warn-ink); }
     }
   }
   // Back to a clean start: tracker, checker, key count and the model's last look (tracking() waits for a new one).
-  function clearStation(st) { st.eng.restart(); st.chk.restart(); st.manualN = 0; st.dets = st.detsPrev = st.hands = null; }
+  function clearStation(st) { st.eng.restart(); st.chk.restart(); if (st.ut) st.ut.restart(); st.manualN = 0; st.dets = st.detsPrev = st.hands = null; }
   async function startSession(info) {
     if (G.session || G.starting) return;
     if (!LIST.length) { banner('session', 'There is no station on the floor yet: press + to add one.', 'crit'); return; }
@@ -1924,7 +1951,7 @@ button.chip:hover { border-color: var(--warn-ink); }
     const sess = G.session;
     try {
       if (G.failPick) pickReason(null);
-      for (const st of LIST) st.eng.flush().forEach(emit);
+      for (const st of LIST) { if (st.ut) st.ut.stop(now()).forEach(emit); st.eng.flush().forEach(emit); }
       await Promise.all(LIST.map(st => stopRecording(st)));
       emit({ type: 'session_end', t: now(), source: 'page' });
       for (let i = 0; i < 20 && G.queue.length; i++) { await sendEvents(); if (G.queue.length) await sleep(300); }
@@ -2007,6 +2034,34 @@ button.chip:hover { border-color: var(--warn-ink); }
     if (t === 'clip') return 'Clip: ' + st.source.label;
     return '';
   }
+  // The unit tracker's box on a station card: the current unit (#003) and its state, the counts, and one line per unit this session.
+  const UNIT_PHASE = { waiting: 'Waiting for a unit', in_progress: 'In progress', complete: 'Complete' };
+  const UNIT_ENDED = { departed: 'left', new_unit: 'next unit came', session_stopped: 'session stopped' };
+  function unitView(st) {
+    if (!st.ut) return null;
+    const u = st.ut.state(), counting = !!G.session;
+    const nextNo = u.next || 'next',
+      label = counting ? (u.no ? u.no : nextNo) + ' ' + (UNIT_PHASE[u.phase] || u.phase).toLowerCase() : 'Units start with the session';
+    return { u, counting, label, tag: counting ? (u.no || nextNo) + ' ' + (UNIT_PHASE[u.phase] || u.phase) : '' };
+  }
+  function renderUnits(st) {
+    const v = unitView(st);
+    if (!v) { st.elUnit.hidden = true; return; }
+    const u = v.u, rows = u.units.slice().reverse();
+    const key = [v.label, u.queue, u.queueFrom, u.unlinked, u.completed, u.incomplete, u.manual, u.disagreements, G.score, rows.length, u.current ? Math.floor((now() - u.start) / 1000) : ''].join('|');
+    if (key === st.unitKey) return;
+    st.unitKey = key; st.elUnit.hidden = false;
+    const secs = x => fmtS((x.end - x.start) / 1000);
+    st.elUnit.innerHTML = `<div class="ubar"><span class="chip ${u.phase === 'complete' ? 'good' : u.phase === 'in_progress' ? 'warn' : ''}" title="Auto unit number, counted by order">${esc(v.label)}</span>` +
+      (v.counting && u.queue ? `<span class="chip warn" title="Units that left this station and have not reached the next one yet">${u.queue} waiting for the next station</span>` : '') +
+      (v.counting && u.from ? `<span class="muted" title="This station takes its numbers from ${esc(u.from.toUpperCase())}, in order">numbers from ${esc(u.from.toUpperCase())}${u.queueFrom ? ', ' + u.queueFrom + ' coming' : ''}</span>` : '') +
+      (v.counting && u.unlinked ? `<span class="chip crit" title="Units that arrived here with nothing from the station before: numbered ?01, ?02, flagged for review">${u.unlinked} unlinked</span>` : '') +
+      (v.counting ? `<span class="muted">${u.completed} complete${u.incomplete ? ', <b>' + u.incomplete + ' need review</b>' : ''}</span>` : '') +
+      (v.counting && G.score ? `<span class="chip ${u.disagreements ? 'crit' : 'good'}" title="Auto units against the key presses (the answer key)">${u.manual} keyed${u.disagreements ? ', ' + u.disagreements + ' disagree' : ', agree'}</span>` : '') + '</div>' +
+      (u.current ? `<div class="urow now"><b>${esc(u.current.no)}</b><span>${fmtS((now() - u.start) / 1000)}</span><span>in progress</span></div>` : '') +
+      rows.slice(0, 8).map(x => `<div class="urow ${x.result === 'complete' ? 'ok' : 'review'}"><b>${esc(x.no)}</b><span>${secs(x)}</span><span>${x.unlinked ? 'unlinked, review' : x.result === 'complete' ? 'complete' : 'incomplete: review'}${x.mistakes ? ', ' + x.mistakes + ' mistake' + (x.mistakes > 1 ? 's' : '') : ''}${UNIT_ENDED[x.ended] ? ' (' + UNIT_ENDED[x.ended] + ')' : ''}</span></div>`).join('') +
+      (rows.length > 8 ? `<div class="muted" style="font-size:12px">${rows.length - 8} earlier units are in the session's tracked-units.csv</div>` : '');
+  }
   function renderStation(st, sum, t) {
     autoStandard(st);
     const s = st.eng.state(), cfg = st.cfg, label = id => (cfg.substeps.find(x => x.id === id) || {}).label || id;
@@ -2027,6 +2082,7 @@ button.chip:hover { border-color: var(--warn-ink); }
     else if (st.source.type === 'none') { lab = 'No camera'; cur = !G.score ? 'Connect a camera to count this station' : st.isQa ? 'Connect a camera, or key ' + (st.id === G.qaIds[0] ? 'P or F' : 'Pass or Fail on the bar') + ' for each unit' : 'Connect a camera, or ' + (st.idx < 9 ? 'key ' + (st.idx + 1) : 'press its button on the bar') + ' when a unit leaves'; }
     else if (rd && rd.need) { lab = 'Setup needed'; cur = rd.need; }
     else { lab = 'Between cycles'; cur = s.cycle ? 'Waiting for the next unit' : 'Waiting for the first step'; big = s.since ? fmtS((t - s.since) / 1000) : ''; }
+    renderUnits(st);
     st.elNow.className = cls; st.elNowLab.textContent = lab; st.elCur.textContent = cur; st.elBig.textContent = big;
     const d = ss ? ss.detected : null, m = ss ? ss.manual : null, over = v => (takt && v != null && v > takt ? ' class="over"' : '');
     st.elKv.innerHTML = `<div><span>Cycle</span><b>${s.inCycle ? fmtS((t - s.cycleStart) / 1000) : '--'}</b></div>` +
@@ -2513,17 +2569,18 @@ button.chip:hover { border-color: var(--warn-ink); }
       const q = [...G.events].reverse().find(e => e.type === 'qa_result' && e.station === st.id);
       if (q) { flag = q.result === 'pass' ? 'Pass' : q.result === 'fail' ? 'Fail' : ''; cls = q.result === 'pass' ? 'good' : q.result === 'fail' ? 'crit' : ''; }
     } else if (s.inCycle) { flag = 'On track'; cls = 'good'; }
-    return { cur, flag, cls };
+    const uv = unitView(st);
+    return { cur, flag, cls, unit: uv ? uv.tag : '' };
   }
   function renderDemoStrips() {
     const t = now();
     for (const st of LIST) {
       if (!st.demoStrip) continue;
       if (st.demoNoCam) st.demoNoCam.hidden = !(st.source.type === 'none' || (st.source.type === 'phone' && !phoneLive(st) && !(st.phone && st.phone.showQr)));
-      const v = stripOf(st, t), key = v.cur + '|' + v.flag + '|' + v.cls;
+      const v = stripOf(st, t), key = v.cur + '|' + v.flag + '|' + v.cls + '|' + v.unit;
       if (key === st.demoKey) continue;
       st.demoKey = key;
-      st.demoStrip.innerHTML = `<span class="dcur" title="${esc(v.cur)}">${esc(v.cur)}</span>` + (v.flag ? `<span class="chip ${v.cls}" title="${esc(v.flag)}">${esc(v.flag)}</span>` : '');
+      st.demoStrip.innerHTML = (v.unit ? `<span class="chip unitchip" title="Unit number and state (auto, by order)">${esc(v.unit)}</span>` : '') + `<span class="dcur" title="${esc(v.cur)}">${esc(v.cur)}</span>` + (v.flag ? `<span class="chip ${v.cls}" title="${esc(v.flag)}">${esc(v.flag)}</span>` : '');
     }
   }
   function renderDemoSide() {
@@ -2535,6 +2592,7 @@ button.chip:hover { border-color: var(--warn-ink); }
           `<div class="dlink">${prev ? 'Receives from ' + esc(prev.id.toUpperCase()) : 'Start of the line'}${next ? ', passes to ' + esc(next.id.toUpperCase()) : ', end of the line'}</div>` +
           `<div>Operator: <span class="chip${o ? ' good' : ''}">${o ? esc(o.code) + ', ' + esc(levelLabel(o.level).toLowerCase()) : 'none set'}</span></div>` +
           `<div class="dsrc">Camera: ${esc(sourceText(st) || 'not connected')}</div>` +
+          (st.ut && G.session ? `<div class="dsrc">Units: ${st.ut.state().completed} complete${st.ut.state().incomplete ? ', ' + st.ut.state().incomplete + ' need review' : ''}</div>` : '') +
           `${G.demoClip === st.id ? (clipOptions(st) ? `<select class="dclip" aria-label="Clip for ${esc(st.id.toUpperCase())}"><option value="">Pick a clip</option>${clipOptions(st)}</select>` : '<span class="dsrc">No clips yet. Recordings show up here after a session.</span>') : ''}` +
           `<div class="dbtns"><button type="button" class="btn sm" data-a="phone">Phone</button><button type="button" class="btn sm" data-a="usb">USB</button><button type="button" class="btn sm" data-a="clip">Clip</button><button type="button" class="btn sm" data-a="qr">QR</button><button type="button" class="btn sm" data-a="none">Disconnect</button></div></div>`;
       }).join('') +

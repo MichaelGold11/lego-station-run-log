@@ -118,6 +118,17 @@ reorders or sets aside wires or units. The dashboard's WIP shows the units waiti
 and **units.csv** (under **Sessions and exports**) has one row per unit: each station's time, the wait
 before it (from the previous station finishing to the arrival), its mistakes, and the QA result.
 
+**Automatic unit tracking (S2 and S3).** The page numbers units as they pass through: #001, #002 and so
+on, by order, with nothing on the unit. A unit gets its number the moment it arrives at S2 (its wires and
+connector come into view). When S2 sees it complete and it leaves (out of view for about 2 seconds) or
+the next unit arrives, the recording resets for the next one. S3 does not invent numbers: the unit that
+enters S3 is the next one that left S2, so #002 at S2 is #002 at S3. Both tiles show the number and state
+(waiting, in progress, complete); S2 also shows how many units are waiting for S3. A unit S3 sees with
+nothing from S2 is numbered ?01, ?02, flagged for review, and does not shift the real numbers. A unit that
+leaves before it is complete is flagged "incomplete: review" and not counted. The key presses stay the
+answer key: the tile shows how many units the cameras and the keys disagree on. **tracked-units.csv**
+(session export) has one row per unit with S2 and S3 times side by side.
+
 ## 3. Roles
 
 | Role | What they do |
