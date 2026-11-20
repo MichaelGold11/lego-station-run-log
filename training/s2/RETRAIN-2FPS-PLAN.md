@@ -67,6 +67,34 @@ Test B leans toward the live model: it probably trained on these same videos.
 - The Chrome upload tool takes files under 10 MB, so the zip goes through Drive, not the page.
 - Colab runs on Michael's account; he already accepted the Colab terms (2026-11-19).
 
+## Result of the 2026-11-19 run (22:43): not swapped
+
+Colab: 1,076 frames, train 898 / check 169, mAP50 0.722, mAP50-95 0.55. Per class mAP50: red 0.841,
+white 0.615, black 0.387, open 0.909, closed 0.859. Model in Drive `s2-model-2fps/` (not in the app).
+
+`compare_s2.py` now letterboxes like the app (gray 114 padding, aspect kept); the earlier plain resize
+squashed images. Numbers with the letterbox:
+
+| | Live model | 2 fps model |
+|---|---|---|
+| Test A: held-out photos fully right | 5/5 | 0/5 (one closed at 0.60, nothing else) |
+| Training photos 3468 to 3479 (it trained on these) | 12/12 found closed or open | 2/12 found anything |
+| Test B: open frames called open | 57% | 91% |
+| Test B: open frames called closed | 41% | 10% |
+| Test B: closed frames called closed | 86% | 94% |
+
+Swap rule: B passes, A fails, so no swap.
+
+Why A fails: every video frame is portrait (1280 x 2276, a phone held upright, hands close up). The
+photos are landscape 4:3 (1920 x 1440), and so is the live camera (`app/line.html` asks for 640 x 480).
+The new model learned one shape of scene and sees nothing in the other, even photos it trained on.
+The live model handles both; how Ruza cut her frames is unknown (her notebook starts from a frames zip).
+Test A is the closer match to the live camera, so a model that fails it is not safe to wire in, not
+even for lever state alone.
+
+Next: footage in landscape, ideally from the demo setup's camera, then retrain. A cheaper test of the
+shape theory: pad the portrait frames onto a 4:3 gray canvas before training, and retrain.
+
 ## Open question that decides which test matters
 
 What does the live S2 camera actually see: a whole unit from above on the table (like the photos, Test A)

@@ -17,8 +17,16 @@ VAL = ["k_IMG_8942", "k_IMG_8949", "k_IMG_8958", "m_IMG_3306", "m_IMG_3313", "m_
 CONF = 0.4
 
 
+def letterbox(im, size=640):
+    # Same as the app (app/line.html, live-detect.js) and ultralytics: scale to fit, center, gray (114) padding.
+    w, h = im.size; r = min(size / w, size / h); nw, nh = round(w * r), round(h * r)
+    out = Image.new("RGB", (size, size), (114, 114, 114))
+    out.paste(im.resize((nw, nh), Image.BILINEAR), ((size - nw) // 2, (size - nh) // 2))
+    return out
+
+
 def detect(sess, f):
-    x = np.asarray(Image.open(f).convert("RGB").resize((640, 640)), np.float32).transpose(2, 0, 1)[None] / 255
+    x = np.asarray(letterbox(Image.open(f).convert("RGB")), np.float32).transpose(2, 0, 1)[None] / 255
     o = sess.run(None, {sess.get_inputs()[0].name: x})[0][0].T   # (8400, 4 + classes)
     sc = o[:, 4:]; cl = sc.argmax(1); cf = sc.max(1); d = {}
     for c, v in zip(cl[cf > CONF], cf[cf > CONF]):
@@ -49,8 +57,10 @@ def main():
     for name, s in models.items():
         for truth, fs in frames.items():
             said = [detect(s, f) for f in fs]
-            right = sum(truth in d for d in said); wrong = sum(("closed" if truth == "open" else "open") in d for d in said)
-            print(f"  {name} truth={truth:6s} n={len(fs):3d}  right {right/len(fs):.0%}  wrong {wrong/len(fs):.0%}  none {1 - (right + wrong)/len(fs):.0%}")
+            other = "closed" if truth == "open" else "open"
+            right = sum(truth in d for d in said); wrong = sum(other in d for d in said)
+            none = sum(truth not in d and other not in d for d in said)   # a frame can show both, so the three need not add to 100
+            print(f"  {name} truth={truth:6s} n={len(fs):3d}  right {right/len(fs):.0%}  wrong {wrong/len(fs):.0%}  none {none/len(fs):.0%}")
 
 
 if __name__ == "__main__":
