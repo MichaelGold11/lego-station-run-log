@@ -2,7 +2,7 @@
 // Replay the S2 unit tracker (S2 only: no S3 recording exists in this repo; S3 is covered by synthetic tests) over recorded sessions: decode the video, run the S2 model with the page's letterbox, then feed
 // the real engine, checker and unit tracker in the page's order (engine update, checker update, tracker update, reset on a
 // departed unit). Hands are not run here (the page's hand model is a browser worker), so the tracker sees presence only.
-//   node scripts/replay-unit-tracker.mjs <session dir> [more dirs] [--fps 4] [--json out.json]
+//   node scripts/replay-unit-tracker.mjs <session dir> [more dirs] [--fps 4] [--json out.json] [--model other.onnx]
 // Prints, per recording: the tracker's units, and what the live session recorded (cycle_end events, manual presses) to compare.
 // Needs ffmpeg and ffprobe on PATH. Frames are placed at t = i / fps.
 import fs from 'node:fs';
@@ -17,13 +17,13 @@ const LD = load('live-detect.js'), LE = load('line-engine.js');
 const MIN_BOX = 0.25, IOU = 0.7;
 
 const argv = process.argv.slice(2), dirs = [];
-let fps = 4, jsonOut = '';
-for (let i = 0; i < argv.length; i++) { if (argv[i] === '--fps') fps = +argv[++i]; else if (argv[i] === '--json') jsonOut = argv[++i]; else dirs.push(argv[i]); }
+let fps = 4, jsonOut = '', modelPath = '';
+for (let i = 0; i < argv.length; i++) { if (argv[i] === '--fps') fps = +argv[++i]; else if (argv[i] === '--json') jsonOut = argv[++i]; else if (argv[i] === '--model') modelPath = argv[++i]; else dirs.push(argv[i]); }
 if (!dirs.length) { console.error('Usage: node scripts/replay-unit-tracker.mjs <session dir> [...] [--fps 4] [--json out.json]'); process.exit(2); }
 
 const cfg = JSON.parse(fs.readFileSync(path.join(ROOT, 'data/meta/wire-line.json'), 'utf8'));
 const stn = cfg.stations.find(s => s.id === 's2'), mcfg = cfg.models.s2, S = mcfg.imgsz || 640;
-const m = await openOnnx(path.join(ROOT, 'app', mcfg.file.replace(/^\//, '')), mcfg.classes, S);
+const m = await openOnnx(modelPath ? path.resolve(modelPath) : path.join(ROOT, 'app', mcfg.file.replace(/^\//, '')), mcfg.classes, S);
 const inName = m.sess.inputNames[0], outName = m.sess.outputNames[0];
 const track = LE.trackedClasses(stn, mcfg.classes.slice());
 
