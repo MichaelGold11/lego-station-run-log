@@ -100,9 +100,9 @@ for (const dir of dirs) {
       const cls = LE.steadyClasses(prevDets ? LE.classSignals(prevDets, zones, track) : null, LE.classSignals(dets, zones, track));
       prevDets = dets;
       const sig = LE.mergeSignals(r.signals, cls, null);
-      const evs = eng.update(sig, t); evs.forEach(emit);
+      const stp = LE.stepStation(eng, ut, sig, t), evs = stp.events; evs.forEach(emit);
       let motion = null; for (const id of Object.keys(r.signals)) motion = Math.max(motion || 0, r.signals[id].activity || 0);
-      const vds = chk.update({ t, events: evs, state: eng.state(), modelOn: true, frame: { id: ++seq, t, dets }, zones, hands: null, motion, idle: false });
+      const vds = stp.held ? [] : chk.update({ t, events: evs, state: eng.state(), modelOn: true, frame: { id: ++seq, t, dets }, zones, hands: null, motion, idle: false });
       vds.forEach(emit);
       const out = ut.update({ t, present: LE.unitPresent(dets, stn.unitTracker), hand: false, events: evs.concat(vds) });
       for (const e of out) { emit(e); if (e.action === 'end' && e.reset) { eng.abandon(t).forEach(emit); chk.restart(); } }

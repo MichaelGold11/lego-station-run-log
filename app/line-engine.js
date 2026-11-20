@@ -1036,7 +1036,15 @@
         from: upId, queue: isUp ? link.length(sid) : 0, queueFrom: upId ? link.length(upId) : 0, unlinked: unlinkedN, unlinkedNow: !!(cur && cur.unlinked) };
     }
     function restart() { phase = 'waiting'; n = 0; unlinkedN = 0; cur = null; units = []; needEmpty = !!o.startNeedsEmpty; lastPresent = false; presentSince = null; absentSince = null; manual = []; if (link) link.reset(sid); }
-    return { update, stop, noteManual, state, restart, config: o };
+    // True while the finished unit is still in view and newUnitNeedsEmpty is on: the station's step engine and checker must sit out (see stepStation).
+    const holding = () => !!(o.newUnitNeedsEmpty && phase === 'complete');
+    return { update, stop, noteManual, state, restart, holding, config: o };
+  }
+  // The one place the page and the replay decide whether a station's step engine may run this frame: not while its tracker holds a
+  // finished unit that has not left (its wires are still in view, they must not start cycle 2). Returns { held, events }.
+  function stepStation(eng, ut, signals, t) {
+    if (ut && ut.holding && ut.holding()) { eng.idle(signals, t); return { held: true, events: [] }; }
+    return { held: false, events: eng.update(signals, t) };
   }
   // Presence for the live page and the replay: a unit is in view when a presence class is detected anywhere at presentConf or more.
   function unitPresent(dets, cfg) {
@@ -1192,6 +1200,9 @@
         substepAvg: subAvg, idleShare: obs > 0 && (d.cycles.length || d.open) ? round(clamp01(1 - busy / obs), 3) : null,
         repeats: d.cycles.reduce((a, c) => a + c.repeats, 0), flags: d.cycles.reduce((a, c) => a + c.flags.length, 0)
       };
+      // A station with a unit tracker counts units, not step-engine cycles: a complete unit (departed, or still in view with its cycle closed).
+      // (A session with no unit events from this station, e.g. recorded before the tracker, keeps the cycle count.)
+      if (unitTrackerOn(st) && sorted.some(e => e.type === 'unit' && e.station === st.id)) det.cycles = trackedUnits(sorted, st.id).filter(u => u.result === 'complete' || (u.action === 'open' && d.cycles.some(c => c.end >= u.start))).length;
       const ms = m.map(x => x.sec).filter(isNum);
       const man = { cycles: m.length, lastSec: r1(ms.length ? ms[ms.length - 1] : null), avgSec: r1(mean(ms)), stdSec: r1(sd(ms)) };
       const basis = o.basis === 'detected' || o.basis === 'manual' ? o.basis : (det.cycles > 0 ? 'detected' : 'manual');
@@ -1461,7 +1472,7 @@
     DEFAULTS, MOTION, MISMATCH_NOTE, EVENT_TYPES, CYCLE_ACTIONS, SUBSTEP_COLS, CYCLE_COLS, VERDICT_COLS, CHECK, LEVELS, OPERATOR_CODE, FLOOR, CLASS_TEST,
     members, activeRule, evalRule, missingOf, ruleText, checkConfig, captureDefaults, CAPTURE_DEFAULTS, captureWanted, nextSampleDue, modelFor, checkModelOutput, e2eBadClass, qaDecide, createStation,
     operatorCode, defaultName, shortName, classTestLayout, setupKey, nextStationId, freeSpot, saveScheduler, applyLayout,
-    zoneSignals, calibrationFrom, classSignals, trackedClasses, unitCheck, ASSEMBLY, handPresence, steadyClasses, mergeSignals, createChecker, createUnitTracker, createUnitLink, unitRows, unitPresent, unitNo, unitTrackerOn, UNIT_TRACKER, trackedUnits, trackedUnitsCsv, TRACKED_COLS,
+    zoneSignals, calibrationFrom, classSignals, trackedClasses, unitCheck, ASSEMBLY, handPresence, steadyClasses, mergeSignals, createChecker, createUnitTracker, createUnitLink, stepStation, unitRows, unitPresent, unitNo, unitTrackerOn, UNIT_TRACKER, trackedUnits, trackedUnitsCsv, TRACKED_COLS,
     standardViews, pickStandardView, sameZones, sortEvents, ruleZones, unobserved, NO_DATA, detectedCycles, manualCycles, summarize, substepsCsv, cyclesCsv, verdictsCsv, linkUnits, unitCols, unitsCsv, csvCell
   };
 });

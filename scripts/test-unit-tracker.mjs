@@ -230,5 +230,33 @@ console.log('unit tracker: synthetic S2 to S3 run, two units, wires still in vie
   check('a third S3 arrival with nothing queued stays unlinked (?01)', s3n.length === 3 && s3n[2].no === '?01' && s3n[2].unlinked && s3n[2].unit === null, JSON.stringify(s3n[2]));
 }
 
+console.log('\nunit tracker: step engine gated while a finished unit is still in view');
+{
+  const ut = LE.createUnitTracker(S2);
+  const calls = { update: 0, idle: 0 };
+  // A stand-in step engine whose wires keep re-firing substeps and, on 'close', a cycle_end; it counts how it is driven.
+  let script = [];
+  const eng = { update(sig, t) { calls.update++; return script.map(e => Object.assign({ station: 's2', t, source: 'model' }, e)); }, idle() { calls.idle++; } };
+  let t = 0; const all = [];
+  const fr = (ms, present, evs) => { for (let i = 0; i < Math.round(ms / 125); i++) { t += 125; script = i === 0 && evs ? evs : []; const r = LE.stepStation(eng, ut, {}, t); all.push(...r.events); ut.update({ t, present, hand: false, events: r.events }); } };
+  fr(1000, false);
+  fr(1000, true, [{ type: 'substep', substep: 's2_arrive', move: 'start' }]);
+  fr(1000, true, [{ type: 'substep', substep: 's2_open', move: 'next' }]);
+  fr(500, true, [{ type: 'substep', substep: 's2_close', move: 'next' }, { type: 'cycle_end', cycle: 1 }]);
+  check('complete after the first cycle_end', ut.state().phase === 'complete' && ut.holding());
+  const u0 = calls.update, n0 = all.length;
+  fr(2000, true, [{ type: 'substep', substep: 's2_arrive', move: 'start' }, { type: 'verdict', kind: 'mistake' }, { type: 'cycle_end', cycle: 2 }]);
+  check('while held: the engine is not updated, no events, no second cycle_end, no mistake', calls.update === u0 && all.length === n0 && ut.state().mistakes === undefined && ut.state().current.mistakes === 0 && ut.state().completed === 1);
+  fr(1000, true, [{ type: 'substep', substep: 's2_arrive', move: 'start' }]);
+  check('re-fired arrival while held does not start a unit', ut.state().counted === 1 && ut.state().phase === 'complete');
+  fr(2500, false);
+  check('unit departs after departMs, tracker no longer holds', ut.state().phase === 'waiting' && !ut.holding() && ut.state().units.length === 1);
+  const u1 = calls.update;
+  fr(1000, true, [{ type: 'substep', substep: 's2_arrive', move: 'start' }]);
+  fr(500, true, [{ type: 'substep', substep: 's2_close', move: 'next' }, { type: 'cycle_end', cycle: 1 }]);
+  check('after departure the next unit runs normally: engine updated, #002 complete', calls.update > u1 && ut.state().no === '#002' && ut.state().phase === 'complete' && all.filter(e => e.type === 'cycle_end').length === 2);
+  check('stepStation without a tracker just updates the engine', LE.stepStation(eng, null, {}, 1).held === false);
+}
+
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);
