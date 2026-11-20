@@ -1078,6 +1078,11 @@ console.log('capture triggers: captureWanted');
   const s2ids = SHIPPED.stations.find(s => s.id === 's2').zones.map(z => z.id);
   const land = LE.pickStandardView(STD.roles.s2, s2ids, 4 / 3), port = LE.pickStandardView(STD.roles.s2, s2ids, 3 / 4);
   check('committed standard: s2 has a view that fits at 4:3 and one at 3:4, with different boxes, each holding every s2 zone', land && port && land.fits && port.fits && !LE.sameZones(land.view.zones, port.view.zones) && s2ids.every(id => land.view.zones[id] && port.view.zones[id]), JSON.stringify([land, port]));
+  for (const rid of ['s1', 's3', 's4']) {
+    const ids = SHIPPED.stations.find(s => s.id === rid).zones.map(z => z.id);
+    const l = LE.pickStandardView(STD.roles[rid], ids, 4 / 3), p = LE.pickStandardView(STD.roles[rid], ids, 3 / 4);
+    check('committed standard: ' + rid + ' has boxes at 4:3 and 3:4, each holding every ' + rid + ' zone, and is marked for a visual check', l && p && l.fits && p.fits && ids.every(id => l.view.zones[id] && p.view.zones[id]) && /VISUAL CHECK/.test(STD.roles[rid].note) && /VISUAL CHECK/.test(STD.roles[rid].otherViews[0].note), JSON.stringify([l, p]));
+  }
   // The server keeps at most 300 characters of a note, so a longer one would be cut the first time anyone presses Save as standard.
   const stdNotes = Object.values(STD.roles).flatMap(r => [r].concat(r.otherViews || [])).map(v => v.note || "");
   check("committed standard: every note is at most 300 characters, so the file comes back unchanged from a save", stdNotes.every(n => n.length <= 300), stdNotes.map(n => n.length).join());

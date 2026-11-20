@@ -125,6 +125,28 @@ kbd { font-family: var(--f-mono); font-size: 11px; background: var(--surface-2);
   background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
   touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
 .floor.panning { cursor: grabbing; }
+/* Demo view: only each station's camera, with its name and a thin status strip; the stations' details live in the left panel. */
+.demo { position: absolute; inset: 0; z-index: 6; display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); background: var(--bg, var(--floor)); cursor: default; user-select: text; -webkit-user-select: text; touch-action: pan-y; overflow: auto; }
+.demo[hidden] { display: none; }
+.demo-side { border-right: 1px solid var(--line); padding: 12px; display: grid; gap: 10px; align-content: start; background: var(--surface); min-width: 0; }
+.demo-side h3 { margin: 0; font-size: 14px; }
+.demo-side .dflow { font-size: 12.5px; color: var(--ink-2); }
+.demo-st { border: 1px solid var(--line); border-radius: 8px; padding: 8px; display: grid; gap: 5px; font-size: 12.5px; min-width: 0; }
+.demo-st .dh { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.demo-st .dh b { font-size: 13px; }
+.demo-st .dlink, .demo-st .dsrc { color: var(--muted); font-size: 12px; }
+.demo-st .dbtns { display: flex; gap: 4px; flex-wrap: wrap; }
+.demo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 12px; align-content: start; min-width: 0; }
+.dtile { min-width: 0; display: grid; grid-template-rows: auto auto; gap: 0; }
+.dtile .dview { position: relative; min-width: 0; }
+.dtile .dview .stage { width: 100%; }
+.dtile .dname { position: absolute; top: 8px; left: 8px; z-index: 3; font: 700 14px var(--f-mono, monospace); color: #fff; background: rgba(15, 17, 19, .78); border-radius: 4px; padding: 3px 9px; pointer-events: none; }
+.demo .nosrc { display: none; }
+.dtile .dnocam { position: absolute; inset: 0; z-index: 2; display: grid; place-content: center; gap: 6px; text-align: center; padding: 16px; background: #0b0c0d; color: #aab0b6; font-size: 13px; }
+.dtile .dnocam b { color: #eff1ef; font-size: 15px; }
+.dtile .dstrip { display: flex; gap: 8px; align-items: center; min-height: 26px; padding: 3px 8px; border: 1px solid var(--line); border-top: 0; border-radius: 0 0 6px 6px; background: var(--surface); font-size: 12px; min-width: 0; }
+.dtile .dstrip .dcur { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 900px) { .demo { grid-template-columns: minmax(0, 1fr); } .demo-side { border-right: 0; border-bottom: 1px solid var(--line); } .demo-grid { grid-template-columns: minmax(0, 1fr); } }
 .world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 .arrows { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
 .arrows .fa { fill: none; stroke: var(--accent); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; opacity: .8; }
@@ -294,6 +316,8 @@ button.chip:hover { border-color: var(--warn-ink); }
       <button class="btn primary" id="btnStart" type="button">Start session</button>
       <button class="btn" id="btnStop" type="button" hidden>Stop session</button>
       <button class="btn" id="btnSessions" type="button">Sessions</button>
+      <button class="btn" id="btnDemo" type="button" aria-pressed="false" title="Demo view: only each station's camera and what the system sees, with the stations listed on the left">Demo view</button>
+      <a class="btn" href="/insights" target="_blank" rel="noopener" title="Assembly Insights: the manager view of the recorded runs. Opens in a new tab, so recording keeps going here">Insights</a>
       <button class="btn" id="btnSetup" type="button" title="Cameras, boxes, calibration and the line's switches">Setup</button>
     </div>
   </header>
@@ -372,6 +396,10 @@ button.chip:hover { border-color: var(--warn-ink); }
     <span class="muted" style="font-size:12px">It goes in the middle of the screen. Then connect its camera.</span>
     <div class="acts"><button class="btn primary" type="submit">Add station</button><button class="btn" id="btnAddX" type="button">Cancel</button></div>
   </form>
+  <div class="demo" id="demo" hidden aria-label="Demo view">
+    <aside class="demo-side" id="demoSide" aria-label="Stations"></aside>
+    <div class="demo-grid" id="demoGrid"></div>
+  </div>
   <div class="floor-empty" id="floorEmpty" hidden>No stations on this layout yet. Press + to add one.</div>
   <div class="zoombox">
     <button class="btn" id="zOut" type="button" title="Zoom out" aria-label="Zoom out">&minus;</button>
@@ -416,7 +444,7 @@ button.chip:hover { border-color: var(--warn-ink); }
   // config: the effective config (G.base, the file, with the floor layout applied: one station per layout entry).
   const G = {
     config: null, base: null, standard: { roles: {} }, layout: null, layouts: [], roles: [], editMode: false, qaIds: [], setup: {}, events: [], queue: [], session: null, lastSession: null, basis: store.get('wire-line:basis') || 'auto',
-    modelOn: false, handsOn: false, cameras: [], clips: [], camAllowed: false, failPick: null, sending: false, summary: null, sumAt: 0, evSeen: -1,
+    demo: store.get('wire-line:demo') === true, modelOn: false, handsOn: false, cameras: [], clips: [], camAllowed: false, failPick: null, sending: false, summary: null, sumAt: 0, evSeen: -1,
     qaId: null, saveTimer: null, starting: false, stopping: false, soundOn: store.get('wire-line:sound') !== false, setupMode: false,
     score: store.get('wire-line:scoreOn') !== false,    // Score the cameras: the answer key shows (on by default; a new key, because the page saved false under the old one on every load)
     capOn: store.get('wire-line:capture'), capTotal: 0, capBusy: 0, capWarned: false    // capture switch (null: the config decides), frames this session, uploads in flight
@@ -1057,7 +1085,7 @@ button.chip:hover { border-color: var(--warn-ink); }
       if (txt !== st.lastChip) { st.pchip.textContent = txt; st.lastChip = txt; }
       st.qrBtn.textContent = ph.showQr ? 'Hide QR' : 'Show QR';
     }
-    const show = on && (!live || ph.showQr);
+    const show = on && (live || !G.demo ? (!live || ph.showQr) : ph.showQr);    // Demo view: a waiting phone shows its QR panel only when the panel's QR button asked for it
     st.phoneEl.hidden = !show;
     if (!show) { st.phoneKey = ''; return; }
     const i = PHN.info || {}, host = phoneHost(), link = phoneLink(st, host), [msg, bad] = phoneStatus(st), trusted = (i.trusted || []).includes(host);
@@ -1385,6 +1413,7 @@ button.chip:hover { border-color: var(--warn-ink); }
 
   // ---------- setup mode: every station at once (camera, boxes, calibration), plus the line-wide switches ----------
   function setSetupMode(on) {
+    if (on && G.demo) setDemo(false);    // Setup works on the station cards
     G.setupMode = !!on;
     document.body.classList.toggle('setup-mode', G.setupMode);
     $('setupBar').hidden = !G.setupMode;
@@ -2123,6 +2152,7 @@ button.chip:hover { border-color: var(--warn-ink); }
       if (G.score) renderKeyCounts();
     }
     for (const st of LIST) renderStation(st, G.summary, t);
+    if (G.demo) { renderDemoStrips(); renderDemoSide(); }
     if (!$('startForm').hidden) renderReadyLine();
     if (G.session) {
       $('sessClock').textContent = fmtClock(t - G.session.startedAtMs);
@@ -2325,6 +2355,7 @@ button.chip:hover { border-color: var(--warn-ink); }
       return st;
     });
     G.qaIds = LIST.filter(st => st.isQa).map(st => st.id);
+    if (G.demo) buildDemo();
     for (const st of added) { st.editPanel.hidden = !G.editMode; sizeCanvas(st); emit({ type: 'source_change', station: st.id, t, input: 'none', note: st.source.label }); }
     $('hdrNote').textContent = (G.config.name || 'Line') + ', ' + LIST.length + ' station' + (LIST.length === 1 ? '' : 's') + ', one overhead camera each';
     $('hdrNote').title = G.config.product || '';
@@ -2401,6 +2432,7 @@ button.chip:hover { border-color: var(--warn-ink); }
   }
   function setEditMode(on) {
     if (on && G.session) { noEdits(); return; }
+    if (on && G.demo) setDemo(false);
     G.editMode = !!on;
     if (G.editMode && G.setupMode) setSetupMode(false);    // one mode at a time
     cancelDrag();
@@ -2468,6 +2500,97 @@ button.chip:hover { border-color: var(--warn-ink); }
     if (st) { revealCard(st); if (st.source.type === 'none') showConnect(st, 'choose'); }
     return id;
   }
+
+  // ---------- Demo view: only each station's camera, with its name and a status strip; the stations are listed on the left ----------
+  // The camera stages move into the demo tiles (same elements, so pairing, video, the model overlay and the step checker
+  // keep working) and go back to their cards when Demo view is off. Class layout: the first station on top, the rest in a row below.
+  function stripOf(st, t) {
+    const s = st.eng.state(), cfg = st.cfg, cv = st.chk.current, bad = cv && (cv.kind === 'mistake' || cv.kind === 'review') ? cv : null;
+    const step = (cfg.substeps.find(x => x.id === s.current) || {}).label || s.current;
+    let cur = s.inCycle ? step : st.elCur.textContent, flag = '', cls = '';
+    if (bad) { flag = bad.kind === 'mistake' ? 'Defect: ' + bad.message : 'Needs review'; cls = 'crit'; }
+    else if (st.isQa) {
+      const q = [...G.events].reverse().find(e => e.type === 'qa_result' && e.station === st.id);
+      if (q) { flag = q.result === 'pass' ? 'Pass' : q.result === 'fail' ? 'Fail' : ''; cls = q.result === 'pass' ? 'good' : q.result === 'fail' ? 'crit' : ''; }
+    } else if (s.inCycle) { flag = 'On track'; cls = 'good'; }
+    return { cur, flag, cls };
+  }
+  function renderDemoStrips() {
+    const t = now();
+    for (const st of LIST) {
+      if (!st.demoStrip) continue;
+      if (st.demoNoCam) st.demoNoCam.hidden = !(st.source.type === 'none' || (st.source.type === 'phone' && !phoneLive(st) && !(st.phone && st.phone.showQr)));
+      const v = stripOf(st, t), key = v.cur + '|' + v.flag + '|' + v.cls;
+      if (key === st.demoKey) continue;
+      st.demoKey = key;
+      st.demoStrip.innerHTML = `<span class="dcur" title="${esc(v.cur)}">${esc(v.cur)}</span>` + (v.flag ? `<span class="chip ${v.cls}" title="${esc(v.flag)}">${esc(v.flag)}</span>` : '');
+    }
+  }
+  function renderDemoSide() {
+    const names = LIST.map(st => st.id.toUpperCase());
+    const html = `<h3>Stations</h3><div class="dflow">Each unit flows ${names.map(esc).join(' &rarr; ') || '--'}. Units are linked by their order.</div>` +
+      LIST.map((st, i) => {
+        const prev = LIST[i - 1], next = LIST[i + 1], o = st.op;
+        return `<div class="demo-st" data-st="${esc(st.id)}"><div class="dh"><b>${esc(st.id.toUpperCase())} ${esc(st.cfg.label || '')}</b></div>` +
+          `<div class="dlink">${prev ? 'Receives from ' + esc(prev.id.toUpperCase()) : 'Start of the line'}${next ? ', passes to ' + esc(next.id.toUpperCase()) : ', end of the line'}</div>` +
+          `<div>Operator: <span class="chip${o ? ' good' : ''}">${o ? esc(o.code) + ', ' + esc(levelLabel(o.level).toLowerCase()) : 'none set'}</span></div>` +
+          `<div class="dsrc">Camera: ${esc(sourceText(st) || 'not connected')}</div>` +
+          `${G.demoClip === st.id ? (clipOptions(st) ? `<select class="dclip" aria-label="Clip for ${esc(st.id.toUpperCase())}"><option value="">Pick a clip</option>${clipOptions(st)}</select>` : '<span class="dsrc">No clips yet. Recordings show up here after a session.</span>') : ''}` +
+          `<div class="dbtns"><button type="button" class="btn sm" data-a="phone">Phone</button><button type="button" class="btn sm" data-a="usb">USB</button><button type="button" class="btn sm" data-a="clip">Clip</button><button type="button" class="btn sm" data-a="qr">QR</button><button type="button" class="btn sm" data-a="none">Disconnect</button></div></div>`;
+      }).join('') +
+      `<div><button type="button" class="btn sm" id="demoPair" title="Make a new pairing code for the phone cameras. Every phone link and QR code so far stops working.">New pairing code</button></div>` +
+      `<span class="muted" style="font-size:12px">Operators are anonymous codes with a training level. Set one in the floor view.</span>`;
+    if (html !== G.demoSideHtml) { $('demoSide').innerHTML = html; G.demoSideHtml = html; }
+  }
+  function buildDemo() {
+    const grid = $('demoGrid');
+    for (const st of LIST) { st.el.querySelector('.st-body').prepend(st.stage); st.demoStrip = null; }    // everything back to its card first
+    grid.textContent = '';
+    LIST.forEach((st, i) => {
+      const tile = document.createElement('div'), view = document.createElement('div'), nm = document.createElement('div'), strip = document.createElement('div');
+      tile.className = 'dtile'; tile.dataset.st = st.id; view.className = 'dview'; nm.className = 'dname'; strip.className = 'dstrip';
+      nm.textContent = st.id.toUpperCase() + (st.cfg.label ? ' ' + st.cfg.label : '');
+      const nc = document.createElement('div'); nc.className = 'dnocam'; nc.innerHTML = '<b>No camera yet</b><span>Use Phone, USB, Clip or QR in the panel on the left.</span>'; st.demoNoCam = nc;
+      view.append(st.stage, nc, nm); tile.append(view, strip); grid.appendChild(tile);
+      tile.style.gridRow = i === 0 ? '1' : String(2 + Math.floor((i - 1) / 3));
+      tile.style.gridColumn = String(i === 0 ? 1 : ((i - 1) % 3) + 1);
+      st.demoStrip = strip; st.demoKey = '';
+    });
+    G.demoSideHtml = '';
+    renderDemoSide(); renderDemoStrips();
+    for (const st of LIST) { sizeCanvas(st); drawOverlay(st); }
+  }
+  function setDemo(on) {
+    on = !!on;
+    if (on && G.editMode) setEditMode(false);
+    if (on && G.setupMode) setSetupMode(false);
+    G.demo = on; store.set('wire-line:demo', on);
+    $('demo').hidden = !on;
+    $('btnDemo').classList.toggle('on', on); $('btnDemo').setAttribute('aria-pressed', on ? 'true' : 'false');
+    document.body.classList.toggle('demo-mode', on);
+    if (on) buildDemo();
+    else {
+      for (const st of LIST) { st.el.querySelector('.st-body').prepend(st.stage); st.demoStrip = null; sizeCanvas(st); drawOverlay(st); }
+      $('demoGrid').textContent = ''; scheduleArrows();
+    }
+  }
+  $('btnDemo').onclick = () => setDemo(!G.demo);
+  for (const ev of ['pointerdown', 'wheel', 'touchstart']) $('demo').addEventListener(ev, e => e.stopPropagation(), { passive: true });    // the floor must not pan under it
+  $('demoSide').addEventListener('change', e => {
+    const card = e.target.closest('.demo-st'), st = card && ST[card.dataset.st];
+    if (st && e.target.classList.contains('dclip') && e.target.value) { const v = e.target.value; G.demoClip = null; G.demoSideHtml = ''; setSource(st, v).then(renderDemoSide); }
+  });
+  $('demoSide').addEventListener('click', e => {
+    if (e.target.id === 'demoPair') { $('btnPair').click(); return; }
+    const b = e.target.closest('button[data-a]'), card = b && b.closest('.demo-st'), st = card && ST[card.dataset.st];
+    if (!st) return;
+    const a = b.dataset.a;
+    if (a === 'phone') setSource(st, 'phone');
+    else if (a === 'usb') connectUsb(st);
+    else if (a === 'clip') { G.demoClip = G.demoClip === st.id ? null : st.id; G.demoSideHtml = ''; renderDemoSide(); }
+    else if (a === 'qr') { (async () => { if (!st.phone) await setSource(st, 'phone'); if (st.phone) { st.phone.showQr = !st.phone.showQr; renderPhone(st, true); renderDemoStrips(); } })(); }
+    else if (a === 'none') setSource(st, 'none');
+  });
 
   // ---------- operator at each station: an anonymous code and a training level (docs/dashboard-plan.md, decision 1) ----------
   const levelLabel = id => (LE.LEVELS.find(l => l.id === id) || {}).label || '';
@@ -2647,6 +2770,7 @@ button.chip:hover { border-color: var(--warn-ink); }
     if (!lay) { lay = LE.classTestLayout(G.base); G.layouts = [lay]; }
     setScore(G.score);
     await reconcile(lay);
+    if (G.demo) setDemo(true);
     renderSession();
     restoreView();
     await loadPhoneInfo();

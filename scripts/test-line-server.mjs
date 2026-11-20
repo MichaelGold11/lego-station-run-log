@@ -78,6 +78,12 @@ try {
   check('GET /runs serves the LEGO run log with its local runtime', runs.status === 200 && /<title>LEGO Station Run Log<\/title>/.test(runs.text) && /\/local-runtime\.js/.test(runs.text));
   check('npm start prints the wire line first and the run log second', /Wire line: http:\/\/localhost:\d+\/line\n[^]*LEGO run log \(archived\): http:\/\/localhost:\d+\/runs/.test(log), log.split('\n').slice(0, 2).join(' | '));
 
+  const lineP = await req('GET', '/line'), insP = await req('GET', '/insights');
+  check('GET /line has the Insights link and the Demo view toggle with its station tiles container', lineP.status === 200 && /href="\/insights"/.test(lineP.text) && /id="btnDemo"/.test(lineP.text) && /id="demoGrid"/.test(lineP.text) && /id="demoSide"/.test(lineP.text));
+  check('GET /insights serves the manager page', insP.status === 200 && /Insights/.test(insP.text));
+  check('line.html script has the Demo view wiring: remembered toggle, stages move into tiles, status strip, no names', /wire-line:demo/.test(lineP.text) && /function buildDemo/.test(lineP.text) && /function renderDemoStrips/.test(lineP.text) && /anonymous codes/.test(lineP.text));
+  check('Demo view: an unconnected tile is a placeholder, a waiting phone shows its QR only on request, and Clip works from the panel', /No camera yet/.test(lineP.text) && /dnocam/.test(lineP.text) && /class="dclip"/.test(lineP.text) && /\(live \|\| !G\.demo \? \(!live \|\| ph\.showQr\) : ph\.showQr\)/.test(lineP.text));
+
   console.log('config and setup');
   const cfg = await req('GET', '/api/line/config');
   check('GET /api/line/config falls back to the repo config (4 stations)', cfg.status === 200 && cfg.json.stations.length === 4);
@@ -93,6 +99,11 @@ try {
   check('GET /dashboard serves the dashboard page as text/html', dash.status === 200 && /text\/html/.test(dash.headers['content-type']) && /Wire Line Dashboard/.test(dash.text));
   const dashBad = await req('GET', '/dashboard', null, { Host: 'evil.example' });
   check('GET /dashboard with a foreign Host gets 403', dashBad.status === 403);
+  const ins = await req('GET', '/insights');
+  check('GET /insights serves the Assembly Insights page', ins.status === 200 && /text\/html/.test(ins.headers['content-type']) && /Assembly Insights/.test(ins.text));
+  const insApi = await req('GET', '/api/insights');
+  check('GET /api/insights answers with digests and reviews', insApi.status === 200 && Array.isArray(insApi.json.digests) && insApi.json.reviews && typeof insApi.json.reviews === 'object', insApi.text.slice(0, 160));
+  check('GET /api/insights with a foreign Host gets 403', (await req('GET', '/api/insights', null, { Host: 'evil.example' })).status === 403);
   const setup = { s1: { zones: { supply: { x: 0.1, y: 0.1, w: 0.2, h: 0.3 }, ghost: { x: 0, y: 0, w: 0.1, h: 0.1 } }, calib: { motion: { supply: 0.02 }, bright: { supply: { off: 80 } } } } };
   const put = await req('PUT', '/api/line/setup', setup, jsonHdr);
   check('PUT /api/line/setup saves zones and calibration', put.status === 200, put.text);
@@ -259,7 +270,7 @@ try {
 
   console.log('standard setup per role');
   const std0 = await req('GET', '/api/line/standard');
-  check('GET /api/line/standard returns the committed file (roles with no zones yet)', std0.status === 200 && std0.json.version === 1 && std0.json.roles && std0.json.roles.s1 && Object.keys(std0.json.roles.s1.zones).length === 0, std0.text.slice(0, 200));
+  check('GET /api/line/standard returns the committed file (version 1, every role present)', std0.status === 200 && std0.json.version === 1 && std0.json.roles && std0.json.roles.s1 && std0.json.roles.s4 && Object.keys(std0.json.roles.s1.zones).length > 0, std0.text.slice(0, 200));
   const stdPut = await req('PUT', '/api/line/standard', { roles: { s1: { zones: { supply: { x: 0.1, y: 0.2, w: 0.3, h: 0.4 }, ghost: { x: 0, y: 0, w: 0.1, h: 0.1 } }, note: 'trained mount' } } }, jsonHdr);
   const stdGot = (await req('GET', '/api/line/standard')).json;
   check('PUT /api/line/standard saves a role\'s zones; zones the role does not have are dropped', stdPut.status === 200 && stdGot.roles.s1.zones.supply.h === 0.4 && !stdGot.roles.s1.zones.ghost && stdGot.roles.s1.note === 'trained mount', JSON.stringify(stdGot));

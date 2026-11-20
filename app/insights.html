@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Assembly Insights</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Assembly Insights: the manager view of the wire line (Savannah's Nov 13 design and field guide).
+   Colors have one job each: mint clear/closed, amber Needs Review, orange Action Required, coral past 10% slower,
+   white primary, gray structure. The heatmap uses a blue scale so amber stays "Needs Review" (audit, MED). */
+:root {
+  --bg: #121315; --panel: #1c1e21; --panel2: #24272b; --panel3: #2c3035; --line: #34383d; --line2: #464b52;
+  --text: #ecebe7; --muted: #a3a6ab; --dim: #74787e;
+  --mint: #8fd6b8; --amber: #f0c25a; --orange: #f08c4a; --coral: #f2917f; --gray: #8a8e94;
+  --blue1: #22303f; --blue2: #2c4a66; --blue3: #3b6a94; --blue4: #5b93c7;
+  --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace; --sans: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 var(--sans); }
+a { color: inherit; }
+button { font: inherit; color: inherit; cursor: pointer; }
+.app { display: grid; grid-template-columns: 250px 1fr; min-height: 100vh; }
+aside { border-right: 1px solid var(--line); padding: 26px 18px; display: flex; flex-direction: column; gap: 8px; position: sticky; top: 0; height: 100vh; }
+.brand small { display: block; font: 500 12px/1.3 var(--sans); letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+.brand b { display: block; font-size: 19px; font-weight: 500; margin: 6px 0 22px; }
+nav a { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 8px; text-decoration: none; color: var(--text); font-size: 16px; border-left: 3px solid transparent; }
+nav a.on { background: var(--panel3); border-left-color: #b9e57a; }
+nav a:hover:not(.on) { background: var(--panel); }
+nav svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+.navsep { flex: 1; }
+.src { border-top: 1px solid var(--line); padding-top: 16px; }
+.src h4 { margin: 0 0 8px; font: 500 12px var(--sans); letter-spacing: .14em; color: var(--muted); text-transform: uppercase; }
+.seg { display: flex; border: 1px solid var(--line2); border-radius: 8px; padding: 3px; gap: 3px; }
+.seg button { flex: 1; background: none; border: 0; padding: 8px 6px; border-radius: 6px; color: var(--muted); font-size: 14px; }
+.seg button.on { background: var(--panel3); color: var(--text); }
+.src p { color: var(--muted); font-size: 13px; margin: 10px 0 6px; }
+.linkbtn { background: none; border: 0; padding: 0; text-decoration: underline; color: var(--text); font-size: 13px; }
+main { padding: 26px 34px 60px; max-width: 1500px; width: 100%; }
+.top { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+.top h1 { margin: 0; font-size: 30px; font-weight: 500; }
+.top .sub { color: var(--muted); font-size: 14px; margin-top: 2px; }
+.top .grow { flex: 1; }
+select { background: var(--panel); color: var(--text); border: 1px solid var(--line2); border-radius: 8px; padding: 10px 34px 10px 14px; font: 15px var(--sans); appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 18px) 52%, calc(100% - 13px) 52%; background-size: 5px 5px; background-repeat: no-repeat; }
+.live { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.live i { width: 7px; height: 7px; border-radius: 50%; background: var(--mint); display: inline-block; }
+.banner { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--amber); border-radius: 0; padding: 12px 16px; margin: 0 0 18px; color: var(--muted); font-size: 14px; }
+.banner b { color: var(--text); font-weight: 500; }
+.headline { font-size: 22px; margin: 0 0 18px; font-weight: 400; }
+.kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; margin-bottom: 10px; }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; min-height: 112px; }
+.kpi h5 { margin: 0 0 6px; font: 500 12px var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.kpi .big { font: 500 32px/1.15 var(--mono); }
+.kpi .note { color: var(--muted); font-size: 13px; margin-top: 4px; }
+.meta { color: var(--muted); font-size: 14px; margin: 6px 0 20px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; margin-bottom: 18px; }
+.card > h2, .card .h2 { margin: 0 0 16px; font-size: 20px; font-weight: 500; }
+.cardhead { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+.cardhead h2 { margin: 0; font-size: 20px; font-weight: 500; flex: 1; }
+.cardhead span { color: var(--muted); font-size: 14px; }
+.flow { display: flex; align-items: stretch; gap: 8px; }
+.flow .arr { display: flex; align-items: center; color: var(--muted); font-size: 18px; }
+.st { flex: 1 1 0; max-width: 420px; min-width: 0; background: var(--panel2); border: 1px solid var(--line); border-top: 4px solid var(--mint); border-radius: 10px; padding: 14px 18px 16px; text-align: left; }
+.st.review { border-top-color: var(--amber); } .st.action { border-top-color: var(--orange); } .st.idle { border-top-color: var(--line2); }
+.st.sel { outline: 1.5px solid var(--text); outline-offset: -1px; }
+.st .id { font: 400 15px var(--mono); color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--mint); display: inline-block; flex: none; }
+.dot.review { background: var(--amber); } .dot.action { background: var(--orange); } .dot.idle { background: var(--line2); }
+.st .nm { font-size: 19px; margin: 4px 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st .num { font: 400 34px/1.2 var(--mono); margin-bottom: 4px; }
+.st .ln { font-size: 14px; color: var(--muted); }
+.c-amber { color: var(--amber) !important; } .c-orange { color: var(--orange) !important; } .c-coral { color: var(--coral) !important; } .c-mint { color: var(--mint) !important; }
+.b { font-weight: 600; }
+.panel { margin-top: 18px; border: 1px solid var(--line2); border-radius: 12px; padding: 20px 22px; display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr); gap: 28px; }
+.panel .crumb { font: 400 15px var(--mono); color: var(--muted); }
+.panel .crumb2 { color: var(--muted); font-size: 14px; margin-bottom: 12px; }
+.kicker { font: 500 13px var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 12px 0 4px; }
+.otitle { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.otitle h3 { margin: 0; font-size: 26px; font-weight: 500; }
+.pill { display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 14px; font-weight: 500; }
+.pill.needs_review { background: var(--amber); color: #3a2a05; } .pill.action_required { background: var(--orange); color: #3b1c06; }
+.pill.resolved, .pill.closed { background: var(--mint); color: #0e3427; } .pill.dismissed { background: var(--gray); color: #1b1d20; }
+.obsmeta { color: var(--muted); font-size: 14px; margin: 6px 0 14px; }
+.evid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.evbox { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; min-height: 150px; }
+.evbox h6 { margin: 0 0 10px; font: 500 13px var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.evbox ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.evbox li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; padding: 6px 8px; border: 1px solid transparent; border-radius: 6px; font-size: 14px; }
+.evbox li span:first-child { font-family: var(--mono); color: var(--muted); }
+.evbox li.moved { border: 1.5px dashed var(--text); }
+.evbox li.missing { color: var(--dim); }
+.evbox .none { color: var(--muted); font-size: 14px; }
+.photo { margin-top: 12px; }
+.photo img { width: 100%; max-height: 300px; object-fit: contain; background: #000; border-radius: 8px; border: 1px solid var(--line); display: block; }
+.photo span { font-size: 13px; color: var(--muted); }
+.msg { margin: 14px 0 4px; font-size: 16px; }
+.small { color: var(--muted); font-size: 13px; }
+details.hist { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+details.hist summary { cursor: pointer; font-weight: 500; }
+details.hist ol { margin: 8px 0 0; padding-left: 0; list-style: none; font-size: 14px; color: var(--muted); }
+details.hist li { display: grid; grid-template-columns: 70px 1fr; gap: 10px; padding: 3px 0; }
+.pager { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.pager button { background: none; border: 0; font-size: 16px; font-weight: 500; padding: 4px 0; }
+.pager button:disabled { color: var(--dim); cursor: default; }
+.pager span { font-family: var(--mono); color: var(--muted); }
+.steps { display: flex; gap: 0; justify-content: space-between; margin: 6px 0 14px; font-size: 15px; }
+.steps span { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.steps span::before { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--line2); }
+.steps span.done { color: var(--mint); } .steps span.done::before { background: var(--mint); }
+.steps span.cur { color: var(--text); } .steps span.cur::before { background: var(--text); }
+.plan { display: flex; justify-content: space-between; color: var(--text); font-size: 15px; margin-bottom: 12px; }
+.decide { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
+.decide h4 { margin: 0 0 14px; font-size: 19px; font-weight: 500; }
+.opt { display: block; width: 100%; text-align: left; background: var(--panel); border: 1px solid var(--line2); border-radius: 8px; padding: 13px 16px; margin-bottom: 10px; }
+.opt:hover { border-color: var(--text); }
+.opt.sel { border-color: var(--text); background: var(--panel3); }
+.opt b { display: block; font-size: 16px; font-weight: 500; }
+.opt small { font-size: 14px; font-weight: 500; }
+.btnrow { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 10px; }
+.btn { border: 1.5px solid var(--text); background: none; border-radius: 8px; padding: 13px 10px; font-weight: 600; font-size: 15px; }
+.btn.pri { background: var(--text); color: #121315; }
+.btn:disabled { opacity: .4; cursor: default; }
+.done { text-align: center; padding: 10px 0 4px; }
+.done .tick { width: 54px; height: 54px; border-radius: 50%; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; font-size: 26px; color: #121315; }
+.done h4 { margin: 0 0 4px; font-size: 20px; font-weight: 600; }
+.done p { color: var(--muted); margin: 0 0 14px; font-size: 14px; }
+.heat { display: grid; gap: 3px; font-size: 13px; }
+.heat .hl { color: var(--muted); font-family: var(--mono); display: flex; align-items: center; }
+.heat .hh { color: var(--muted); font-family: var(--mono); text-align: center; font-size: 12px; }
+.heat .cell { height: 28px; border-radius: 3px; background: var(--panel2); position: relative; }
+.heat .cell.mk::after { content: ''; position: absolute; top: 0; right: 0; border-style: solid; border-width: 0 9px 9px 0; border-color: transparent var(--amber) transparent transparent; }
+.legend { display: flex; gap: 16px; color: var(--muted); font-size: 13px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -1px; margin-right: 5px; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font: 500 13px var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 14px 18px; border-bottom: 1px solid var(--line); }
+td { padding: 16px 18px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+tr.row { cursor: pointer; } tr.row:hover td { background: var(--panel2); }
+td.n { font-family: var(--mono); font-size: 18px; text-align: right; } th.n { text-align: right; }
+.tblwrap { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.stname b { display: block; font: 500 17px var(--mono); } .stname span { color: var(--muted); font-size: 14px; }
+.bars { display: grid; grid-template-columns: 190px 1fr 50px; gap: 10px 16px; align-items: center; }
+.bars .lab small { display: block; color: var(--muted); font-family: var(--mono); font-size: 12px; }
+.bar { height: 22px; background: var(--panel2); border-radius: 4px; display: flex; overflow: hidden; }
+.bar i { display: block; height: 100%; }
+.bars .v { font-family: var(--mono); text-align: right; }
+.grid2 { display: grid; grid-template-columns: 1.15fr 1fr; gap: 18px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 18px; }
+.spark { display: grid; grid-template-columns: 70px 1fr 80px; align-items: center; gap: 10px; margin-bottom: 4px; }
+.spark .v { text-align: right; font-size: 16px; line-height: 1.2; }
+.empty { color: var(--muted); padding: 18px 0; }
+.foot { color: var(--muted); font-size: 14px; margin-top: 26px; }
+.warnline { color: var(--amber); font-size: 14px; margin-top: 6px; }
+.stepslow { font-family: var(--mono); }
+.obslist button { display: grid; grid-template-columns: 90px 1fr auto; gap: 12px; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); padding: 10px 4px; }
+.obslist button:hover { background: var(--panel2); }
+@media (max-width: 1100px) { .app { grid-template-columns: 1fr; } aside { position: static; height: auto; } .kpis { grid-template-columns: repeat(2, 1fr); } .panel, .grid2, .grid3 { grid-template-columns: 1fr; } .flow { flex-direction: column; } .flow .arr { display: none; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand"><small>Molex Innovation Studio</small><b>Assembly Insights</b></div>
+    <nav id="nav">
+      <a href="#overview" data-v="overview"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></svg>Overview</a>
+      <a href="#stations" data-v="stations"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="5" height="12" rx="1"/><rect x="9.5" y="6" width="5" height="12" rx="1"/><rect x="16" y="6" width="5" height="12" rx="1"/></svg>Stations</a>
+      <a href="#trends" data-v="trends"><svg viewBox="0 0 24 24"><path d="M4 18l5-6 4 3 7-8"/><path d="M4 21h16"/></svg>Trends &amp; Insights</a>
+      <a href="/line"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M3 12h3M18 12h3M12 3v3M12 18v3"/></svg>Live line</a>
+    </nav>
+    <div class="navsep"></div>
+    <div class="src">
+      <h4>Data source</h4>
+      <div class="seg" id="srcSeg"><button data-s="camera">Camera Testing</button><button data-s="sim">Simulation</button></div>
+      <p id="srcNote"></p>
+      <button class="linkbtn" id="resetDemo" hidden>Reset demo decisions</button>
+    </div>
+  </aside>
+  <main id="main"><p class="empty">Loading…</p></main>
+</div>
+<script src="/line-engine.js"></script>
+<script src="/insights-lib.js"></script>
+<script>
+'use strict';
+const L = window.InsightsLib;
+const S = {
+  src: lsGet('insights-src') || 'camera', period: null, view: 'overview', station: null, obsIdx: {}, sel: null, planPick: null, verifyAsk: null, flash: null,
+  real: null, demo: null, demoReviews: null, model: null, loading: false, err: null
+};
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage off */ } }
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtT = t => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+const fmtD = t => new Date(t).toLocaleDateString([], { month: 'short', day: 'numeric' });
+const sid = id => String(id).toUpperCase();
+const pct = p => (p == null ? '–' : (p >= 0 ? p + '% slower' : -p + '% faster'));
+const dur = m => (m == null ? '' : m >= 60 ? Math.floor(m / 60) + 'h ' + (m % 60) + 'm' : m + 'm');
+
+// ---------- data ----------
+async function loadReal() {
+  try {
+    const r = await fetch('/api/insights', { cache: 'no-store' });
+    if (!r.ok) throw new Error('The server answered ' + r.status);
+    S.real = await r.json(); S.err = null;
+  } catch (e) { S.err = 'Could not read the recorded runs: ' + e.message + '. Is npm run go running?'; }
+}
+function ensureDemo() {
+  if (S.demo) return;
+  const cfg = (S.real && S.real.config) || { stations: [] };
+  S.demo = L.makeDemo(cfg.stations.length >= 4 ? cfg : demoConfig(), Date.now());
+  let saved = null; try { saved = JSON.parse(lsGet('insights-demo-reviews') || 'null'); } catch (e) { saved = null; }
+  S.demoReviews = Object.assign({}, S.demo.reviews, saved || {});
+}
+function demoConfig() {
+  const mk = (id, label, subs) => ({ id, label, substeps: subs.map((l, i) => ({ id: id + '_' + i, label: l })) });
+  return { stations: [mk('s1', 'Cut', ['Cut the wire', 'Check length']), mk('s2', 'Arrange and clamp', ['Wires arrive', 'Open the lever connector', 'Arrange the wires', 'Close the levers']),
+    mk('s3', 'Second connector', ['Unit arrives', 'Add a new lever connector', 'Get a black wire', 'Insert the black wire']), mk('s4', 'QA pull test', ['Unit arrives', 'Pull test'])] };
+}
+function periodRange() {
+  const now = Date.now(), d = new Date(now); d.setHours(0, 0, 0, 0);
+  if (S.period === 'today') return { from: d.getTime(), to: now, now };
+  if (S.period === 'week') return { from: d.getTime() - 6 * 86400000, to: now, now };
+  return { from: -Infinity, to: Infinity, now };
+}
+function compute() {
+  const r = periodRange();
+  if (S.src === 'sim') { ensureDemo(); S.model = L.rollup(S.demo.digests, S.demoReviews, Object.assign(r, { refSec: S.demo.refSec })); }
+  else S.model = S.real ? L.rollup(S.real.digests, S.real.reviews, r) : null;
+}
+function defaultPeriod() {
+  if (S.src === 'sim') return 'week';
+  if (!S.real) return 'all';
+  const d = new Date(); d.setHours(0, 0, 0, 0);
+  return S.real.digests.some(g => g.startedAtMs >= d.getTime()) ? 'today' : 'all';
+}
+async function saveDecision(obs, action) {
+  const reviews = S.src === 'sim' ? S.demoReviews : S.real.reviews;
+  const next = L.decide(reviews[obs.id] || null, action, Date.now());
+  reviews[obs.id] = next;
+  if (S.src === 'sim') {
+    const mine = {}; for (const k of Object.keys(S.demoReviews)) if (S.demoReviews[k] !== S.demo.reviews[k]) mine[k] = S.demoReviews[k];
+    lsSet('insights-demo-reviews', JSON.stringify(mine));
+  } else {
+    try {
+      const r = await fetch('/api/db/insights-reviews/' + encodeURIComponent(obs.id), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) });
+      if (!r.ok) throw new Error('status ' + r.status);
+    } catch (e) { alertLine('Could not save that decision on this laptop (' + e.message + ').'); }
+  }
+  compute(); render();
+}
+function alertLine(t) { S.flash = t; render(); }
+
+// ---------- shell ----------
+function render() {
+  const nav = document.querySelectorAll('#nav a[data-v]');
+  nav.forEach(a => a.classList.toggle('on', a.dataset.v === (S.view === 'station' ? 'stations' : S.view)));
+  document.querySelectorAll('#srcSeg button').forEach(b => b.classList.toggle('on', b.dataset.s === S.src));
+  document.getElementById('srcNote').textContent = S.src === 'sim' ? 'Simulated week on the four-station line. Demo decisions are saved in this browser only. Not a production record.' : 'Read from the runs recorded on this laptop. Review decisions are saved on this laptop.';
+  document.getElementById('resetDemo').hidden = S.src !== 'sim';
+  const main = document.getElementById('main');
+  if (S.src === 'camera' && S.err) { main.innerHTML = topBar('Assembly Insights', '') + '<div class="banner"><b>' + esc(S.err) + '</b></div>'; bindTop(); return; }
+  if (!S.model) { main.innerHTML = '<p class="empty">Loading…</p>'; return; }
+  const v = S.view === 'stations' ? viewStations() : S.view === 'station' ? viewStation() : S.view === 'trends' ? viewTrends() : viewOverview();
+  main.innerHTML = v;
+  bindTop(); bindView();
+}
+function topBar(title, sub) {
+  const opts = [['today', 'Today'], ['week', 'Last 7 days'], ['all', 'All runs']].map(([k, l]) => '<option value="' + k + '"' + (S.period === k ? ' selected' : '') + '>' + l + '</option>').join('');
+  const live = S.src === 'camera' && S.real ? '<span class="live"><i></i>Updated ' + fmtT(S.real.generatedAt) + '</span>' : '';
+  return '<div class="top"><div class="grow"><h1>' + esc(title) + '</h1><div class="sub">' + sub + '</div></div>' + live + '<select id="period" aria-label="Period">' + opts + '</select></div>' +
+    (S.flash ? '<div class="banner"><b>' + esc(S.flash) + '</b></div>' : '');
+}
+function subline() {
+  const m = S.model;
+  const what = S.src === 'sim' ? 'Manual Assembly Cell A · Simulated data' : 'Wire line · ' + m.line.sessions + (m.line.sessions === 1 ? ' run' : ' runs') + ' recorded on this laptop';
+  return esc(what) + ' · ' + ({ today: 'Today', week: 'Last 7 days', all: 'All runs' }[S.period]);
+}
+function noDataBanner() {
+  const m = S.model;
+  if (S.src !== 'camera') return '';
+  if (!m.stations.length) return '<div class="banner"><b>No runs recorded yet.</b> Start a session on the Live line page, build a few units, then come back. Or switch the data source to Simulation to see the full picture.</div>';
+  if (!m.line.cycles && !m.observations.length) return '<div class="banner"><b>No finished units or flags in this period yet.</b> Pick "All runs", or build units until the station counts them (set each one down for 2 seconds).</div>';
+  if (!m.line.cycles) return '<div class="banner"><b>Flags recorded, but no finished units yet.</b> Pace and time lost appear once the station counts units. Each station needs ' + 5 + ' finished units before its own median becomes its reference time.</div>';
+  return '';
+}
+
+// ---------- Overview ----------
+function viewOverview() {
+  const m = S.model, ln = m.line;
+  if (!S.station || !m.stations.find(s => s.id === S.station)) S.station = m.focus || (m.stations[0] && m.stations[0].id) || null;
+  const paceNote = ln.pacePct == null ? 'Needs ' + 5 + '+ finished units per station' : ln.pacePct > L.SLOW_PCT ? 'Past the 10% line' : 'Within 10% of reference';
+  const trust = m.camera.faRate == null ? '<div class="big">–</div><div class="note">No reviewed flags yet</div>' : '<div class="big">' + (100 - m.camera.faRate) + '%</div><div class="note">of reviewed flags were real (' + m.camera.reviewed + ' reviewed)</div>';
+  const fpy = ln.fpy != null ? '<div class="kpi"><h5>First-pass yield</h5><div class="big">' + ln.fpy + '%</div><div class="note">' + ln.qa.passed + ' passed, ' + ln.qa.failed + ' failed the pull test</div></div>'
+    : '<div class="kpi"><h5>Camera trust</h5>' + trust + '</div>';
+  let h = topBar('Overview', subline()) + noDataBanner();
+  h += '<p class="headline">' + esc(m.headline) + '</p>';
+  h += '<div class="kpis">' +
+    '<div class="kpi"><h5>Units done</h5><div class="big">' + ln.units + '</div><div class="note">Finished at ' + esc(lastStationName()) + '</div></div>' +
+    '<div class="kpi"><h5>Pace</h5><div class="big' + (ln.pacePct > L.SLOW_PCT ? ' c-coral' : '') + '">' + (ln.pacePct == null ? '–' : (ln.pacePct >= 0 ? '+' : '') + ln.pacePct + '%') + '</div><div class="note">' + paceNote + '</div></div>' +
+    '<div class="kpi"><h5>Open flags</h5><div class="big">' + (ln.open.review + ln.open.action) + '</div><div class="note"><span class="c-amber">' + ln.open.review + ' Needs Review</span> · <span class="c-orange">' + ln.open.action + ' Action Required</span></div></div>' +
+    '<div class="kpi"><h5>Time lost</h5><div class="big">' + (ln.timeLostMin == null ? '–' : ln.timeLostMin + '<span style="font-size:18px"> min</span>') + '</div><div class="note">' + (ln.bottleneck ? 'Slowest: ' + esc(ln.bottleneck.name) + ' (' + ln.bottleneck.avgSec + ' s)' : 'Over reference time, this period') + '</div></div>' +
+    fpy + '</div>';
+  h += '<div class="meta">' + (ln.oldestOpenMin != null ? 'Oldest awaiting review ' + dur(ln.oldestOpenMin) + '. ' : 'Nothing awaiting review. ') + 'Closed today ' + ln.closedToday + '.</div>';
+  h += '<div class="card"><div class="cardhead"><h2>Production flow</h2><span>Recorded station cycles</span></div>';
+  if (!m.stations.length) h += '<p class="empty">No stations yet.</p>';
+  else {
+    h += '<div class="flow">' + m.stations.map((s, i) => (i ? '<div class="arr">›</div>' : '') + stationCard(s)).join('') + '</div>';
+    const st = m.stations.find(s => s.id === S.station);
+    if (st) h += reviewPanel(st);
+  }
+  h += '</div>';
+  h += heatmap();
+  h += foot();
+  return h;
+}
+function lastStationName() { const m = S.model, q = m.stations.filter(s => s.qa); return (q.length ? q : m.stations.slice(-1)).map(s => sid(s.id)).join(', ') || 'the last station'; }
+function stationCard(s) {
+  const cls = !s.cycles && !s.observations ? 'idle' : s.status === 'clear' ? '' : s.status;
+  return '<button class="st ' + cls + (S.station === s.id ? ' sel' : '') + '" data-st="' + esc(s.id) + '">' +
+    '<div class="id"><span class="dot ' + cls + '"></span>' + sid(s.id) + '</div><div class="nm">' + esc(s.name.replace(/^S\d+\s*/i, '')) + '</div>' +
+    '<div class="num">' + s.cycles + '</div>' +
+    (s.review || s.action ? '<div class="ln c-amber">' + s.review + ' Needs Review</div><div class="ln c-orange">' + s.action + ' Action Required</div>' : '<div class="ln">No open issues.</div>') +
+    '<div class="ln' + (s.slow ? ' c-coral b' : '') + '">' + (s.pacePct == null ? (s.cycles ? 'Reference after 5 units' : 'No units yet') : pct(s.pacePct)) + '</div>' +
+    (s.unobserved.length ? '<div class="ln c-amber">' + s.unobserved.length + ' step' + (s.unobserved.length > 1 ? 's' : '') + ' not watched</div>' : '') + '</button>';
+}
+function stationObs(stId) {
+  // Open flags first (oldest first), then the closed ones (newest first).
+  const all = S.model.observations.filter(x => x.station === stId);
+  const open = all.filter(x => x.state === 'needs_review' || x.state === 'action_required');
+  const closed = all.filter(x => !(x.state === 'needs_review' || x.state === 'action_required')).reverse();
+  return { list: open.concat(closed), open: open.length };
+}
+function reviewPanel(st) {
+  const { list, open } = stationObs(st.id);
+  let i = S.obsIdx[st.id] || 0;
+  if (S.sel) { const k = list.findIndex(x => x.id === S.sel); if (k >= 0) i = k; }
+  if (i >= list.length) i = Math.max(0, list.length - 1);
+  S.obsIdx[st.id] = i;
+  const o = list[i];
+  let h = '<div class="panel"><div>';
+  h += '<div class="crumb">' + sid(st.id) + ' · ' + esc(st.name.replace(/^S\d+\s*/i, '')) + '</div><div class="crumb2">Station · all checkpoints · <a href="#station/' + esc(st.id) + '">Open station detail</a></div>';
+  if (!o) {
+    h += '<p class="empty">No flags at this station in this period.' + (st.cycles ? ' ' + st.cycles + ' cycles recorded.' : '') + '</p></div><div></div></div>';
+    return h;
+  }
+  S.sel = o.id;
+  h += '<div class="kicker">' + esc(o.checkpointLabel || '') + '</div>';
+  h += '<div class="otitle"><h3>' + esc(o.title) + '</h3><span class="pill ' + o.state + '">' + esc(L.STATE_LABEL[o.state]) + '</span></div>';
+  h += '<div class="obsmeta">Observation ' + (i + 1) + ' of ' + list.length + ' · ' + open + ' open · Flagged ' + fmtT(o.t) + (S.period !== 'today' ? ', ' + fmtD(o.t) : '') + (o.cycle ? ' · Cycle ' + o.cycle : '') + (o.conf != null ? ' · Camera ' + o.conf + '% sure' : '') + '</div>';
+  h += evidence(st, o);
+  h += '<p class="msg">' + esc(o.message) + '</p>';
+  if (o.demo) h += '<p class="small">Simulated illustration. Not a live camera or a Molex production record.</p>';
+  else h += '<p class="small"><a href="/review#s=' + encodeURIComponent(o.session) + '">Open this run in Review</a> to watch the video' + (o.videoT != null ? ' at ' + Math.round(o.videoT) + ' s' : '') + '.</p>';
+  if (o.history.length) h += '<details class="hist"><summary>Show history (' + o.history.length + ')</summary><ol><li><span>' + fmtT(o.t) + '</span><span>Flagged by camera</span></li>' + o.history.map(x => '<li><span>' + fmtT(x.at) + '</span><span>' + esc(x.text) + '</span></li>').join('') + '</ol></details>';
+  h += '</div><div>';
+  h += '<div class="pager"><button data-pg="-1"' + (i === 0 ? ' disabled' : '') + '>← Previous</button><span>' + (i + 1) + ' of ' + list.length + '</span><button data-pg="1"' + (i >= list.length - 1 ? ' disabled' : '') + '>Next →</button></div>';
+  h += decisionPanel(o);
+  h += '</div></div>';
+  return h;
+}
+function evidence(st, o) {
+  const steps = (S.model.stations.find(s => s.id === o.station) || st).steps;
+  const label = id => { const s = steps.find(x => x.id === id); return s ? s.short : id; };
+  const exp = o.expected || [];
+  const seen = o.seen || [];
+  const expHtml = exp.map((id, k) => '<li class="' + (id === o.substep ? 'moved' : '') + '"><span>' + (k + 1) + '</span><span>' + esc(label(id)) + '</span></li>').join('');
+  let seenHtml = seen.length ? seen.map((id, k) => '<li class="' + (exp[k] !== id ? 'moved' : '') + '"><span>' + (exp.indexOf(id) + 1) + '</span><span>' + esc(label(id)) + '</span></li>').join('') : '';
+  const missing = o.kind === 'wrong_order' || o.kind === 'skipped' ? exp.slice(0, exp.indexOf(o.substep) + 1).filter(id => seen.indexOf(id) < 0) : [];
+  seenHtml += missing.map(id => '<li class="missing moved"><span>' + (exp.indexOf(id) + 1) + '</span><span>' + esc(label(id)) + ' (not seen)</span></li>').join('');
+  let h = '<div class="evid"><div class="evbox"><h6>Expected order</h6><ol>' + expHtml + '</ol></div><div class="evbox"><h6>Camera saw</h6>' +
+    (seenHtml ? '<ol>' + seenHtml + '</ol>' : '<p class="none">' + (o.kind === 'qa_fail' ? 'The tester failed this unit: ' + esc(o.message) + (o.cause ? '. Likely cause: ' + sid(o.cause) : '') : 'No step order recorded for this flag.') + '</p>') + '</div></div>';
+  if (o.photo) h += '<div class="photo"><a href="' + esc(o.photo) + '" target="_blank" rel="noopener"><img src="' + esc(o.photo) + '" alt="What the camera saw at ' + fmtT(o.t) + '" loading="lazy"></a><span>Camera frame at the moment of the flag. Dashed rows moved or were skipped.</span></div>';
+  else h += '<p class="small" style="margin-top:8px">Dashed rows moved or were skipped.</p>';
+  return h;
+}
+function decisionPanel(o) {
+  const stage = o.state === 'needs_review' ? 0 : o.state === 'action_required' && !o.plan ? 1 : o.state === 'action_required' ? 2 : 3;
+  const dots = ['Review', 'Plan', 'Result'].map((l, k) => '<span class="' + (k < stage ? 'done' : k === stage ? 'cur' : '') + '">' + l + '</span>').join('');
+  let h = '<div class="steps">' + dots + '</div>';
+  if (o.state === 'needs_review') {
+    h += '<div class="decide"><h4>Does the evidence confirm an issue?</h4><div class="btnrow"><button class="btn pri" data-act="confirm">Confirm issue</button><button class="btn" data-act="dismiss">No issue found</button><button class="btn" data-act="unable">Unable to verify</button></div>' +
+      '<p class="small" style="margin:12px 0 0">Confirming means the camera was right. It stays open until someone verifies the fix.</p></div>';
+  } else if (o.state === 'action_required' && !o.plan) {
+    const pick = S.planPick || 'self';
+    h += '<div class="decide"><h4>What\'s next?</h4>' + [['self', "I'll address it", "I'll handle it"], ['assist', 'Request assistance', 'Someone else checks'], ['defer', 'Defer for follow-up', 'Later, at the desk']]
+      .map(([k, t, d]) => '<button class="opt' + (pick === k ? ' sel' : '') + '" data-plan="' + k + '"><b>' + t + '</b><small class="small">' + d + '</small></button>').join('') +
+      '<button class="btn pri" style="width:100%" data-act="plan">Record follow-up</button></div>';
+  } else if (o.state === 'action_required') {
+    h += '<div class="plan"><span>Plan: ' + esc(L.PLANS[o.plan] || o.plan) + '</span><button class="linkbtn" data-act="replan">Change action</button></div>';
+    if (S.verifyAsk === o.id) {
+      h += '<div class="decide"><h4>Was the correction verified?</h4><button class="opt" data-act="corrected-yes"><b>Yes, verified</b><small class="c-mint">Resolves the flag</small></button><button class="opt" data-act="corrected-no"><b>Not yet</b><small class="c-orange">Stays in Action Required until verified</small></button></div>';
+    } else {
+      h += '<div class="decide"><h4>What was the result?</h4>' +
+        '<button class="opt" data-act="ask-verify"><b>Issue corrected</b><small class="c-orange">Asks if correction was verified</small></button>' +
+        (o.result === 'corrected' ? '<button class="opt" data-act="verify"><b>Fix verified</b><small class="c-mint">Resolves the flag</small></button>' : '') +
+        '<button class="opt" data-act="handoff"><b>Handed off</b><small class="c-orange">Keeps follow-up open</small></button>' +
+        '<button class="opt" data-act="no_remaining"><b>No remaining issue</b><small class="c-mint">Closes it. Not counted as a false alarm</small></button>' +
+        '<button class="opt" data-act="other"><b>Other outcome</b><small class="c-orange">Stays open unless verified resolution</small></button></div>';
+    }
+  } else {
+    const look = { resolved: ['var(--mint)', 'Resolved', 'The fix was verified. This flag is closed.'], closed: ['var(--mint)', 'Closed, no remaining issue', 'Confirmed earlier, nothing left to fix. Not a false alarm.'], dismissed: ['var(--gray)', 'No issue found', 'Closed as a false alarm. It counts toward camera trust.'] }[o.state];
+    h += '<div class="decide done"><div class="tick" style="background:' + look[0] + '">✓</div><h4>' + look[1] + '</h4><p>' + look[2] + '</p><div class="btnrow" style="grid-template-columns:1fr 1fr"><button class="btn pri" data-act="next">Next flag ›</button><button class="btn" data-act="reopen">Reopen</button></div></div>';
+  }
+  return h;
+}
+function heatmap() {
+  const m = S.model;
+  if (!m.hourRange || !m.stations.length) return '';
+  const [h0, h1] = m.hourRange, hrs = []; for (let x = Math.max(0, h0 - 1); x <= Math.min(23, h1 + 1); x++) hrs.push(x);
+  const max = Math.max(1, ...m.hours.map(c => c.n));
+  const shade = n => (!n ? 'var(--panel2)' : n / max > 0.66 ? 'var(--blue4)' : n / max > 0.33 ? 'var(--blue3)' : 'var(--blue2)');
+  const hl = x => (x % 12 || 12) + (x < 12 ? 'a' : 'p');
+  let g = '<div class="heat" style="grid-template-columns:60px repeat(' + hrs.length + ',1fr)"><span></span>' + hrs.map(x => '<span class="hh">' + hl(x) + '</span>').join('');
+  for (const s of m.stations) {
+    g += '<span class="hl">' + sid(s.id) + '</span>';
+    for (const x of hrs) { const c = m.hours.find(q => q.station === s.id && q.hour === x); g += '<span class="cell' + (c && c.review ? ' mk' : '') + '" style="background:' + shade(c ? c.n : 0) + '" title="' + sid(s.id) + ' ' + hl(x) + ': ' + (c ? c.n : 0) + ' flags' + (c && c.review ? ', ' + c.review + ' to review' : '') + '"></span>'; }
+  }
+  g += '</div>';
+  return '<div class="card"><div class="cardhead"><h2>Observations by hour</h2><span>One cell = one station in one hour</span></div>' + g +
+    '<div class="legend"><span><i style="background:var(--blue2)"></i>Few</span><span><i style="background:var(--blue4)"></i>Many</span><span><i style="background:transparent;border-style:solid;border-width:0 10px 10px 0;border-color:transparent var(--amber) transparent transparent;width:0;height:0;border-radius:0"></i>Has a flag to review</span><span>A row that stays lit is a steady problem. A single lit cell is likely a one-off.</span></div></div>';
+}
+
+// ---------- Stations ----------
+function viewStations() {
+  const m = S.model;
+  let h = topBar('Stations', subline()) + noDataBanner();
+  h += '<div class="tblwrap"><table><thead><tr><th>Station</th><th>Main issue</th><th class="n">Cycles</th><th class="n">Cycle time</th><th class="n">Time lost</th><th>Open observations</th><th></th></tr></thead><tbody>';
+  if (!m.stations.length) h += '<tr><td colspan="7" class="empty">No stations recorded yet.</td></tr>';
+  for (const s of m.stations) {
+    const cls = s.status === 'clear' ? '' : s.status;
+    h += '<tr class="row" data-goto="station/' + esc(s.id) + '"><td><div class="stname" style="display:flex;gap:12px;align-items:center"><span class="dot ' + cls + '"></span><div><b>' + sid(s.id) + '</b><span>' + esc(s.name.replace(/^S\d+\s*/i, '')) + '</span></div></div></td>' +
+      '<td>' + (s.mainIssue ? esc(s.mainIssue) : '<span class="small" style="font-size:15px">No open observations</span>') + '</td>' +
+      '<td class="n">' + s.cycles + '</td><td class="n" style="font-size:16px"><span class="' + (s.slow ? 'c-coral b' : '') + '">' + (s.pacePct == null ? (s.avgSec != null ? s.avgSec + ' s' : '–') : pct(s.pacePct)) + '</span>' + (s.avgSec != null && s.refSec ? '<div class="small">' + s.avgSec + ' s vs ' + s.refSec + ' s</div>' : '') + '</td>' +
+      '<td class="n" style="font-size:16px">' + (s.timeLostSec == null ? '–' : Math.round(s.timeLostSec / 6) / 10 + ' min') + '</td>' +
+      '<td>' + (s.review || s.action ? (s.review ? '<span class="c-amber">' + s.review + ' Needs Review</span>' : '') + (s.review && s.action ? ' · ' : '') + (s.action ? '<span class="c-orange">' + s.action + ' Action Required</span>' : '') : '0') + '</td><td>›</td></tr>';
+  }
+  h += '</tbody></table></div>';
+  h += '<p class="foot">Pace compares each station with its reference time: the standard time in the station setup if there is one, otherwise the station\'s own median over all recorded runs (after 5 finished units). Coral only past 10% slower.</p>';
+  return h + foot();
+}
+function viewStation() {
+  const m = S.model, s = m.stations.find(x => x.id === S.station);
+  if (!s) { S.view = 'stations'; return viewStations(); }
+  let h = topBar(sid(s.id) + ' · ' + s.name.replace(/^S\d+\s*/i, ''), '<a href="#stations">‹ Stations</a> · ' + subline()) + noDataBanner();
+  h += '<p class="headline">' + esc(stationSentence(s)) + '</p>';
+  h += '<div class="kpis" style="grid-template-columns:repeat(4,1fr)">' +
+    '<div class="kpi"><h5>Cycles</h5><div class="big">' + s.cycles + '</div></div>' +
+    '<div class="kpi"><h5>Cycle time</h5><div class="big' + (s.slow ? ' c-coral' : '') + '">' + (s.avgSec == null ? '–' : s.avgSec + '<span style="font-size:18px"> s</span>') + '</div><div class="note">' + (s.refSec ? 'Reference ' + s.refSec + ' s (' + (s.refSource === 'standard' ? 'standard time' : 'own median') + ')' : 'No reference yet') + '</div></div>' +
+    '<div class="kpi"><h5>Time lost</h5><div class="big">' + (s.timeLostSec == null ? '–' : Math.round(s.timeLostSec / 6) / 10 + '<span style="font-size:18px"> min</span>') + '</div></div>' +
+    '<div class="kpi"><h5>Open flags</h5><div class="big">' + (s.review + s.action) + '</div><div class="note"><span class="c-amber">' + s.review + ' Needs Review</span> · <span class="c-orange">' + s.action + ' Action Required</span></div></div></div>';
+  if (s.unobserved.length) h += '<div class="banner"><b>Not watched in the newest run:</b> ' + esc(s.unobserved.join(', ')) + '. Draw those areas in Setup on the Live line page so the camera can time them.</div>';
+  h += '<div class="card"><div class="cardhead"><h2>Which step?</h2><span>Median this period against each step\'s reference</span></div><table><thead><tr><th>Step</th><th class="n">Reference</th><th class="n">Median</th><th class="n">vs reference</th><th class="n">Flags</th></tr></thead><tbody>' +
+    s.steps.map((r, k) => '<tr><td>' + (k + 1) + '. ' + esc(r.label) + '</td><td class="n stepslow" style="font-size:15px">' + (r.refSec == null ? '–' : r.refSec + ' s') + '</td><td class="n stepslow" style="font-size:15px">' + (r.medianSec == null ? '–' : r.medianSec + ' s') + '</td><td class="n" style="font-size:15px"><span class="' + (r.pct > L.SLOW_PCT ? 'c-coral b' : '') + '">' + (r.pct == null ? '–' : pct(r.pct)) + '</span></td><td class="n" style="font-size:15px">' + (r.flags ? r.flags + (r.open ? ' <span class="c-amber">(' + r.open + ' open)</span>' : '') : '0') + '</td></tr>').join('') + '</tbody></table></div>';
+  const obs = S.model.observations.filter(x => x.station === s.id).slice().reverse();
+  h += '<div class="card"><div class="cardhead"><h2>Flags at this station</h2><span>' + obs.length + ' this period</span></div>' + (obs.length ? '<div class="obslist">' + obs.slice(0, 40).map(o => '<button data-open="' + esc(o.id) + '"><span class="small" style="font-size:14px">' + fmtT(o.t) + (S.period !== 'today' ? ' ' + fmtD(o.t) : '') + '</span><span>' + esc(o.title) + ' · ' + esc(o.checkpointLabel || '') + '</span><span class="pill ' + o.state + '" style="font-size:12px">' + esc(L.STATE_LABEL[o.state]) + '</span></button>').join('') + '</div>' : '<p class="empty">No flags in this period.</p>') + '</div>';
+  return h + foot();
+}
+function stationSentence(s) {
+  const slowStep = s.steps.filter(r => r.pct != null).sort((a, b) => b.pct - a.pct)[0];
+  const flagStep = s.steps.slice().sort((a, b) => b.flags - a.flags)[0];
+  if (!s.cycles && !s.observations) return 'Nothing recorded at this station in this period.';
+  const parts = [];
+  if (s.pacePct != null) parts.push(s.name.replace(/^S\d+\s*/i, '') + ' is ' + pct(s.pacePct) + ' (' + s.avgSec + ' s vs ' + s.refSec + ' s)');
+  else parts.push(s.cycles + ' cycles recorded, reference time after 5 finished units');
+  if (slowStep && slowStep.pct > 0) parts.push('the slowest step is "' + slowStep.short + '" at ' + pct(slowStep.pct));
+  if (flagStep && flagStep.flags) parts.push('most flags are at "' + flagStep.short + '" (' + flagStep.flags + ')');
+  return parts.join(', and ') + '.';
+}
+
+// ---------- Trends ----------
+function viewTrends() {
+  const m = S.model, t = m.trend;
+  let h = topBar('Trends & Insights', subline()) + noDataBanner();
+  let head = '<h2 class="h2" style="font-size:22px">' + esc(trendHeadline()) + '</h2>';
+  if (t && t.worst) head += '<p class="small" style="font-size:16px;max-width:820px">Cycle time moved from ' + pct(t.worst.paceFrom) + ' than its reference to ' + pct(t.worst.paceTo) + ' between the first and second half of this period' + (t.worst.flagsFrom != null && t.worst.flagsTo != null ? ', and its flags went from ' + t.worst.flagsFrom + ' to ' + t.worst.flagsTo + ' per 100 cycles' : '') + '.</p>';
+  else head += '<p class="small" style="font-size:16px">Trends need finished units on at least two different days. Pick "Last 7 days" or "All runs" once you have them.</p>';
+  const closed = m.observations.filter(x => !(x.state === 'needs_review' || x.state === 'action_required')).length, openF = m.observations.filter(x => x.state === 'action_required').length;
+  head += '<p class="small" style="font-size:15px">This period: ' + closed + ' observations closed · ' + openF + ' follow-ups still open' + (m.focus ? ' · <a href="#station/' + esc(m.focus) + '">Review ' + sid(m.focus) + ' →</a>' : '') + '</p>';
+  h += '<div class="card">' + head + '</div>';
+  const cam = m.camera, ln = m.line;
+  h += '<div class="grid3">' +
+    '<div class="kpi"><h5>False alarm rate</h5><div class="big">' + (cam.faRate == null ? '–' : cam.faRate + '%') + '</div><div class="note">' + (cam.reviewed ? cam.falseAlarms + ' of ' + cam.reviewed + ' reviewed flags' : 'No reviewed flags yet') + (cam.top ? '<br>Highest at ' + sid(cam.top.station) + ' ' + esc(cam.top.label) + ' (' + cam.top.faRate + '%, ' + cam.top.reviewed + ' reviews)' : '') + '</div></div>' +
+    '<div class="kpi"><h5>Flags per 100 cycles</h5><div class="big">' + (ln.cycles ? Math.round(m.observations.length / ln.cycles * 1000) / 10 : '–') + '</div><div class="note">' + (t && t.flagsFrom != null && t.flagsTo != null ? (t.flagsTo > t.flagsFrom ? 'Up to ' + t.flagsTo + ' from ' + t.flagsFrom : t.flagsTo < t.flagsFrom ? 'Down to ' + t.flagsTo + ' from ' + t.flagsFrom : 'Steady at ' + t.flagsTo) + ', second half of the period against the first' : m.observations.length + ' flags in this period') + '</div></div>' +
+    '<div class="kpi"><h5>Cycle time vs reference</h5><div class="big">' + (ln.pacePct == null ? '–' : pct(ln.pacePct)) + '</div><div class="note">' + (() => { const w = m.stations.filter(s => s.pacePct != null).sort((a, b) => b.pacePct - a.pacePct)[0]; return w ? sid(w.id) + ' is at ' + pct(w.pacePct) : 'Needs 5+ finished units per station'; })() + '</div></div></div>';
+  h += '<div class="grid2"><div class="card"><h2>Where are observations concentrating?</h2>' + concentration() + '</div><div class="card"><h2>How is cycle time changing?</h2>' + sparks() + '</div></div>';
+  return h + foot();
+}
+function trendHeadline() {
+  const m = S.model, t = m.trend;
+  if (t && t.worst && t.worst.paceTo - t.worst.paceFrom >= 3) {
+    const st = m.stations.find(s => s.id === t.worst.id);
+    const more = t.worst.flagsTo != null && t.worst.flagsFrom != null && t.worst.flagsTo > t.worst.flagsFrom;
+    return sid(t.worst.id) + ' ' + (st ? st.name.replace(/^S\d+\s*/i, '') : '') + ' is getting slower' + (more ? ' and showing more flags.' : '.');
+  }
+  if (m.camera.top && m.camera.top.faRate >= 50) return sid(m.camera.top.station) + ' ' + m.camera.top.label + ' flags are mostly false alarms: check that camera before trusting its flags.';
+  if (m.focus) { const s = m.stations.find(x => x.id === m.focus); return 'Most open flags are at ' + s.name + '.'; }
+  return 'No pattern yet in this period.';
+}
+function concentration() {
+  const cps = S.model.checkpoints.slice(0, 7);
+  if (!cps.length) return '<p class="empty">No flags in this period.</p>';
+  const max = Math.max(...cps.map(c => c.per100 || c.n));
+  let h = '<div class="legend" style="margin:0 0 14px"><span><i style="background:var(--amber)"></i>Unreviewed</span><span><i style="background:#c9cbcf"></i>Confirmed</span><span><i style="background:#5d6168"></i>False alarm</span></div><div class="bars">';
+  for (const c of cps) {
+    const tot = c.per100 != null ? c.per100 : c.n, w = tot / max * 100, f = n => (c.n ? n / c.n * w : 0);
+    h += '<div class="lab"><small>' + sid(c.station) + '</small>' + esc(c.label) + '</div><div class="bar"><i style="width:' + f(c.unreviewed) + '%;background:var(--amber)"></i><i style="width:' + f(c.confirmed) + '%;background:#c9cbcf"></i><i style="width:' + f(c.falseAlarm) + '%;background:#5d6168"></i></div><div class="v">' + (c.per100 != null ? c.per100 : c.n) + '</div>';
+  }
+  h += '</div><p class="small" style="margin-top:14px">Flags per 100 cycles of that station' + (cps.some(c => c.per100 == null) ? ' (a plain count where the station has no finished units)' : '') + '. A checkpoint\'s false-alarm rate is named only after ' + L.MIN_FA_REVIEWS + ' reviews.</p>';
+  const fa = cps.filter(c => c.faRate != null && c.faRate >= 50);
+  if (fa.length) h += '<p style="margin:6px 0 0">' + fa.map(c => sid(c.station) + ' ' + esc(c.label) + ' flags are ' + c.faRate + '% false alarms').join('; ') + ': the camera check there may need a better model or zone.</p>';
+  return h;
+}
+function sparks() {
+  const m = S.model, days = m.days.filter(d => Object.keys(d.cycles).length);
+  if (days.length < 2) return '<p class="empty">Needs finished units on two or more days.</p>' + (m.stations.some(s => s.avgSec != null) ? '<p class="small">This period: ' + m.stations.filter(s => s.avgSec != null).map(s => sid(s.id) + ' ' + s.avgSec + ' s').join(' · ') + '</p>' : '');
+  const W = 300, H = 56, vals = [].concat(...m.stations.map(s => days.map(d => d.pct[s.id]).filter(v => v != null)), [10, 0]);
+  const lo = Math.min(...vals) - 2, hi = Math.max(...vals) + 2, y = v => H - 4 - (v - lo) / (hi - lo) * (H - 8), x = k => 6 + k * (W - 12) / (days.length - 1);
+  let h = '<p class="small" style="margin-top:-6px">Percent slower than each station\'s own reference. The dashed line is 10% slower.</p>';
+  for (const s of m.stations) {
+    const pts = days.map((d, k) => d.pct[s.id] == null ? null : [x(k), y(d.pct[s.id])]).filter(Boolean);
+    const lastV = days.map(d => d.pct[s.id]).filter(v => v != null).slice(-1)[0];
+    const hot = lastV != null && lastV > L.SLOW_PCT;
+    h += '<div class="spark"><span class="mono" style="font-family:var(--mono)">' + sid(s.id) + '</span><svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:56px"><line x1="6" x2="' + (W - 6) + '" y1="' + y(10) + '" y2="' + y(10) + '" stroke="' + 'var(--coral)' + '" stroke-dasharray="3 4" stroke-width="1" opacity=".7"/><line x1="6" x2="' + (W - 6) + '" y1="' + y(0) + '" y2="' + y(0) + '" stroke="var(--line2)" stroke-width="1"/>' +
+      (pts.length > 1 ? '<polyline fill="none" stroke="var(--text)" stroke-width="1.5" points="' + pts.map(p => p.join(',')).join(' ') + '"/>' : '') + pts.map((p, k) => '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="3" fill="' + (k === pts.length - 1 && hot ? 'var(--coral)' : 'var(--text)') + '"/>').join('') + '</svg>' +
+      '<span class="v' + (hot ? ' c-coral' : '') + '">' + (lastV == null ? '–' : pct(lastV).replace(' ', '<br>')) + '</span></div>';
+  }
+  h += '<div class="small" style="display:flex;justify-content:space-between;padding:0 80px 0 80px"><span>' + fmtD(new Date(days[0].day + 'T12:00').getTime()) + '</span><span>' + fmtD(new Date(days[days.length - 1].day + 'T12:00').getTime()) + '</span></div>';
+  const w = m.trend && m.trend.worst;
+  if (w) h += '<p style="margin:14px 0 4px;border-top:1px solid var(--line);padding-top:12px">' + esc(sid(w.id)) + ' moved from ' + pct(w.paceFrom) + ' to ' + pct(w.paceTo) + ' than its reference.</p>';
+  h += '<p class="small">Completed cycles ' + m.stations.map(s => sid(s.id) + ' ' + s.cycles).join(' → ') + '.' + (m.line.bottleneck ? ' The slowest station, ' + sid(m.line.bottleneck.id) + ', sets the pace of the line.' : '') + '</p>';
+  return h;
+}
+function foot() { return '<p class="foot">' + (S.src === 'sim' ? 'Academic prototype using fictional stations and metrics. Not a Molex production system.' : 'Built from this laptop\'s recorded wire line runs. Academic prototype, not a Molex production system.') + '</p>'; }
+
+// ---------- events ----------
+function bindTop() {
+  const sel = document.getElementById('period');
+  if (sel) sel.onchange = () => { S.period = sel.value; S.flash = null; compute(); render(); };
+}
+function bindView() {
+  const main = document.getElementById('main');
+  main.querySelectorAll('[data-st]').forEach(b => b.onclick = () => { S.station = b.dataset.st; S.sel = null; S.verifyAsk = null; render(); });
+  main.querySelectorAll('[data-goto]').forEach(b => b.onclick = () => { location.hash = b.dataset.goto; });
+  main.querySelectorAll('[data-open]').forEach(b => b.onclick = () => { S.sel = b.dataset.open; S.verifyAsk = null; location.hash = 'overview'; });
+  main.querySelectorAll('[data-pg]').forEach(b => b.onclick = () => { const { list } = stationObs(S.station); const i = Math.min(list.length - 1, Math.max(0, (S.obsIdx[S.station] || 0) + Number(b.dataset.pg))); S.obsIdx[S.station] = i; S.sel = list[i] ? list[i].id : null; S.verifyAsk = null; S.planPick = null; render(); });
+  main.querySelectorAll('[data-plan]').forEach(b => b.onclick = () => { S.planPick = b.dataset.plan; render(); });
+  main.querySelectorAll('[data-act]').forEach(b => b.onclick = () => act(b.dataset.act));
+}
+function currentObs() { return S.model.observations.find(x => x.id === S.sel) || null; }
+function act(a) {
+  const o = currentObs(); if (!o) return;
+  S.flash = null;
+  if (a === 'next') { const { list } = stationObs(S.station); const nxt = list.find(x => x.state === 'needs_review' || x.state === 'action_required'); S.sel = nxt ? nxt.id : null; if (!nxt) S.obsIdx[S.station] = 0; render(); return; }
+  if (a === 'ask-verify') { S.verifyAsk = o.id; render(); return; }
+  S.verifyAsk = null;
+  const map = { confirm: { type: 'confirm' }, dismiss: { type: 'dismiss' }, unable: { type: 'unable' }, plan: { type: 'plan', plan: S.planPick || 'self' }, replan: null,
+    'corrected-yes': { type: 'corrected', verified: true }, 'corrected-no': { type: 'corrected', verified: false }, verify: { type: 'verify' }, handoff: { type: 'handoff' }, no_remaining: { type: 'no_remaining' }, other: { type: 'other' }, reopen: { type: 'reopen' } };
+  if (a === 'replan') { const rv = (S.src === 'sim' ? S.demoReviews : S.real.reviews)[o.id]; if (rv) rv.plan = null; compute(); render(); return; }
+  if (a === 'unable') S.flash = 'Left for another review. It stays in the review queue.';
+  S.planPick = null;
+  if (map[a]) saveDecision(o, map[a]);
+}
+document.getElementById('srcSeg').onclick = e => {
+  const b = e.target.closest('button'); if (!b || b.dataset.s === S.src) return;
+  S.src = b.dataset.s; lsSet('insights-src', S.src); S.period = defaultPeriod(); S.sel = null; S.station = null; S.flash = null; compute(); render();
+};
+document.getElementById('resetDemo').onclick = () => { lsSet('insights-demo-reviews', '{}'); S.demo = null; S.sel = null; compute(); render(); };
+function route() {
+  const h = location.hash.replace(/^#/, '') || 'overview';
+  if (h.startsWith('station/')) { S.view = 'station'; S.station = h.slice(8); }
+  else S.view = ['overview', 'stations', 'trends'].includes(h) ? h : 'overview';
+  S.flash = null;
+  render(); window.scrollTo(0, 0);
+}
+window.addEventListener('hashchange', route);
+(async function start() {
+  await loadReal();
+  S.period = defaultPeriod();
+  compute(); route();
+  // Camera mode checks every 5 s (the live page saves events every 2 s), so the page follows a run while it
+  // records. It only redraws when a run or a decision changed, so an open review is not reset.
+  let lastSig = sig();
+  setInterval(async () => {
+    if (S.src !== 'camera' || document.hidden) return;
+    await loadReal();
+    const now = sig();
+    if (now === lastSig) { const u = document.querySelector('.live'); if (u && S.real) u.innerHTML = '<i></i>Updated ' + fmtT(S.real.generatedAt); return; }
+    lastSig = now; compute(); render();
+  }, 5000);
+  function sig() { return S.real ? JSON.stringify([S.real.digests.map(d => [d.id, d.observations.length, Object.values(d.stations).map(x => x.cycles.length)]), Object.keys(S.real.reviews).length, S.err]) : String(S.err); }
+})();
+</script>
+</body>
+</html>
