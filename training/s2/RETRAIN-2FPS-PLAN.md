@@ -85,15 +85,22 @@ squashed images. Numbers with the letterbox:
 
 Swap rule: B passes, A fails, so no swap.
 
-Why A fails: every video frame is portrait (1280 x 2276, a phone held upright, hands close up). The
-photos are landscape 4:3 (1920 x 1440), and so is the live camera (`app/line.html` asks for 640 x 480).
-The new model learned one shape of scene and sees nothing in the other, even photos it trained on.
-The live model handles both; how Ruza cut her frames is unknown (her notebook starts from a frames zip).
-Test A is the closer match to the live camera, so a model that fails it is not safe to wire in, not
-even for lever state alone.
+Test B split by view (check videos; "right" = lever state, then share of frames with red / white found):
 
-Next: footage in landscape, ideally from the demo setup's camera, then retrain. A cheaper test of the
-shape theory: pad the portrait frames onto a 4:3 gray canvas before training, and retrain.
+| View | Truth | n | Live model | 2 fps model |
+|---|---|---|---|---|
+| Wide, top-down (k_ 8942, 8949, 8958) | open | 45 | 89%, red 62%, white 62% | 98%, red 73%, white 64% |
+| Wide, top-down | closed | 35 | 80%, red 74%, white 43% | 91%, red 83%, white 46% |
+| Tall, close-up (m_ 3306, 3313, 3320) | open | 74 | 38%, red 73%, white 72% | 86%, red 74%, white 54% |
+| Tall, close-up | closed | 15 | 100%, red 100%, white 67% | 100%, red 93%, white 60% |
+
+Why A fails: unknown. Not picture shape: 28 of the 45 videos are wide (all k_ plus m_ 3323 to 3327),
+and the new model does well on the wide check videos, which look much like the photos. It misses even
+the photos it trained on, which suggests their auto-labels were empty or wrong, so they trained as
+"nothing here". Cell 4a (label review) was skipped, so this is unchecked.
+
+Next: look at the boxes Grounding DINO drew on the 14 training photos. If they are empty or wrong,
+drop the photos (or box them by hand) and retrain. Do not swap until Test A passes.
 
 ## Open question that decides which test matters
 
