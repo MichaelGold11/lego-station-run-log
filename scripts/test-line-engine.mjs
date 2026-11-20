@@ -180,7 +180,7 @@ console.log('arrival substep counts once per cycle');
   check('arrival substep: its rule flickering back on mid-cycle is not a repeat', a.of('substep').map(e => e.substep + ':' + e.move).join() === 's2_pick:start,s2_get_splice:next,s2_insert:next', a.of('substep').map(e => e.substep + ':' + e.move).join());
   check('arrival substep: no flag and no skipped step from the flicker', a.of('flag').length === 0, JSON.stringify(a.of('flag')));
   const b = run(mk(null));
-  check('without an arrival, the same substep still repeats', b.of('substep').map(e => e.substep + ':' + e.move).join() === 's2_pick:start,s2_get_splice:next,s2_pick:repeat,s2_insert:jump', b.of('substep').map(e => e.substep + ':' + e.move).join());
+  check('without an arrival, the same substep still repeats, and the step it went back over (done earlier this cycle) is not counted as skipped', b.of('substep').map(e => e.substep + ':' + e.move).join() === 's2_pick:start,s2_get_splice:next,s2_pick:repeat,s2_insert:next', b.of('substep').map(e => e.substep + ':' + e.move).join());
   const c = mk('s2_pick');
   c.step(null, 500).step('in', 500).step('out', 500);   // s2_handoff is the cycle end: reached by jump, closes cycle 1
   const end1 = c.of('cycle_end').length;
@@ -1087,6 +1087,47 @@ console.log('capture triggers: captureWanted');
   // The server keeps at most 300 characters of a note, so a longer one would be cut the first time anyone presses Save as standard.
   const stdNotes = Object.values(STD.roles).flatMap(r => [r].concat(r.otherViews || [])).map(v => v.note || "");
   check("committed standard: every note is at most 300 characters, so the file comes back unchanged from a save", stdNotes.every(n => n.length <= 300), stdNotes.map(n => n.length).join());
+}
+
+console.log('S2 false "step skipped" and WIP');
+{
+  const st = SHIPPED.stations.find(x => x.id === 's2'), cls = SHIPPED.models.s2.classes.concat(['unit_complete']);
+  const play = seq => {
+    const eng = LE.createStation(st, { holdFrames: SHIPPED.holdFrames, defaults: SHIPPED.defaults, qaGraceSec: SHIPPED.qaGraceSec, modelClasses: cls });
+    let t = 0; const out = [];
+    for (const [patch, ms] of seq) {
+      const cur = {}; for (const z of st.zones) { cur[z.id] = { activity: 0, bright: 0 }; for (const c of cls) cur[z.id]['class:' + c] = 0; }
+      for (const z of Object.keys(patch)) Object.assign(cur[z], patch[z]);
+      const end = t + ms; while (t < end) { out.push(...eng.update(JSON.parse(JSON.stringify(cur)), t)); t += FRAME; }
+    }
+    return out;
+  };
+  const OPEN = { work: { 'class:connector_open': 0.8 } }, ARR = { wires: { activity: 0.5 } }, ARRIVE = { wires: { 'class:red_wire': 0.8 } }, CLOSE = { work: { 'class:unit_complete': 0.9 } };
+  // The 221220 order: open, arrange, open, arrange, the wires seen again (arrival repeats), then the close.
+  const ev = play([[{}, 500], [OPEN, 500], [{}, 500], [ARR, 500], [{}, 500], [OPEN, 500], [{}, 500], [ARR, 500], [{}, 500], [ARRIVE, 500], [{}, 500], [CLOSE, 500], [{}, 500]]);
+  const later = ev.filter(e => e.type === 'flag' && e.cycle === 1 && e.substep !== 's2_arrive');
+  const subs = ev.filter(e => e.type === 'substep').map(e => e.substep + ':' + e.move).join();
+  check('221220 order: the arrival repeating mid-cycle before the close raises no skipped open or arrange', /s2_arrive:repeat,s2_close/.test(subs) && later.length === 0, subs + ' / ' + JSON.stringify(later.map(f => f.note)));
+  const bad = play([[{}, 500], [ARRIVE, 500], [{}, 500], [ARR, 500], [{}, 500]]);
+  const f = bad.filter(e => e.type === 'flag').map(e => e.note).join(' | ');
+  check('a real wrong order still flags: arrange with the connector never opened in this cycle', /skipped Open the lever connector/.test(f), f);
+  const bad2 = play([[{}, 500], [OPEN, 500], [{}, 500], [CLOSE, 500], [{}, 500]]);
+  check('a real wrong order still flags: close without arranging', /skipped Arrange the wires/.test(bad2.filter(e => e.type === 'flag').map(e => e.note).join()));
+  // Tracker gate: no unit in progress, no mistake from the checker; with one, the mistake shows.
+  const ut = LE.createUnitTracker(st);
+  const flag = { type: 'flag', note: 'skipped Open the lever connector', substep: 's2_open', cycle: 1, t: 1 }, sub = { type: 'substep', substep: 's2_arrange' };
+  check('checkerEvents drops skipped flags while the tracker has no unit in progress', LE.checkerEvents([sub, flag], ut).length === 1 && LE.checkerEvents([sub, flag], null).length === 2);
+  ut.update({ t: 100, present: false, events: [] }); ut.update({ t: 200, present: true, events: [{ type: 'substep', station: 's2', substep: 's2_arrive', move: 'start', source: 'model', t: 200 }] });
+  check('checkerEvents passes them once a unit is in progress', ut.active() && LE.checkerEvents([sub, flag], ut).length === 2);
+  // dismiss: a mistake showing at the done moment goes away.
+  const r = crig(st2());
+  r.play(500).step({ in: act() }).step({ crimp: act() });
+  check('before dismiss a mistake shows', r.chk.current && r.chk.current.kind === 'mistake');
+  r.chk.dismiss();
+  check('dismiss clears the showing mistake', r.chk.current === null);
+  // WIP: never negative, blank when the upstream has no camera.
+  check('wipShown: blank (null) when upstream has no source, even if the count is negative', LE.wipShown(-1, false) === null && LE.wipShown(2, false) === null);
+  check('wipShown: never negative, a plain count passes', LE.wipShown(-1, true) === 0 && LE.wipShown(3, true) === 3 && LE.wipShown(0, true) === 0 && LE.wipShown(null, true) === null);
 }
 
 console.log('\n' + passes + ' passed, ' + fails + ' failed');

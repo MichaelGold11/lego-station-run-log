@@ -451,7 +451,9 @@
       } else { move = 'repeat'; S.repeats++; }
       // A skipped substep only counts when it could have been seen. The bulb test is left out: a unit whose bulb
       // stays dark is reported as light: false on its qa_result, not as a skipped step.
-      const missed = skipped.filter(j => j !== lightIdx && live(j));
+      // A substep that already happened in this cycle was not skipped (S2: the arrival re-firing, then the close, must not read as
+      // "open skipped" when the connector was opened earlier in the cycle). A new cycle has an empty S.occ, so nothing is excused there.
+      const missed = skipped.filter(j => j !== lightIdx && live(j) && !S.occ.some(o => o.id === subs[j].id));
       if (!move) move = missed.length ? 'jump' : 'next';
       out.push(ev({ type: 'substep', substep: sub.id, from, move, source, conf, t: onset, cycle: S.cycle }));
       for (const j of missed) out.push(ev({ type: 'flag', substep: subs[j].id, note: 'skipped ' + subs[j].label, source, t: onset, cycle: S.cycle }));
@@ -894,6 +896,8 @@
 
     return {
       update, saveRef, setRef, restart() { C = fresh(); }, station,
+      // The unit is complete and frozen in view: whatever mistake or review is showing goes away (the checker is not run again until it leaves).
+      dismiss() { const had = !!(C.show && (C.show.kind === 'mistake' || C.show.kind === 'review')); C.show = null; C.cleared = null; C.pending = null; return had; },
       get ref() { return ref; }, get current() { return C.show; }, get cleared() { return C.cleared; }, get clear() { return C.clear; },
       get pending() { return C.pending ? subs[C.pending.idx].id : null; }, get frames() { return C.frames.length; }
     };
@@ -1038,7 +1042,9 @@
     function restart() { phase = 'waiting'; n = 0; unlinkedN = 0; cur = null; units = []; needEmpty = !!o.startNeedsEmpty; lastPresent = false; presentSince = null; absentSince = null; manual = []; if (link) link.reset(sid); }
     // True while the finished unit is still in view and newUnitNeedsEmpty is on: the station's step engine and checker must sit out (see stepStation).
     const holding = () => !!(o.newUnitNeedsEmpty && phase === 'complete');
-    return { update, stop, noteManual, state, restart, holding, config: o };
+    // True while a unit is being worked (a number was given and it has not ended): wrong order before that is the wires arriving, not a mistake.
+    const active = () => phase !== 'waiting';
+    return { update, stop, noteManual, state, restart, holding, active, config: o };
   }
   // The one place the page and the replay decide whether a station's step engine may run this frame: not while its tracker holds a
   // finished unit that has not left (its wires are still in view, they must not start cycle 2). Returns { held, events }.
@@ -1046,6 +1052,15 @@
     if (ut && ut.holding && ut.holding()) { eng.idle(signals, t); return { held: true, events: [] }; }
     return { held: false, events: eng.update(signals, t) };
   }
+  // What the step checker is shown: while the tracker has no unit in progress, the engine's "skipped" flags are left out, so no wrong-order
+  // mistake is raised for wires that are still arriving (the engine's own events and log are untouched). No tracker: everything passes.
+  function checkerEvents(events, ut) {
+    if (!ut || !ut.active || ut.active() || ut.holding()) return events;
+    return events.filter(e => !(e && e.type === 'flag' && /^skipped /.test(e.note || '')));
+  }
+  // The number on a flow-strip link: units waiting between two stages. Blank (null) when the upstream station has no camera or source (nothing
+  // counts there, so the downstream count would read as a negative pile), and never below zero.
+  function wipShown(n, upstreamHasSource) { return !isNum(n) || !upstreamHasSource ? null : Math.max(0, n); }
   // Presence for the live page and the replay: a unit is in view when a presence class is detected anywhere at presentConf or more.
   function unitPresent(dets, cfg) {
     const c = cfg || {}, min = isNum(c.presentConf) ? c.presentConf : UNIT_TRACKER.presentConf, set = c.presenceClasses || [];
@@ -1472,7 +1487,7 @@
     DEFAULTS, MOTION, MISMATCH_NOTE, EVENT_TYPES, CYCLE_ACTIONS, SUBSTEP_COLS, CYCLE_COLS, VERDICT_COLS, CHECK, LEVELS, OPERATOR_CODE, FLOOR, CLASS_TEST,
     members, activeRule, evalRule, missingOf, ruleText, checkConfig, captureDefaults, CAPTURE_DEFAULTS, captureWanted, nextSampleDue, modelFor, checkModelOutput, e2eBadClass, qaDecide, createStation,
     operatorCode, defaultName, shortName, classTestLayout, setupKey, nextStationId, freeSpot, saveScheduler, applyLayout,
-    zoneSignals, calibrationFrom, classSignals, trackedClasses, unitCheck, ASSEMBLY, handPresence, steadyClasses, mergeSignals, createChecker, createUnitTracker, createUnitLink, stepStation, unitRows, unitPresent, unitNo, unitTrackerOn, UNIT_TRACKER, trackedUnits, trackedUnitsCsv, TRACKED_COLS,
+    zoneSignals, calibrationFrom, classSignals, trackedClasses, unitCheck, ASSEMBLY, handPresence, steadyClasses, mergeSignals, createChecker, createUnitTracker, createUnitLink, stepStation, checkerEvents, wipShown, unitRows, unitPresent, unitNo, unitTrackerOn, UNIT_TRACKER, trackedUnits, trackedUnitsCsv, TRACKED_COLS,
     standardViews, pickStandardView, sameZones, sortEvents, ruleZones, unobserved, NO_DATA, detectedCycles, manualCycles, summarize, substepsCsv, cyclesCsv, verdictsCsv, linkUnits, unitCols, unitsCsv, csvCell
   };
 });

@@ -981,7 +981,8 @@ button.chip:hover { border-color: var(--warn-ink); }
     st.sig = LE.mergeSignals(r.signals, cls, hp);
     let evs = [], held = false;
     if (tracking(st)) { const r2 = LE.stepStation(st.eng, st.ut, st.sig, t); evs = r2.events; held = r2.held; evs.forEach(emit); } else st.eng.idle(st.sig, t);
-    const vds = held ? [] : runChecker(st, evs, zoneMotion(r.signals), t);
+    if (held) st.chk.dismiss();
+    const vds = held ? [] : runChecker(st, LE.checkerEvents(evs, st.ut), zoneMotion(r.signals), t);
     runUnitTracker(st, evs, vds, t);
     st.fpsN++;
     if (t - st.fpsT >= 1000) { st.fps = st.fpsN * 1000 / (t - st.fpsT); st.fpsN = 0; st.fpsT = t; }
@@ -2161,7 +2162,7 @@ button.chip:hover { border-color: var(--warn-ink); }
         const w = L.wip[i], a = id.toUpperCase(), b = ids[i + 1].toUpperCase(), out = ST[id].cfg.output;
         // Two stations next to each other with the same role work side by side: no WIP between them (docs/canvas-plan.md).
         flow += w.n == null ? `<div class="fl-ar" title="${a} and ${b} have the same role: they work side by side"><i>+</i></div>`
-          : `<div class="fl-ar${w.n < 0 ? ' neg' : ''}" title="Units waiting between ${a} and ${b} (linked by order)${out ? ' (' + esc(a + ' makes ' + out) + ')' : ''}"><i>→</i>WIP ${w.n}<i>→</i></div>`;
+          : `<div class="fl-ar" title="${LE.wipShown(w.n, ST[id].source.type !== 'none') == null ? a + ' has no camera or source: no count between ' + a + ' and ' + b : 'Units waiting between ' + a + ' and ' + b + ' (linked by order)'}${out ? ' (' + esc(a + ' makes ' + out) + ')' : ''}"><i>→</i>${LE.wipShown(w.n, ST[id].source.type !== 'none') == null ? '' : 'WIP ' + LE.wipShown(w.n, true)}<i>→</i></div>`;
       }
     });
     $('sFlow').innerHTML = '<span class="eyebrow" style="margin-right:6px">Flow</span>' + flow;
