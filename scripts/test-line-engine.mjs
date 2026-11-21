@@ -710,7 +710,10 @@ console.log('shipped process (v2, lever connectors, arrivals)');
     const play = (step, ms) => {
       const cur = blank();
       if (typeof step === 'string') cur[step].activity = 0.5;
-      else if (step) for (const z of Object.keys(step)) Object.assign(cur[z], step[z]);
+      else if (step) for (const z of Object.keys(step)) Object.assign(cur[z] || (cur[z] = {}), step[z]);
+      // The page adds a whole-view 'frame' zone to the model signals; here it holds the best of each class over the zones.
+      if (model && !(step && step.frame)) { cur.frame = {}; for (const z of Object.keys(cur)) if (z !== 'frame') for (const k of Object.keys(cur[z])) if (k.startsWith('class:')) cur.frame[k] = Math.max(cur.frame[k] || 0, cur[z][k]); }
+      if (model) for (const k of model) for (const sfx of ['', '#2', '#3']) if (!(('class:' + k + sfx) in cur.frame)) cur.frame['class:' + k + sfx] = 0;
       const end = t + ms; while (t < end) { out.push(...eng.update(JSON.parse(JSON.stringify(cur)), t)); t += FRAME; }
     };
     play(null, 500); for (const z of seq) play(z, 500); play(null, 500);
@@ -734,6 +737,20 @@ console.log('shipped process (v2, lever connectors, arrivals)');
     { work: { 'class:red_wire': 0.9, 'class:connector_closed': 0.9 } }
   ], S3M);
   check('S3 with its model: the arriving unit already has a closed connector, and that is not "inserted"', subsOf(s3m) === 's3_arrive' && !flagsOf(s3m), subsOf(s3m) + ' / ' + flagsOf(s3m));
+  // S3 done with the model: two closed connectors held 3 s, and only after the new connector was seen open.
+  const two = { frame: { 'class:connector_closed': 0.8, 'class:connector_closed#2': 0.6 } };
+  const s3early = run('s3', [{ frame: { 'class:connector_closed': 0.8 } }, two, two, two, two, two, two, two, two], S3M);
+  check('S3 with its model: two closed connectors without the new one seen open first is not done', !s3early.some(e => e.type === 'cycle_end'), subsOf(s3early));
+  const s3short = run('s3', [{ frame: { 'class:connector_closed': 0.8 } }, { frame: { 'class:connector_open': 0.8, 'class:connector_closed': 0.8 } }, two, two, two, { frame: { 'class:connector_closed': 0.8 } }], S3M);
+  check('S3 with its model: two closed connectors for only 1.5 s (closed on the red wire alone) is not done yet', !s3short.some(e => e.type === 'cycle_end'), subsOf(s3short));
+  const s3done = run('s3', [{ frame: { 'class:connector_closed': 0.8 } }, { frame: { 'class:connector_open': 0.8, 'class:connector_closed': 0.8 } }, two, two, two, two, two, two, two, two], S3M);
+  check('S3 with its model: open new connector, then two closed connectors for 3 s ends the cycle', s3done.filter(e => e.type === 'cycle_end').length === 1 && /s3_arrive,s3_add_connector.*s3_insert/.test(subsOf(s3done)), subsOf(s3done));
+  check('S3 with its model: a black wire the camera missed is not flagged as skipped (optional)', !flagsOf(s3done), flagsOf(s3done));
+  const twoBlack = { frame: { 'class:connector_closed': 0.8, 'class:black_wire': 0.7, 'class:black_wire#2': 0.6 } };
+  const s3black = run('s3', [{ frame: { 'class:connector_closed': 0.8 } }, { frame: { 'class:connector_open': 0.8, 'class:connector_closed': 0.8 } }, twoBlack, twoBlack, twoBlack, two, two, two, two, two, two, two, two], S3M);
+  check('S3 with its model: a second black wire in view after the new connector ticks "Get a black wire", then done', /s3_add_connector,s3_get_black,s3_insert/.test(subsOf(s3black)) && s3black.some(e => e.type === 'cycle_end'), subsOf(s3black));
+  const cs = LE.classSignals([{ cls: 'connector_closed', conf: 0.9, nbox: [0.1, 0.1, 0.2, 0.2] }, { cls: 'connector_closed', conf: 0.6, nbox: [0.8, 0.9, 0.9, 0.98] }], { work: { x: 0, y: 0, w: 0.5, h: 0.5 } }, ['connector_closed']);
+  check('classSignals: the whole-view "frame" zone sees both connectors (#2 = 0.6), a drawn zone only its own', cs.frame['class:connector_closed#2'] === 0.6 && cs.work['class:connector_closed'] === 0.9 && cs.work['class:connector_closed#2'] === 0, JSON.stringify(cs));
   const s4 = run('s4', ['test']);
   check('S4: the unit arrives; the pull test result comes from the P or F key', subsOf(s4) === 's4_arrive' && !s4.some(e => e.type === 'cycle_end'), subsOf(s4));
   check('S2 checks the color order (positionCheck on red, white, black in the work area)', JSON.stringify(SHIPPED.stations[1].positionCheck.classes) === '["red_wire","white_wire","black_wire"]');

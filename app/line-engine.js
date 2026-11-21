@@ -14,6 +14,8 @@
   'use strict';
 
   const DEFAULTS = { activity: 0.1, bright: 0.5, class: 0.4 };
+  // Model rules may use zone "frame": the whole camera view, no box to draw.
+  const FRAME_ZONE = 'frame';
   const MOTION = { noise: 6, scale: 32 };      // per-pixel gray diff noise floor, and the mean diff that counts as motion 1.0
   const BRIGHT_SPAN = 60;                        // without a "Bulb on" calibration, a rise of 60 gray levels counts as bright 1.0
   const MISMATCH_NOTE = 'quality mismatch, review the video';
@@ -27,7 +29,8 @@
   // ---------- rules ----------
   // A rule is {zone, signal, min} or {zone, class, min} or {anyOf: [rule, ...]}. min falls back to the config defaults.
   const members = rule => (rule ? (Array.isArray(rule.anyOf) ? rule.anyOf : [rule]) : []);
-  const sigKey = m => (m.class ? 'class:' + m.class : (m.signal || 'activity'));
+  // count: 2 reads the second-best box of the class ("two closed connectors"), so a rule can need more than one.
+  const sigKey = m => (m.class ? 'class:' + m.class + (m.count > 1 ? '#' + m.count : '') : (m.signal || 'activity'));
   function memberMin(m, defaults) {
     if (isNum(m.min)) return m.min;
     const d = Object.assign({}, DEFAULTS, defaults);
@@ -72,7 +75,7 @@
   // Plain English for a rule, using the station's zone labels.
   function ruleText(rule, station) {
     const zl = id => { const z = station && station.zones && station.zones.find(x => x.id === id); return z ? z.label : id; };
-    return members(rule).map(m => (m.class ? 'model sees ' + m.class + ' in ' + zl(m.zone) : (m.signal === 'bright' ? zl(m.zone) + ' goes bright' : 'activity in ' + zl(m.zone)))).join(' or ');
+    return members(rule).map(m => (m.class ? 'model sees ' + (m.count > 1 ? m.count + ' x ' : '') + m.class + ' in ' + (m.zone === FRAME_ZONE ? 'the whole view' : zl(m.zone)) : (m.signal === 'bright' ? zl(m.zone) + ' goes bright' : 'activity in ' + zl(m.zone)))).join(' or ');
   }
 
   // Problems in a line config (the team edits it by hand). Returns a list of plain sentences; empty means fine.
@@ -93,13 +96,16 @@
         seenSub[sub.id] = true;
         for (const kind of ['zones', 'model']) {
           for (const m of members(sub[kind])) {
-            if (!zones[m.zone]) errs.push(sub.id + ' (' + kind + ' rule) uses zone "' + m.zone + '", which ' + st.id + ' does not have.');
+            if (!zones[m.zone] && !(kind === 'model' && m.zone === FRAME_ZONE)) errs.push(sub.id + ' (' + kind + ' rule) uses zone "' + m.zone + '", which ' + st.id + ' does not have.');
+            if (m.count != null && !(Number.isInteger(m.count) && m.count >= 1 && m.count <= 3)) errs.push(sub.id + ': count must be 1, 2 or 3.');
             if (kind === 'model' && !m.class) errs.push(sub.id + ': a model rule needs a class.');
             if (kind === 'zones' && m.signal && m.signal !== 'activity' && m.signal !== 'bright') errs.push(sub.id + ': signal "' + m.signal + '" is not activity or bright.');
           }
         }
         if (sub.model && sub.model.mustStay != null && typeof sub.model.mustStay !== 'boolean') errs.push(sub.id + ': mustStay must be true or false.');
         if (sub.after != null && !st.substeps.slice(0, st.substeps.indexOf(sub)).some(x => x.id === sub.after)) errs.push(sub.id + ': after must name an earlier substep of ' + st.id + '.');
+        if (sub.optional != null && typeof sub.optional !== 'boolean') errs.push(sub.id + ': optional must be true or false.');
+        for (const kind of ['zones', 'model']) if (sub[kind] && sub[kind].holdSec != null && !(isNum(sub[kind].holdSec) && sub[kind].holdSec >= 0)) errs.push(sub.id + ': holdSec must be a number of seconds, 0 or more.');
         if (sub.standardSec != null && !(isNum(sub.standardSec) && sub.standardSec > 0)) errs.push(sub.id + ': standardSec must be a number of seconds above 0.');
       }
       const pc = st.positionCheck;
@@ -432,7 +438,8 @@
       } else { move = 'repeat'; S.repeats++; }
       // A skipped substep only counts when it could have been seen. The bulb test is left out: a unit whose bulb
       // stays dark is reported as light: false on its qa_result, not as a skipped step.
-      const missed = skipped.filter(j => j !== lightIdx && live(j));
+      // "optional": a step the camera may miss (S3 black wire on a dark table) is ticked when seen, never flagged when not.
+      const missed = skipped.filter(j => j !== lightIdx && !subs[j].optional && live(j));
       if (!move) move = missed.length ? 'jump' : 'next';
       out.push(ev({ type: 'substep', substep: sub.id, from, move, source, conf, t: onset, cycle: S.cycle }));
       for (const j of missed) out.push(ev({ type: 'flag', substep: subs[j].id, note: 'skipped ' + subs[j].label, source, t: onset, cycle: S.cycle }));
@@ -468,7 +475,9 @@
         if (!c || c.kind !== ar.kind) c = S.cnt[i] = { t0: t, n: 0, sum: 0, msum: r.vals.map(() => 0), zones: members(ar.rule).map(m => m.zone), kind: ar.kind };
         c.n++; c.sum += r.v;
         r.vals.forEach((x, k) => { c.msum[k] += x || 0; });
-        if (c.n >= N) cands.push(i);
+        // holdSec on a rule: it must also have stayed on this long (S3 model: two closed connectors for 3 s = unit done).
+        const hs = ar.rule.holdSec;
+        if (c.n >= N && !(hs > 0 && t - c.t0 < hs * 1000)) cands.push(i);
       }
       const pick = choose(cands);
       if (pick != null) transition(pick, out);
@@ -587,15 +596,20 @@
 
   const inRect = (x, y, z) => x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h;
   // Model detections ({cls, conf, nbox}) -> {zone: {'class:<name>': best confidence with the box center in the zone}}.
+  // Also 'class:<name>#2' and '#3' (the second and third best box of that class), and a 'frame' zone that is the whole view.
   function classSignals(dets, zones, classes) {
     const out = {};
-    for (const id of Object.keys(zones || {})) {
-      const z = zones[id], s = {};
-      for (const c of classes || []) s['class:' + c] = 0;
+    const all = Object.assign({ [FRAME_ZONE]: { x: 0, y: 0, w: 1, h: 1 } }, zones || {});
+    for (const id of Object.keys(all)) {
+      const z = all[id], s = {}, confs = {};
+      for (const c of classes || []) { s['class:' + c] = 0; confs[c] = []; }
       for (const d of dets || []) {
-        const k = 'class:' + d.cls;
-        if (!(k in s) || !d.nbox) continue;
-        if (inRect((d.nbox[0] + d.nbox[2]) / 2, (d.nbox[1] + d.nbox[3]) / 2, z) && d.conf > s[k]) s[k] = d.conf;
+        if (!confs[d.cls] || !d.nbox) continue;
+        if (inRect((d.nbox[0] + d.nbox[2]) / 2, (d.nbox[1] + d.nbox[3]) / 2, z)) confs[d.cls].push(d.conf);
+      }
+      for (const c of Object.keys(confs)) {
+        const a = confs[c].sort((x, y) => y - x);
+        s['class:' + c] = a[0] || 0; s['class:' + c + '#2'] = a[1] || 0; s['class:' + c + '#3'] = a[2] || 0;
       }
       out[id] = s;
     }
@@ -675,6 +689,7 @@
       out[id] = Object.assign({}, base[id], cls && cls[id]);
       if (hands) { const hp = hands[id] || 0; out[id].hand = hp; out[id].activity = Math.max(out[id].activity || 0, hp); }
     }
+    if (cls && cls[FRAME_ZONE] && !out[FRAME_ZONE]) out[FRAME_ZONE] = Object.assign({}, cls[FRAME_ZONE]);
     return out;
   }
 
