@@ -1113,7 +1113,7 @@
   // events (kind mistake or review) of that station inside the unit's start-to-end window there (open window runs to `now`).
   // Order: needs_review first, then in-line units (s3, waiting_s3, s2; oldest first), then done, newest first.
   function lineUnits(events, config, opts) {
-    const sorted = sortEvents(events), now = opts && isNum(opts.now) ? opts.now : (sorted.length ? sorted[sorted.length - 1].t : 0);
+    const sorted = sortEvents(events), now = opts && isNum(opts.now) ? opts.now : (sorted.length ? sorted[sorted.length - 1].t : 0), stopped = !!(opts && opts.stopped);
     const tr = ((config && config.stations) || []).filter(unitTrackerOn);
     const down = tr.filter(st => st.unitTracker.from || (st.role || st.id) === DONE_ROLE), up = tr.filter(st => down.indexOf(st) < 0);
     const roleOf = {}; for (const st of up) roleOf[st.id] = 's2'; for (const st of down) roleOf[st.id] = 's3';
@@ -1163,19 +1163,28 @@
       const waitSec = a && a.end != null ? sec(a.end, b ? b.start : now) : null, s3sec = b ? sec(b.start, b.end != null ? b.end : now) : null;
       const fin = stage === 'done' || (stage === 'needs_review' && last.end != null);
       const mkS2 = stationInfo(a), mkS3 = stationInfo(b);
+      if (stopped && stage !== 'done') {
+        // After Stop: every unit not done at S3 is incomplete. cutOff: the Stop did it (it was in the line, or its open unit ended session_stopped).
+        // A unit flagged before Stop (unlinked, or ended incomplete at a station on its own) keeps needsReview and is not cut off.
+        const cutOff = stage !== 'needs_review' || [a, b].some(r => r && r.ended === 'session_stopped');
+        const flagged = !!(b && b.unlinked) || !!(a && a.unlinked) || [a, b].some(r => r && r.end != null && r.result === 'incomplete' && r.ended !== 'session_stopped');
+        return { no: u.no, unit: u.unit, stage: 'incomplete', cutOff, stageSec: sec(since, now), s2Sec: s2sec, waitSec, s3Sec: s3sec, totalSec: sec(first.start, fin ? last.end : now), start: first.start,
+          needsReview: flagged, result: 'incomplete', s2: mkS2, s3: mkS3, mistakes: { s2: mkS2 ? mkS2.messages : [], s3: mkS3 ? mkS3.messages : [] } };
+      }
       return { no: u.no, unit: u.unit, stage, stageSec: stage === 'done' ? null : sec(since, now), s2Sec: s2sec, waitSec, s3Sec: s3sec, totalSec: sec(first.start, fin ? last.end : now), start: first.start,
         needsReview: stage === 'needs_review', result: incomplete ? 'incomplete' : (last.end != null ? last.result : null), s2: mkS2, s3: mkS3,
         mistakes: { s2: mkS2 ? mkS2.messages : [], s3: mkS3 ? mkS3.messages : [] } };
     });
-    const rank = { needs_review: 0, s3: 1, waiting_s3: 1, s2: 1, done: 2 };
+    const rank = { needs_review: 0, incomplete: 0, s3: 1, waiting_s3: 1, s2: 1, done: 2 };
     return rows.sort((x, y) => (rank[x.stage] - rank[y.stage]) || (x.stage === 'done' ? y.start - x.start : x.start - y.start));
   }
   // Tiles and alerts of the units board from lineUnits rows (pure). now: the clock; runStart: when the run began (units per hour).
-  // inProgress.total counts all four stages. Alerts, problems first: review, wrong_order, stuck.
+  // inProgress.total counts the four in-line stages (s2, waiting_s3, s3, needs_review); incomplete rows (after Stop) are counted in incomplete and incompleteCutOff, never in progress or done. Alerts, problems first: review, wrong_order, stuck.
   function lineUnitStats(rows, opts) {
     const o = opts || {}, list = rows || [], now = isNum(o.now) ? o.now : null, runStart = isNum(o.runStart) ? o.runStart : null;
     const inProgress = { total: 0, s2: 0, waiting_s3: 0, s3: 0, needs_review: 0 };
-    for (const r of list) if (r.stage !== 'done') { inProgress[r.stage]++; inProgress.total++; }
+    for (const r of list) if (r.stage !== 'done' && r.stage !== 'incomplete') { inProgress[r.stage]++; inProgress.total++; }
+    const incompleteRows = list.filter(r => r.stage === 'incomplete');
     const done = list.filter(r => r.stage === 'done');
     const mean = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null), avg = a => (a.length ? round(mean(a), 1) : null);
     const times = k => list.map(r => r[k]).filter(x => x && x.end != null && x.result !== 'incomplete' && isNum(x.sec)).map(x => x.sec);
@@ -1192,7 +1201,7 @@
         const k = r.s3 && r.s3.result === 'incomplete' ? 's3' : r.s2 && r.s2.result === 'incomplete' ? 's2' : r.s3 ? 's3' : 's2';
         al.review.push({ kind: 'review', unit: r.unit, no: r.no, station: r[k].station, stage: r.stage, sec: r.stageSec, message: 'Unit ' + who(r) + ' needs review at ' + STN[k] });
       }
-      if (r.stage !== 'done') for (const k of ['s2', 's3']) for (const m of (r[k] ? r[k].messages : [])) if (m.kind === 'mistake' && m.code === 'wrong_order') {
+      if (r.stage !== 'done' && r.stage !== 'incomplete') for (const k of ['s2', 's3']) for (const m of (r[k] ? r[k].messages : [])) if (m.kind === 'mistake' && m.code === 'wrong_order') {
         al.wrong_order.push({ kind: 'wrong_order', unit: r.unit, no: r.no, station: r[k].station, stage: r.stage, sec: now != null ? round((now - m.t) / 1000, 1) : null, message: 'Unit ' + who(r) + ' at ' + STN[k] + ': ' + (m.message || 'wrong order') });
       }
       if ((r.stage === 's2' || r.stage === 's3') && stations[r.stage].n >= 3 && isNum(r.stageSec) && r.stageSec > 2 * trueAvg[r.stage]) {
@@ -1200,7 +1209,7 @@
         al.stuck.push({ kind: 'stuck', unit: r.unit, no: r.no, station: r[k].station, stage: r.stage, sec: r.stageSec, message: 'Unit ' + who(r) + ' stuck at ' + STN[k] + ' for ' + Math.round(r.stageSec) + ' s, average ' + Math.round(stations[k].avgSec) + ' s' });
       }
     }
-    return { done: done.length, inProgress, avgUnitSec: avg(done.map(r => r.totalSec).filter(isNum)), stations, bottleneck, unitsPerHour, rightFirstTime, alerts: [].concat(al.review, al.wrong_order, al.stuck) };
+    return { done: done.length, inProgress, incomplete: incompleteRows.length, incompleteCutOff: incompleteRows.filter(r => r.cutOff).length, avgUnitSec: avg(done.map(r => r.totalSec).filter(isNum)), stations, bottleneck, unitsPerHour, rightFirstTime, alerts: [].concat(al.review, al.wrong_order, al.stuck) };
   }
   // The photos of one unit row: captures stamped with its unit, else (older sessions) by station and time inside that station's window. Oldest first.
   function unitPhotos(row, captures) {
