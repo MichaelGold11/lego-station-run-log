@@ -7,7 +7,7 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const secs = v => (v == null || !isFinite(v) ? '--' : Number(v).toFixed(1) + ' s');
   const clock = v => { if (v == null || !isFinite(v)) return '--'; const s = Math.round(v); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
-  const STAGE = { s2: 'At S2', waiting_s3: 'Waiting for S3', s3: 'At S3', done: 'Done', needs_review: 'Needs review' };
+  const STAGE = { s2: 'At S2', waiting_s3: 'Waiting for S3', s3: 'At S3', done: 'Done', needs_review: 'Needs review', incomplete: 'Incomplete' };
   const STN = { s2: 'S2', s3: 'S3' };
   const CSS = `
 .ur-dlg{border:1px solid var(--line-2,#c5c9c5);border-radius:10px;padding:0;background:var(--surface,#fcfcfb);color:var(--ink,#15181b);font-family:var(--f-ui,system-ui,sans-serif);font-size:14px;width:min(760px,calc(100vw - 16px));max-height:calc(100vh - 16px);box-shadow:0 12px 40px rgba(0,0,0,.3)}

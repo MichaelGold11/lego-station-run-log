@@ -396,5 +396,36 @@ console.log('\nline units: one row per unit across S2 and S3');
   check('C2 Q2: the next Start clears the snapshot', /G\.events = \[\]; G\.queue = \[\]; G\.evSeen = -1; G\.lastBoard = null;/.test(html));
 }
 
+// after-stop S1: one count, Incomplete after Stop, and the model-load path.
+{
+  const html = fs.readFileSync(new URL('../app/line.html', import.meta.url), 'utf8'), mock = fs.readFileSync(new URL('../app/live-mock.html', import.meta.url), 'utf8');
+  const ins = fs.readFileSync(new URL('../app/insights.html', import.meta.url), 'utf8'), ur = fs.readFileSync(new URL('../app/unit-record.js', import.meta.url), 'utf8');
+  const stop = html.split('\n').find(l => l.includes('G.lastBoard = {') && l.includes('sid: sess.id')) || '';
+  const live = html.split('\n').find(l => l.includes('function boardSource') ) ? html.slice(html.indexOf('function boardSource'), html.indexOf('function boardNow')) : '';
+  const WP = "ort.env.wasm.wasmPaths = new URL('/vendor/ort/', location.href).href;";
+  check('after-stop: wasmPaths is absolute in line.html and live-mock.html', html.includes(WP) && mock.includes(WP) && !/wasmPaths = '\/vendor/.test(html + mock));
+  check('after-stop: the Stop snapshot is built with stopped: true and marked stopped', /stopped: true, rows: LE\.lineUnits\(G\.events, G\.config, \{ now: tn, stopped: true \}\)/.test(stop), stop.trim().slice(0, 140));
+  check('after-stop: the live board does not pass stopped', /lineUnits\(G\.events, G\.config, \{ now: t \}\)/.test(live) && !/stopped/.test(live.replace('G.lastBoard', '')));
+  check('after-stop: BD_STAGE, insights STAGE_LABEL and unit-record STAGE say Incomplete', /BD_STAGE = \{[^}]*incomplete: \['Incomplete', ''\]/.test(html) && /STAGE_LABEL = \{[^}]*incomplete: 'Incomplete'/.test(ins) && /STAGE = \{[^}]*incomplete: 'Incomplete'/.test(ur));
+  check('after-stop: insights has a neutral .ub-stage.incomplete style (no red, amber or coral)', /\.ub-stage\.incomplete \{[^}]*panel3/.test(ins) && !/\.ub-stage\.incomplete \{[^}]*(amber|coral|orange|crit)/.test(ins));
+  check('after-stop: second tile is Incomplete after Stop (stats.incomplete, plain sub line), else Units in progress', /src\.stopped \? tile\('Incomplete', stats\.incomplete \|\| 0, 'not finished at S3 when the run stopped'\)\s*: tile\('Units in progress', ip\.total/.test(html));
+  check('after-stop: a new Start clears the snapshot, so the tile reads Units in progress again', /G\.lastBoard = null;/.test(html) && /if \(!G\.session && G\.lastBoard\) return G\.lastBoard;/.test(html));
+  check('after-stop: the strip reads the board stats: S3 done is stats.done, WIP is in progress at each station plus the queue', /out\.done\[c\] = b\.stats\.done/.test(html) && /out\.wip\[a\] = ip\.s2 \+ rv\.s2; out\.queue = ip\.waiting_s3/.test(html) && /out\.wip\[c\] = ip\.s3 \+ rv\.s3/.test(html) && /renderSummary\(G\.summary, t\)/.test(html));
+  check('after-stop: tiles and strip share one lineUnitStats call (boardNow)', /const rows = src\.rows, stats = boardNow\(t\)\.stats;/.test(html) && (html.match(/LE\.lineUnitStats\(/g) || []).length === 1);
+  // The same arithmetic on engine rows: strip WIP (at S2 + queue + at S3, a review at the station its alert names) equals the tiles' in progress.
+  const rows = [
+    { no: '#001', unit: 1, stage: 'done', s2: { end: 1, result: 'complete', station: 's2' }, s3: { end: 2, result: 'complete', station: 's3' } },
+    { no: '#002', unit: 2, stage: 's2', s2: { end: null, station: 's2' } },
+    { no: '#003', unit: 3, stage: 'waiting_s3', s2: { end: 5, result: 'complete', station: 's2' } },
+    { no: '#004', unit: 4, stage: 's3', s2: { end: 5, result: 'complete', station: 's2' }, s3: { end: null, station: 's3' } },
+    { no: '#005', unit: 5, stage: 'needs_review', needsReview: true, s2: { end: 5, result: 'incomplete', station: 's2' } },
+    { no: '?01', unit: 6, stage: 'needs_review', needsReview: true, s3: { end: null, station: 's3', unlinked: true } }
+  ];
+  for (const r of rows) for (const k of ['s2', 's3']) if (r[k]) { r[k].messages = []; r[k].sec = 5; } 
+  const stt = LE.lineUnitStats(rows, { now: 1000, runStart: 0 }), ip = stt.inProgress, rv = { s2: 0, s3: 0 };
+  for (const al of stt.alerts) if (al.kind === 'review') rv[al.station === 's3' ? 's3' : 's2']++;
+  check('after-stop: strip arithmetic: S3 done equals tiles done (S3 complete only), WIP figures add up to tiles in progress', stt.done === 1 && (ip.s2 + rv.s2) + ip.waiting_s3 + (ip.s3 + rv.s3) === ip.total && ip.total === 5, JSON.stringify([stt.done, ip, rv]));
+}
+
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);

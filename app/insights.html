@@ -164,6 +164,7 @@ td.n { font-family: var(--mono); font-size: 18px; text-align: right; } th.n { te
 .ub-scroll table { min-width: 640px; }
 .ub-tr { cursor: pointer; } .ub-tr:hover td, .ub-tr:focus td { background: var(--panel2); } .ub-tr:focus { outline: 2px solid var(--mint); outline-offset: -2px; }
 .ub-stage { display: inline-block; padding: 2px 9px; border-radius: 6px; font-size: 13px; font-weight: 500; background: var(--panel3); }
+.ub-stage.incomplete { background: var(--panel3); color: var(--text); box-shadow: inset 0 0 0 1px var(--line2); }
 .ub-stage.needs_review { background: var(--amber); color: #3a2a05; } .ub-stage.done { background: var(--mint); color: #0e3427; }
 .tl { min-width: 560px; }
 .tl-ax { display: flex; margin-left: 74px; justify-content: space-between; color: var(--muted); font-size: 12px; font-family: var(--mono); margin-bottom: 6px; }
@@ -556,7 +557,7 @@ function sparks() {
 function foot() { return '<p class="foot">' + (S.src === 'sim' ? 'Academic prototype using fictional stations and metrics. Not a Molex production system.' : 'Built from this laptop\'s recorded wire line runs. Academic prototype, not a Molex production system.') + '</p>'; }
 
 // ---------- Units: per-run units table and timeline ----------
-const STAGE_LABEL = { s2: 'At S2', waiting_s3: 'Waiting for S3', s3: 'At S3', done: 'Done', needs_review: 'Needs review' };
+const STAGE_LABEL = { s2: 'At S2', waiting_s3: 'Waiting for S3', s3: 'At S3', done: 'Done', needs_review: 'Needs review', incomplete: 'Incomplete' };
 const fmtS = v => (v == null ? '–' : v >= 60 ? Math.floor(v / 60) + 'm ' + String(Math.round(v % 60)).padStart(2, '0') + 's' : Math.round(v * 10) / 10 + ' s');
 function unitRuns() {
   if (S.src !== 'camera' || !S.real) return [];

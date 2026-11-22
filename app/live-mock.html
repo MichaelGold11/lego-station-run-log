@@ -548,7 +548,7 @@ th:last-child, td:last-child { text-align: left; font-family: var(--f-ui); }
       try {
         const mod = await import('/vendor/ort/ort.webgpu.min.mjs');
         const ort = mod.InferenceSession ? mod : mod.default;
-        ort.env.wasm.wasmPaths = '/vendor/ort/';
+        ort.env.wasm.wasmPaths = new URL('/vendor/ort/', location.href).href;
         const threads = self.crossOriginIsolated ? Math.max(1, Math.min(4, navigator.hardwareConcurrency || 2)) : 1;
         ort.env.wasm.numThreads = threads;
         const res = await fetch('/models/lego-parts.onnx', { cache: 'reload' });
