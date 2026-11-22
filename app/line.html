@@ -2000,7 +2000,7 @@ button.chip:hover { border-color: var(--warn-ink); }
       for (const st of LIST) { if (st.ut) st.ut.stop(now()).forEach(emit); st.eng.flush().forEach(emit); }
       await Promise.all(LIST.map(st => stopRecording(st)));
       emit({ type: 'session_end', t: now(), source: 'page' });
-      { const tn = now(); G.lastBoard = { sid: sess.id, now: tn, runStart: sess.startedAtMs, rows: LE.lineUnits(G.events, G.config, { now: tn }) }; }    // the board stays on screen after Stop, and its rows still open
+      { const tn = now(); G.lastBoard = { sid: sess.id, now: tn, runStart: sess.startedAtMs, rows: LE.lineUnits(G.events, G.config, { now: tn }), summary: LE.summarize(G.events, G.config, { now: tn, basis: G.score ? G.basis : 'detected' }) }; }    // the board stays on screen after Stop, and its rows still open
       for (let i = 0; i < 20 && G.queue.length; i++) { await sendEvents(); if (G.queue.length) await sleep(300); }
       const r = await fetch('/api/sessions/' + sess.id + '/end', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       const doc = await r.json();
@@ -2320,7 +2320,8 @@ button.chip:hover { border-color: var(--warn-ink); }
     // Metrics: recompute when events change, else once a second (idle share and units per hour move with time).
     if (G.evSeen !== G.events.length || t - G.sumAt > 1000) {
       // Detected counts unless the cameras are being scored; then the Count by switch (Auto by default) decides.
-      G.summary = LE.summarize(G.events, G.config, { now: t, basis: G.score ? G.basis : 'detected' });
+      // After Stop the events are empty but the board is kept, so the strip shows the stopped run's own summary (C2 Q2) until the next Start.
+      G.summary = (!G.session && G.lastBoard && G.lastBoard.summary) || LE.summarize(G.events, G.config, { now: t, basis: G.score ? G.basis : 'detected' });
       G.evSeen = G.events.length; G.sumAt = t;
       renderSummary(G.summary);
       renderBoard(t);
