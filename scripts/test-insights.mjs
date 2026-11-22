@@ -130,6 +130,10 @@ console.log('units per session (C5)');
   check('digest.units has one row per unit (2)', Array.isArray(du.units) && du.units.length === 2, JSON.stringify(du.units.map(u => u.unit)));
   check('unit 1 is done after S3 completes, 90 s in total', byUnit(1) && byUnit(1).stage === 'done' && byUnit(1).totalSec === 90, JSON.stringify(byUnit(1) && [byUnit(1).stage, byUnit(1).totalSec]));
   check('unit 2 is at S3, open, its time runs to the last event (now = 100 s, so 0 s there)', byUnit(2) && byUnit(2).stage === 's3' && byUnit(2).s3Sec === 0, JSON.stringify(byUnit(2) && [byUnit(2).stage, byUnit(2).s3Sec]));
+  const dEnd = L.digestSession({ id: '20261122-100000-abce', doc: { title: 'U', startedAtMs: U0, endedAtMs: at(110) }, events: evU, captures: [], config }, LineEngine);
+  const byEnd = n => dEnd.units.find(u => u.unit === n);
+  check('an ended session: the unit at S3 is incomplete and cut off, the done one stays done', byEnd(1).stage === 'done' && byEnd(2).stage === 'incomplete' && byEnd(2).cutOff === true, JSON.stringify(dEnd.units.map(u => [u.unit, u.stage, u.cutOff])));
+  check('a live session (no endedAtMs): unit 2 stays s3 with no cutOff field', byUnit(2).stage === 's3' && !('cutOff' in byUnit(2)));
   check('a session with no unit events has units []', Array.isArray(d.units) && d.units.length === 0);
 }
 

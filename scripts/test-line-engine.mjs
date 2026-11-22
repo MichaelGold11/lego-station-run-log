@@ -1186,5 +1186,41 @@ console.log('units done at S3, units in progress (WIP)');
   function three(c) { return c.stations.findIndex(x => x.id === 's3') + 1; }
 }
 
+console.log('\nline units after Stop (C1)');
+{
+  const S3 = SHIPPED.stations.find(x => x.id === 's3'), CFG2 = { stations: [SHIPPED.stations.find(x => x.id === 's2'), S3] };
+  const T0 = 1000000, at = sec => T0 + sec * 1000;
+  const st = (station, sec, no, unit, extra) => Object.assign({ type: 'unit', station, action: 'start', t: at(sec), unit, no }, extra || {});
+  const en = (station, from, to, no, unit, extra) => Object.assign({ type: 'unit', station, action: 'end', t: at(to), start: at(from), end: at(to), unit, no, result: 'complete', needsReview: false, ended: 'departed', unlinked: false }, extra || {});
+  const byNo = rows => Object.fromEntries(rows.map(r => [r.no, r]));
+  // #001 done at S3 (30-50). #002 at S2 (open from 72). #003 left S2 (55 to 58), waiting. #004 at S3 open from 62 (S2 55-58 earlier is #003's slot, so use its own S2 20-25).
+  const ev = [st('s2', 0, '#001', 1), en('s2', 0, 20, '#001', 1), st('s3', 30, '#001', 1, { from: 's2' }), en('s3', 30, 50, '#001', 1),
+    st('s2', 21, '#003', 3), en('s2', 21, 25, '#003', 3),
+    st('s2', 26, '#004', 4), en('s2', 26, 29, '#004', 4), st('s3', 62, '#004', 4, { from: 's2' }),
+    st('s2', 72, '#002', 2),
+    // #005: ended incomplete at S2 on its own at 40 (flagged before Stop). #006: open at S2 when the session stopped, ended session_stopped.
+    st('s2', 35, '#005', 5), en('s2', 35, 40, '#005', 5, { result: 'incomplete', needsReview: true }),
+    st('s2', 63, '#006', 6), en('s2', 63, 70, '#006', 6, { result: 'incomplete', needsReview: true, ended: 'session_stopped' })];
+  const plain = LE.lineUnits(ev, CFG2, { now: at(80) }), same = LE.lineUnits(ev, CFG2, { now: at(80), stopped: false });
+  check('C1: without stopped the rows are byte-for-byte the old rows', JSON.stringify(plain) === JSON.stringify(same) && plain.every(r => !('cutOff' in r)) && !plain.some(r => r.stage === 'incomplete'));
+  check('C1: before Stop the stages are as they were', byNo(plain)['#002'].stage === 's2' && byNo(plain)['#003'].stage === 'waiting_s3' && byNo(plain)['#004'].stage === 's3' && byNo(plain)['#005'].stage === 'needs_review' && byNo(plain)['#006'].stage === 'needs_review', JSON.stringify(plain.map(r => r.no + ':' + r.stage)));
+  const rows = LE.lineUnits(ev, CFG2, { now: at(80), stopped: true }), r = byNo(rows);
+  check('C1: cut off at s2, waiting_s3 and s3 is incomplete with cutOff true', ['#002', '#003', '#004'].every(n => r[n].stage === 'incomplete' && r[n].cutOff === true && r[n].needsReview === false), JSON.stringify(rows.map(x => [x.no, x.stage, x.cutOff, x.needsReview])));
+  check('C1: a unit whose open unit ended session_stopped is incomplete and cut off', r['#006'].stage === 'incomplete' && r['#006'].cutOff === true && r['#006'].result === 'incomplete');
+  check('C1: a unit flagged before Stop is incomplete, not cut off, still needsReview', r['#005'].stage === 'incomplete' && r['#005'].cutOff === false && r['#005'].needsReview === true);
+  check('C1: a done unit is untouched', JSON.stringify(r['#001']) === JSON.stringify(byNo(plain)['#001']) && r['#001'].stage === 'done' && !('cutOff' in r['#001']));
+  check('C1: incomplete rows sort where needs_review sorted, done last', rows[rows.length - 1].no === '#001' && rows.slice(0, 5).every(x => x.stage === 'incomplete'), rows.map(x => x.no).join());
+  const s0 = LE.lineUnitStats(plain, { now: at(80), runStart: T0 }), s1 = LE.lineUnitStats(rows, { now: at(80), runStart: T0 });
+  check('C1 stats before Stop: inProgress 5 (s2 1, waiting 1, s3 1, review 2), incomplete 0', s0.inProgress.total === 5 && s0.inProgress.s2 === 1 && s0.inProgress.waiting_s3 === 1 && s0.inProgress.s3 === 1 && s0.inProgress.needs_review === 2 && s0.incomplete === 0 && s0.incompleteCutOff === 0, JSON.stringify(s0.inProgress));
+  check('C1 stats after Stop: inProgress 0, incomplete 5, incompleteCutOff 4, done 1', s1.inProgress.total === 0 && s1.inProgress.s2 === 0 && s1.inProgress.needs_review === 0 && s1.incomplete === 5 && s1.incompleteCutOff === 4 && s1.done === 1, JSON.stringify([s1.inProgress, s1.incomplete, s1.incompleteCutOff, s1.done]));
+  check('C1 stats after Stop: one review alert, for the unit flagged before Stop only; no stuck or wrong_order', s1.alerts.length === 1 && s1.alerts[0].kind === 'review' && s1.alerts[0].no === '#005', JSON.stringify(s1.alerts));
+  const wo = ev.concat([{ type: 'verdict', station: 's2', t: at(73), kind: 'mistake', reason: 'wrong_order', message: 'Wrong order' }]);
+  check('C1 stats: wrong_order fires for an in-line row, never for an incomplete one', LE.lineUnitStats(LE.lineUnits(wo, CFG2, { now: at(80) }), { now: at(80) }).alerts.some(a => a.kind === 'wrong_order') && !LE.lineUnitStats(LE.lineUnits(wo, CFG2, { now: at(80), stopped: true }), { now: at(80) }).alerts.some(a => a.kind === 'wrong_order'));
+  // Finding 1 (engine side): a unit that ended incomplete at S3 never counts as done at S3 in summarize.
+  const ev3 = [st('s2', 0, '#001', 1), en('s2', 0, 20, '#001', 1), st('s3', 30, '#001', 1, { from: 's2' }), en('s3', 30, 50, '#001', 1, { result: 'incomplete', needsReview: true, ended: 'session_stopped' }), { type: 'session_end', t: at(60) }];
+  const sm = LE.summarize(ev3, CFG2).line, row3 = LE.lineUnits(ev3, CFG2, { now: at(60), stopped: true })[0];
+  check('finding 1: summarize counts no unit done when S3 ended it incomplete, and its row is incomplete after Stop', sm.units === 0 && row3.stage === 'incomplete' && row3.cutOff === true, JSON.stringify([sm.units, row3.stage]));
+}
+
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);
