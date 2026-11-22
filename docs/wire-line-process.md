@@ -180,6 +180,15 @@ view) or `session_stopped`. A unit that ends before the step checker closed its 
   `state().queue` is the length waiting between S2 and S3.
 - **One row per unit.** `LineEngine.lineUnits(events, config, { now })` merges S2 and S3 into one row per unit: stage
   (`s2`, `waiting_s3`, `s3`, `done`, `needs_review`), seconds per stage, mistake messages per station, video file and time.
+- **Units board.** `LineEngine.lineUnitStats(rows, { now, runStart })` turns the rows into the board's tiles and alerts.
+  Tiles: units done (stage `done`, which is S3 completing it); in progress by stage (`s2`, `waiting_s3`, `s3`,
+  `needs_review`, and their `total`); average time per unit (S2 start to S3 done); each station's average over its
+  finished times with `n`, and the bottleneck (the slower one once both have a time); units per hour (done per hour since
+  the run started, blank until 60 s); done right first time (done units with no mistake or review at either station).
+  Alerts, problems first: `review` (a unit needing review), `wrong_order` (a wrong-order mistake on a unit), `stuck`
+  (a unit at S2 or S3 for more than twice that station's average, only once the station has 3 finished units). Each row's
+  station info also lists its `steps` (key, label, start, end, seconds), each message carries its verdict `code`, and
+  `LineEngine.unitPhotos(row, captures)` picks a unit's photos (stamped `unit`, else by station and time window).
 - **Complete** is the step checker's `cycle_end`: on S2 that comes from the `unit_complete` detector, on S3
   from its steps (new connector, black wire inserted; zones only for the last step), then held through the
   same `departMs`. S3 has no complete detector of its own and is unverified on real footage.
@@ -189,7 +198,7 @@ view) or `session_stopped`. A unit that ends before the step checker closed its 
   mistakes, reviews, result, ended, reset, unlinked, from. Key presses (`manual`) are matched by count and
   shown as a disagreement count.
 - **Export:** `tracked-units.csv`: `session_id, crew, shift, unit_no, unit, needs_review`, then per station
-  `<id>_arrive_ts, end_ts, dur_s, complete_ts, result, ended, steps, mistakes, reviews`. `units.csv` gains
+  `<id>_arrive_ts, end_ts, dur_s, complete_ts, result, ended, steps, mistakes, reviews, video_file, video_t` (the station's video file and the time in it at the unit's start). `units.csv` gains
   appended `unit_no` and `<id>_unit_no/result/ended/review`. Replay: `scripts/replay-unit-tracker.mjs`.
 
 ## Mistake alerts (step checker)
