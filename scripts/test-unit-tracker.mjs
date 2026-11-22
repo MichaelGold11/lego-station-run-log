@@ -384,6 +384,14 @@ console.log('\nline units: one row per unit across S2 and S3');
   const tcsv = LE.trackedUnitsCsv([st('s2', 0, '#001', 1), en('s2', 0, 10, '#001', 1), st('s3', 20, '#001', 1, { from: 's2' }), en('s3', 20, 30, '#001', 1, { from: 's2' }), st('s2', 40, '#002', 2)], CFG2, { id: 'x', crew: 'A', shift: 'Day' }).trim().split('\n');
   const hdr = tcsv[0].split(','), c1 = tcsv[1].split(','), c2 = tcsv[2].split(',');
   check('tracked-units: header gains <id>_video_file and <id>_video_t, units carry file and start time (open unit too)', hdr.includes('s2_video_file') && hdr.includes('s2_video_t') && hdr.includes('s3_video_file') && hdr.includes('s3_video_t') && c1[hdr.indexOf('s2_video_file')] === 's2.mp4' && c1[hdr.indexOf('s2_video_t')] === '0' && c1[hdr.indexOf('s3_video_file')] === 's3.mp4' && c1[hdr.indexOf('s3_video_t')] === '20' && c2[hdr.indexOf('s2_video_file')] === 's2.mp4' && c2[hdr.indexOf('s2_video_t')] === '40' && c2.length === hdr.length, tcsv.join(' / '));
+  // after-stop S2 (C1 codex should): a unit flagged before Stop is Incomplete after Stop, and strip WIP (review alerts only at needs_review) sums to inProgress.total (0).
+  {
+    const evs = [st('s2', 0, '#001', 1), en('s2', 0, 8, '#001', 1, { result: 'incomplete', needsReview: true })], now = at(30);
+    const rs = LE.lineUnits(evs, CFG2, { now, stopped: true }), ss = LE.lineUnitStats(rs, { now, runStart: at(0) }), ip = ss.inProgress;
+    const rv = ss.alerts.filter(al => al.kind === 'review' && al.stage === 'needs_review').length;
+    check('C1 codex should: after Stop a unit flagged before Stop leaves strip WIP (sum equals inProgress.total, 0)', rs[0].stage === 'incomplete' && ss.incomplete === 1 && ip.total === 0 && ip.s2 + ip.waiting_s3 + ip.s3 + rv === ip.total, JSON.stringify([rs[0].stage, ss.incomplete, ip, ss.alerts]));
+    check('C1 codex should: line.html adds only needs_review alerts to station WIP', /al\.kind === 'review' && al\.stage === 'needs_review'\) \{ const k = /.test(fs.readFileSync(new URL('../app/line.html', import.meta.url), 'utf8')));
+  }
 }
 
 // C2 Q2 (unit-board S4): after Stop the flow strip shows the stopped run's summary, the same run the frozen board shows.
