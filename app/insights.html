@@ -584,22 +584,24 @@ function viewUnits() {
   h += '</tbody></table></div></div>' + unitTimeline(rows) + foot();
   return h;
 }
+// an open interval runs to where the engine measured it (start plus its seconds so far), so its bar has a length
+function ivEnd(x) { return x.end != null ? x.end : (isFinite(x.sec) ? x.start + x.sec * 1000 : null); }
 function unitTimeline(rows) {
   const ts = [];
-  rows.forEach(r => { [r.s2, r.s3].forEach(x => { if (x) { ts.push(x.start); if (x.end != null) ts.push(x.end); } }); ['s2', 's3'].forEach(k => (r.mistakes[k] || []).forEach(m => ts.push(m.t))); });
+  rows.forEach(r => { [r.s2, r.s3].forEach(x => { if (x) { ts.push(x.start); const e = ivEnd(x); if (e != null) ts.push(e); } }); ['s2', 's3'].forEach(k => (r.mistakes[k] || []).forEach(m => ts.push(m.t))); });
   if (!ts.length) return '';
   const t0 = Math.min.apply(null, ts), t1 = Math.max.apply(null, ts), span = Math.max(1000, t1 - t0), X = t => (Math.max(0, Math.min(1, (t - t0) / span)) * 100).toFixed(2) + '%', W = (a, b) => (Math.max(0, (b - a) / span) * 100).toFixed(2) + '%';
   let h = '<div class="card"><div class="cardhead"><h2>Unit timeline</h2><span>One row per unit, seconds from the first event</span></div><div class="ub-scroll"><div class="tl"><div class="tl-ax"><span>0 s</span><span>' + fmtS(span / 2000) + '</span><span>' + fmtS(span / 1000) + '</span></div>';
   rows.forEach((r, i) => {
     let b = '';
-    const bar = (x, k) => { if (!x) return ''; const end = x.end != null ? x.end : t1, op = x.end == null; return '<div class="tl-b ' + k + (op ? ' open' : '') + '" style="left:' + X(x.start) + ';width:' + W(x.start, end) + '" title="' + k.toUpperCase() + (op ? ' open' : ' ' + fmtS(x.sec)) + '"></div>' + (op ? '<span class="tl-open" style="left:calc(' + X(Math.min(end, t1 - span * 0.1)) + ' + 4px)">open</span>' : ''); };
+    const bar = (x, k) => { if (!x) return ''; const end = ivEnd(x) != null ? ivEnd(x) : t1, op = x.end == null; return '<div class="tl-b ' + k + (op ? ' open' : '') + '" style="left:' + X(x.start) + ';width:' + W(x.start, end) + '" title="' + k.toUpperCase() + (op ? ' open' : ' ' + fmtS(x.sec)) + '"></div>' + (op ? '<span class="tl-open" style="left:calc(' + X(Math.min(end, t1 - span * 0.1)) + ' + 4px)">open</span>' : ''); };
     b += bar(r.s2, 's2');
     if (r.s2 && r.s2.end != null) { const to = r.s3 ? r.s3.start : t1; if (to > r.s2.end) b += '<div class="tl-w" style="left:' + X(r.s2.end) + ';width:' + W(r.s2.end, to) + '" title="Wait"></div>'; }
     b += bar(r.s3, 's3');
     ['s2', 's3'].forEach(k => (r.mistakes[k] || []).forEach(m => { if (m.kind === 'mistake') b += '<div class="tl-m" style="left:' + X(m.t) + '" title="Mistake at ' + k.toUpperCase() + '"></div>'; }));
     h += '<div class="tl-row" tabindex="0" data-unit="' + i + '"><div class="tl-lab">' + esc(unitName(r)) + '</div><div class="tl-trk">' + b + '</div></div>';
   });
-  return h + '</div></div><div class="tl-key"><span><i style="background:var(--mint)"></i>S2</span><span><i style="background:var(--dim);height:2px"></i>Wait</span><span><i style="background:#8fb4d6"></i>S3</span><span><i style="background:var(--coral);width:3px"></i>Mistake</span><span>Hatched: still open at the last event</span></div></div>';
+  return h + '</div></div><div class="tl-key"><span><i style="background:var(--mint)"></i>S2</span><span><i style="background:var(--dim);height:2px"></i>Wait</span><span><i style="background:#8fb4d6"></i>S3</span><span><i style="background:var(--coral);width:3px"></i>Mistake</span><span>Hatched: still open when the run was saved</span></div></div>';
 }
 let unitScripts = null;
 function loadScript(src) { return new Promise((ok, no) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => no(new Error(src)); document.head.appendChild(s); }); }

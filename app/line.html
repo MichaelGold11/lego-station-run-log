@@ -472,7 +472,7 @@ button.chip:hover { border-color: var(--warn-ink); }
   if (location.hash.length > 1) { location.replace('/runs' + location.hash); return; }
   const LE = window.LineEngine, LD = window.LiveDetect;
   const $ = id => document.getElementById(id);
-  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const now = () => Date.now();
   const fmtS = v => (v == null || !isFinite(v) ? '--' : v.toFixed(1) + ' s');
@@ -2257,9 +2257,9 @@ button.chip:hover { border-color: var(--warn-ink); }
       tile('Stations', `<small>S2</small>${bdClock(st.s2.avgSec)} <small>S3</small>${bdClock(st.s3.avgSec)}`, 'average per station' + (stats.bottleneck ? `, slower: <span class="bd-btl">${stats.bottleneck.toUpperCase()}</span>` : '')) +
       tile('Units per hour', stats.unitsPerHour == null ? '--' : Math.round(stats.unitsPerHour), stats.unitsPerHour == null ? 'after the first minute' : 'since start') +
       tile('Done right first time', stats.rightFirstTime.pct == null ? '--' : stats.rightFirstTime.pct + '%', stats.rightFirstTime.pct == null ? 'no unit done yet' : stats.rightFirstTime.n + ' of ' + stats.rightFirstTime.of);
-    $('bdAlerts').innerHTML = stats.alerts.map(a => `<div class="bd-alert ${a.kind === 'stuck' ? 'stuck' : ''}"><span>${esc(a.message)}</span><button class="btn sm" type="button" data-open="${esc(a.no)}">Open ${esc(a.no)}</button></div>`).join('');
+    $('bdAlerts').innerHTML = stats.alerts.map(a => `<div class="bd-alert ${a.kind === 'stuck' ? 'stuck' : ''}"><span>${esc(a.message)}</span><button class="btn sm" type="button" data-open="${rows.findIndex(r => a.unit != null ? r.unit === a.unit : r.no === a.no)}">Open ${esc(a.no)}</button></div>`).join('');
     // station cards: the unit in front of each station now, and how many wait between them
-    const at = k => rows.find(r => r.stage === k), queue = ip.waiting_s3;
+    const at = k => rows.find(r => r[k] && r[k].start != null && r[k].end == null), queue = ip.waiting_s3;
     const card = (k, stn) => {
       const r = at(k), name = stn ? stn.name || stn.id : k.toUpperCase(), info = r && r[k], step = info && info.steps && info.steps.length ? info.steps[info.steps.length - 1].label : '';
       const takt = G.config.taktSec, over = r && takt && r.stageSec > takt;
@@ -2269,17 +2269,17 @@ button.chip:hover { border-color: var(--warn-ink); }
     };
     $('bdCards').innerHTML = card('s2', sts.s2) + `<div class="bd-queue"><span>waiting for S3</span><b>${queue}</b></div>` + card('s3', sts.s3);
     // the table, problems first (the order lineUnits returns)
-    const mk = r => ['s2', 's3'].flatMap(k => ((r.mistakes && r.mistakes[k]) || []).map(m => k.toUpperCase() + ': ' + (m.message || (m.code ? m.code.replace(/_/g, ' ') : 'mistake'))));
+    const mk = r => ['s2', 's3'].flatMap(k => ((r.mistakes && r.mistakes[k]) || []).map(m => k.toUpperCase() + ': ' + (m.message || (m.code ? String(m.code).replace(/_/g, ' ') : 'mistake'))));
     const body = rows.map((r, i) => {
       const sg = BD_STAGE[r.stage] || [r.stage, ''], m = mk(r);
-      return `<tr class="${r.needsReview ? 'rv' : ''}"><td class="no">${esc(r.no)}</td><td class="t"><span class="chip ${sg[1]}">${sg[0]}</span></td><td>${r.stage === 'done' ? '--' : bdClock(r.stageSec)}</td><td>${bdClock(r.s2Sec)}</td><td>${bdClock(r.s3Sec)}</td>` +
-        `<td class="m ${m.length ? 'bad' : ''}">${m.length ? esc(m.join('; ')) : 'none'}</td><td><button class="btn sm" type="button" data-open="${esc(r.no)}" aria-label="Open unit ${esc(r.no)}">Open</button></td></tr>`;
+      return `<tr class="${r.needsReview ? 'rv' : ''}"><td class="no">${esc(r.no)}</td><td class="t"><span class="chip ${esc(sg[1])}">${esc(sg[0])}</span></td><td>${r.stage === 'done' ? '--' : bdClock(r.stageSec)}</td><td>${bdClock(r.s2Sec)}</td><td>${bdClock(r.s3Sec)}</td>` +
+        `<td class="m ${m.length ? 'bad' : ''}">${m.length ? esc(m.join('; ')) : 'none'}</td><td><button class="btn sm" type="button" data-open="${i}" aria-label="Open unit ${esc(r.no)}">Open</button></td></tr>`;
     }).join('');
     $('bdTbl').innerHTML = rows.length ? `<table><thead><tr><th>Unit</th><th>Stage</th><th>Time in stage</th><th>S2</th><th>S3</th><th>Mistakes</th><th></th></tr></thead><tbody>${body}</tbody></table>`
       : '<div class="bd-empty">No units yet. Each unit shows here once it is in front of a station camera.</div>';
   }
-  async function openUnit(no) {
-    const b = G.board, row = b && b.rows.find(r => r.no === no);
+  async function openUnit(i) {
+    const b = G.board, row = b && b.rows[Number(i)];
     if (!row) return;
     UnitRecord.open(row, { sessionId: b.sid, captures: [] });
     if (!b.sid) return;

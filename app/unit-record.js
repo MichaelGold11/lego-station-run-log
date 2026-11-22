@@ -4,7 +4,7 @@
 // UnitRecord.close() closes it. Escape and the Close button close it too. Used by /line and /insights.
 (function (root) {
   'use strict';
-  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const secs = v => (v == null || !isFinite(v) ? '--' : Number(v).toFixed(1) + ' s');
   const clock = v => { if (v == null || !isFinite(v)) return '--'; const s = Math.round(v); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
   const STAGE = { s2: 'At S2', waiting_s3: 'Waiting for S3', s3: 'At S3', done: 'Done', needs_review: 'Needs review' };
@@ -35,7 +35,7 @@
 .ur-none{color:var(--muted,#767b83)}
 @media (max-width:520px){.ur-head{padding:10px 12px}.ur-body{padding:10px 12px 14px}}
 `;
-  let dlg = null, styled = false;
+  let dlg = null, dlgRow = null, dlgSid = null, styled = false;
   function videoUrl(sessionId, info) {
     if (!sessionId || !info || !info.station || info.videoT == null) return null;
     const m = /-(\d+)\.\w+$/.exec(info.videoFile || ''), part = m ? Number(m[1]) : 1;
@@ -61,7 +61,7 @@
     const items = [];
     for (const k of ['s2', 's3']) for (const m of (row.mistakes && row.mistakes[k]) || []) {
       const url = videoUrl(sessionId, { station: row[k] && row[k].station, videoT: m.videoT, videoFile: m.videoFile || (row[k] && row[k].videoFile) });
-      items.push(`<li class="${m.kind === 'review' ? 'ur-rv' : ''}"><b>${STN[k]}${m.kind === 'review' ? ' needs review' : ''}:</b> ${esc(m.message || (m.code ? m.code.replace(/_/g, ' ') : 'Mistake'))}${url ? ` <a class="ur-play" href="${esc(url)}" target="_blank" rel="noopener">Play at ${clock(m.videoT)}</a>` : ''}</li>`);
+      items.push(`<li class="${m.kind === 'review' ? 'ur-rv' : ''}"><b>${STN[k]}${m.kind === 'review' ? ' needs review' : ''}:</b> ${esc(m.message || (m.code ? String(m.code).replace(/_/g, ' ') : 'Mistake'))}${url ? ` <a class="ur-play" href="${esc(url)}" target="_blank" rel="noopener">Play at ${clock(m.videoT)}</a>` : ''}</li>`);
     }
     return items.length ? '<ul class="ur-bad">' + items.join('') + '</ul>' : '<div class="ur-none">No mistakes on this unit.</div>';
   }
@@ -71,16 +71,17 @@
     if (!list.length) return '<div class="ur-none">No photos for this unit.</div>';
     return '<div class="ur-ph">' + list.map(c => `<figure><img src="${esc(photoUrl(sessionId, c))}" alt="Photo at ${esc((c.station || '').toUpperCase())}" loading="lazy">${esc((c.station || '').toUpperCase())}${c.reason ? ', ' + esc(c.reason) : ''}</figure>`).join('') + '</div>';
   }
-  function close() { if (dlg) { if (dlg.open) dlg.close(); dlg.remove(); dlg = null; } }
+  function close() { if (dlg) { if (dlg.open) dlg.close(); dlg.remove(); dlg = null; dlgRow = dlgSid = null; } }
   function open(row, opts) {
     if (!row || typeof document === 'undefined') return null;
     const o = opts || {}, sid = o.sessionId || null;
     if (!styled) { const s = document.createElement('style'); s.textContent = CSS; document.head.appendChild(s); styled = true; }
     close();
     dlg = document.createElement('dialog');
+    dlgRow = row; dlgSid = sid;
     dlg.className = 'ur-dlg';
     dlg.setAttribute('aria-label', 'Unit ' + (row.no || ''));
-    dlg.innerHTML = `<div class="ur-in"><div class="ur-head"><h2>Unit ${esc(row.no)}</h2><span class="ur-sub">${esc(STAGE[row.stage] || row.stage)}${row.totalSec != null ? ', ' + clock(row.totalSec) + ' in all' : ''}</span><button class="ur-x" type="button">Close</button></div>` +
+    dlg.innerHTML = `<div class="ur-in"><div class="ur-head"><h2>Unit ${esc(row.no)}</h2><span class="ur-sub">${esc(STAGE[row.stage] || row.stage)}${row.stageSec != null && row.stage !== 'done' ? ', ' + clock(row.stageSec) + ' in this stage' : ''}${row.totalSec != null ? ', ' + clock(row.totalSec) + (row.stage === 'done' ? ' in all, S2 start to S3 done' : ' from first start to last step') : ''}</span><button class="ur-x" type="button">Close</button></div>` +
       `<div class="ur-body"><section><h3>Steps</h3><div style="display:grid;gap:8px">${station(row, 's2', sid)}${station(row, 's3', sid)}</div></section>` +
       `<section><h3>Mistakes</h3>${mistakes(row, sid)}</section><section><h3>Photos</h3><div class="ur-photos">${photos(row, o.captures, sid)}</div></section></div></div>`;
     dlg.querySelector('.ur-x').onclick = close;
@@ -93,7 +94,9 @@
   }
   // Photos can arrive after the dialog opened: fill them in without redrawing the rest.
   function setPhotos(row, captures, sessionId) {
-    const el = dlg && dlg.querySelector('.ur-photos');
+    // a late response for another unit or session (the dialog was closed or reopened) is dropped
+    if (!dlg || dlgRow !== row || dlgSid !== (sessionId || null)) return;
+    const el = dlg.querySelector('.ur-photos');
     if (el) el.innerHTML = photos(row, captures, sessionId);
   }
   root.UnitRecord = { open, close, setPhotos };
