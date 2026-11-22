@@ -119,5 +119,19 @@ check('the trend names S2 as getting slower', rd.trend && rd.trend.worst && rd.t
 check('S4 pull-test flags are mostly false alarms', rd.camera.top && rd.camera.top.station === 's4' && rd.camera.top.faRate >= 60, JSON.stringify(rd.camera.top));
 check('same numbers on every page: station open counts add up to the line', rd.stations.reduce((a, s) => a + s.review + s.action, 0) === rd.line.open.review + rd.line.open.action);
 
+console.log('units per session (C5)');
+{
+  const U0 = 1700000000000, at = sec => U0 + sec * 1000;
+  const st = (station, sec, no, unit) => ({ type: 'unit', station, action: 'start', t: at(sec), unit, no });
+  const en = (station, from, to, no, unit) => ({ type: 'unit', station, action: 'end', t: at(to), start: at(from), end: at(to), unit, no, result: 'complete', needsReview: false, ended: 'departed', unlinked: false });
+  const evU = [st('s2', 0, 1, 1), en('s2', 0, 40, 1, 1), st('s3', 50, 1, 1), en('s3', 50, 90, 1, 1), st('s2', 45, 2, 2), en('s2', 45, 80, 2, 2), st('s3', 100, 2, 2)];
+  const du = L.digestSession({ id: '20261122-100000-abcd', doc: { title: 'U', startedAtMs: U0 }, events: evU, captures: [], config }, LineEngine);
+  const byUnit = n => du.units.find(u => u.unit === n);
+  check('digest.units has one row per unit (2)', Array.isArray(du.units) && du.units.length === 2, JSON.stringify(du.units.map(u => u.unit)));
+  check('unit 1 is done after S3 completes, 90 s in total', byUnit(1) && byUnit(1).stage === 'done' && byUnit(1).totalSec === 90, JSON.stringify(byUnit(1) && [byUnit(1).stage, byUnit(1).totalSec]));
+  check('unit 2 is at S3, open, its time runs to the last event (now = 100 s, so 0 s there)', byUnit(2) && byUnit(2).stage === 's3' && byUnit(2).s3Sec === 0, JSON.stringify(byUnit(2) && [byUnit(2).stage, byUnit(2).s3Sec]));
+  check('a session with no unit events has units []', Array.isArray(d.units) && d.units.length === 0);
+}
+
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);

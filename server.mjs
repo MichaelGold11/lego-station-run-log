@@ -690,7 +690,8 @@ function cleanCapture(b, ids, roles) {
     station: b.station, role: b.role, stationName: text(b.stationName, 80) || undefined, t: b.t, videoT: b.videoT == null ? undefined : b.videoT,
     videoFile: text(b.videoFile, 100) || undefined, reason: b.reason, substep: text(b.substep, 60) || undefined, cycle: b.cycle == null ? undefined : b.cycle,
     claim: text(b.claim, 300) || undefined, boxes: r.boxes, zones: b.zones == null ? undefined : b.zones, standard: b.standard == null ? undefined : b.standard,
-    model, operator: operator || undefined
+    model, operator: operator || undefined,
+    unit: Number.isInteger(b.unit) && b.unit >= 1 && b.unit <= 99999 ? b.unit : undefined
   };
   return { meta, image };
 }
