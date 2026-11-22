@@ -454,5 +454,37 @@ console.log('\nline units: one row per unit across S2 and S3');
   check('after-stop: strip arithmetic: S3 done equals tiles done (S3 complete only), WIP figures add up to tiles in progress', stt.done === 1 && (ip.s2 + rv.s2) + ip.waiting_s3 + (ip.s3 + rv.s3) === ip.total && ip.total === 5, JSON.stringify([stt.done, ip, rv]));
 }
 
+// after-stop-followups S1 (C3): station cards after Stop, run from the page's own function on the real engine's stopped rows.
+{
+  const S3 = SHIPPED.stations.find(x => x.id === 's3');
+  const T0 = 1000000, at = sec => T0 + sec * 1000;
+  const st = (station, sec, no, unit, extra) => Object.assign({ type: 'unit', station, action: 'start', t: at(sec), unit, no, videoT: sec, videoFile: station + '.mp4' }, extra || {});
+  const en = (station, from, to, no, unit, extra) => Object.assign({ type: 'unit', station, action: 'end', t: at(to), start: at(from), end: at(to), unit, no, result: 'complete', needsReview: false, ended: 'departed', unlinked: false }, extra || {});
+  const vd = (station, sec, kind, message) => ({ type: 'verdict', station, t: at(sec), kind, message, videoT: sec, videoFile: station + '.mp4' });
+  const CFG2 = { stations: [S2, S3] };
+  const html = fs.readFileSync(new URL('../app/line.html', import.meta.url), 'utf8');
+  const src = (a, b) => html.slice(html.indexOf(a), html.indexOf(b));
+  const esc = x => String(x == null ? '' : x).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const code = src('const BD_STAGE', 'function boardStations') + src('function boardCardHtml', 'function renderBoard') + '; return { boardCardHtml, bdClock };';
+  const { boardCardHtml, bdClock } = new Function('esc', code)(esc);
+  // #001 done at S3, #002 cut off at S3 (S2 left at 30), #003 cut off at S2 (in S2 since 42), #004 left S2 and waits for S3 (cut off at S2)
+  const ev = [st('s2', 0, '#001', 1), en('s2', 0, 10, '#001', 1), st('s3', 12, '#001', 1), en('s3', 12, 20, '#001', 1),
+    st('s2', 21, '#002', 2), en('s2', 21, 30, '#002', 2), st('s3', 32, '#002', 2), st('s2', 42, '#003', 3)];
+  const cards = (rows, stopped) => ['s2', 's3'].map(k => boardCardHtml(k, { id: k, name: k.toUpperCase() }, rows, { stopped, takt: 5 })).join('');
+  const rs = LE.lineUnits(ev, CFG2, { now: at(60), stopped: true }), later = LE.lineUnits(ev, CFG2, { now: at(60), stopped: true });
+  const html1 = cards(rs, true), c2 = boardCardHtml('s2', null, rs, { stopped: true }), c3 = boardCardHtml('s3', null, rs, { stopped: true });
+  check('C3: after Stop no card has "now:", "Waiting for a unit" or a running timer class', !/now:|Waiting for a unit|over/.test(html1), html1.slice(0, 80));
+  check('C3: the S3 card holds #002 as Incomplete with its time held at Stop (S3 start 32 to Stop 60 = 0:28)', /#002/.test(c3) && /Incomplete/.test(c3) && c3.includes('>' + bdClock(28) + '<'), c3.slice(0, 200));
+  check('C3: the S2 card holds #003 as Incomplete with its time held at Stop (42 to 60 = 0:18)', /#003/.test(c2) && /Incomplete/.test(c2) && c2.includes('>' + bdClock(18) + '<'), c2.slice(0, 200));
+  check('C3: the done unit #001 is on no card', !/#001/.test(html1));
+  check('C3: the Incomplete label uses the board neutral chip (no warn, crit, good)', /class="chip "/.test(c3) && !/chip (warn|crit|good)/.test(html1));
+  check('C3: rendering again at a later clock gives the same card', cards(later, true) === html1);
+  const none = boardCardHtml('s3', null, LE.lineUnits([st('s2', 0, '#001', 1)], CFG2, { now: at(20), stopped: true }), { stopped: true });
+  check('C3: a card with no unit at Stop says so plainly and is not the live wording', /No unit at this station when the run stopped/.test(none) && !/Waiting for a unit/.test(none), none.slice(0, 160));
+  const live = LE.lineUnits(ev, CFG2, { now: at(60) }), lv = cards(live, false), lv2 = cards(LE.lineUnits(ev, CFG2, { now: at(90) }), false);
+  check('C3: the live board still shows the unit, "time in stage" and a running time', /time in stage/.test(lv) && /#002/.test(lv) && /#003/.test(lv) && lv !== lv2 && lv.includes('>' + bdClock(28) + '<') && lv2.includes('>' + bdClock(58) + '<'), lv.slice(0, 120));
+  check('C3: renderBoard calls boardCardHtml with the snapshot flag', /boardCardHtml\(k, stn, rows, \{ stopped: !!src\.stopped/.test(html));
+}
+
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);
