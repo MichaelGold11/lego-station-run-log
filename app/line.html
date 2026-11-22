@@ -2263,6 +2263,22 @@ button.chip:hover { border-color: var(--warn-ink); }
     if (!a && c && !stp) out.wip[c] += rv.s2;
     return out;
   }
+  // One station card. Live: the unit in front of the station, its step ("now:") and a running time. After Stop (the snapshot): the unit the Stop cut off
+  // at this station (its last), labelled Incomplete, its time in stage held at Stop (the snapshot's own now), no "now:" line and nothing that ticks.
+  function boardCardHtml(k, stn, rows, o) {
+    const head = `<div class="eyebrow">Station ${k.toUpperCase()}${stn && stn.name && stn.name.toUpperCase() !== k.toUpperCase() ? ' &middot; ' + esc(stn.name) : ''}</div>`;
+    if (o.stopped) {
+      const cut = rows.filter(x => x.stage === 'incomplete' && x.cutOff && (x.s3 ? 's3' : 's2') === k), r = cut[0], info = r && r[k];
+      if (!r) return `<div class="panel bd-card ${k} stopped"><div>${head}<div class="nm" style="margin-top:6px">No unit at this station when the run stopped</div></div><div class="tm">--</div></div>`;
+      return `<div class="panel bd-card ${k} stopped"><div>${head}<div class="big">${esc(r.no)}</div><div class="nm"><span class="chip ${esc(BD_STAGE.incomplete[1])}">${esc(BD_STAGE.incomplete[0])}</span>${cut.length > 1 ? ' +' + (cut.length - 1) + ' more' : ''}</div></div>` +
+        `<div style="text-align:right"><div class="tm">${bdClock(info && info.sec)}</div><div class="nm">time in stage at Stop</div></div></div>`;
+    }
+    const r = rows.find(x => x[k] && x[k].start != null && x[k].end == null), info = r && r[k], step = info && info.steps && info.steps.length ? info.steps[info.steps.length - 1].label : '';
+    const over = r && o.takt && r.stageSec > o.takt;
+    return `<div class="panel bd-card ${k}"><div>${head}` +
+      (r ? `<div class="big">${esc(r.no)}</div><div class="nm">${esc(step ? 'now: ' + step : 'time in stage')}</div>` : `<div class="nm" style="margin-top:6px">Waiting for a unit</div>`) + '</div>' +
+      (r ? `<div style="text-align:right"><div class="tm${over ? ' over' : ''}">${bdClock(r.stageSec)}</div><div class="nm">time in stage</div></div>` : '<div class="tm">--</div>') + '</div>';
+  }
   function renderBoard(t) {
     const sts = boardStations(), src = boardSource(t), on = sts.any || !!(src.rows && src.rows.length);
     $('board').hidden = !on;
@@ -2283,14 +2299,7 @@ button.chip:hover { border-color: var(--warn-ink); }
       tile('Done right first time', stats.rightFirstTime.pct == null ? '--' : stats.rightFirstTime.pct + '%', stats.rightFirstTime.pct == null ? 'no unit done yet' : stats.rightFirstTime.n + ' of ' + stats.rightFirstTime.of);
     $('bdAlerts').innerHTML = stats.alerts.map(a => `<div class="bd-alert ${a.kind === 'stuck' ? 'stuck' : ''}"><span>${esc(a.message)}</span><button class="btn sm" type="button" data-open="${rows.findIndex(r => a.unit != null ? r.unit === a.unit : r.no === a.no)}">Open ${esc(a.no)}</button></div>`).join('');
     // station cards: the unit in front of each station now, and how many wait between them
-    const at = k => rows.find(r => r[k] && r[k].start != null && r[k].end == null), queue = ip.waiting_s3;
-    const card = (k, stn) => {
-      const r = at(k), name = stn ? stn.name || stn.id : k.toUpperCase(), info = r && r[k], step = info && info.steps && info.steps.length ? info.steps[info.steps.length - 1].label : '';
-      const takt = G.config.taktSec, over = r && takt && r.stageSec > takt;
-      return `<div class="panel bd-card ${k}"><div><div class="eyebrow">Station ${k.toUpperCase()}${stn && stn.name && stn.name.toUpperCase() !== k.toUpperCase() ? ' &middot; ' + esc(stn.name) : ''}</div>` +
-        (r ? `<div class="big">${esc(r.no)}</div><div class="nm">${esc(step ? 'now: ' + step : 'time in stage')}</div>` : `<div class="nm" style="margin-top:6px">Waiting for a unit</div>`) + '</div>' +
-        (r ? `<div style="text-align:right"><div class="tm${over ? ' over' : ''}">${bdClock(r.stageSec)}</div><div class="nm">time in stage</div></div>` : '<div class="tm">--</div>') + '</div>';
-    };
+    const queue = ip.waiting_s3, card = (k, stn) => boardCardHtml(k, stn, rows, { stopped: !!src.stopped, takt: G.config.taktSec });
     $('bdCards').innerHTML = card('s2', sts.s2) + `<div class="bd-queue"><span>waiting for S3</span><b>${queue}</b></div>` + card('s3', sts.s3);
     // the table, problems first (the order lineUnits returns)
     const mk = r => ['s2', 's3'].flatMap(k => ((r.mistakes && r.mistakes[k]) || []).map(m => k.toUpperCase() + ': ' + (m.message || (m.code ? String(m.code).replace(/_/g, ' ') : 'mistake'))));
