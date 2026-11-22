@@ -2144,7 +2144,7 @@ button.chip:hover { border-color: var(--warn-ink); }
   function renderSummary(sum) {
     const L = sum.line, ids = LIST.map(s => s.id);
     $('sUnits').textContent = L.units;
-    $('sUnitsS').textContent = (G.qaIds.length ? 'tested at ' + G.qaIds.map(x => x.toUpperCase()).join(' and ') : 'no QA station on the floor') + (L.awaitingQa ? ', ' + L.awaitingQa + ' awaiting result' : '');
+    $('sUnitsS').textContent = (G.qaIds.length ? 'tested at ' + G.qaIds.map(x => x.toUpperCase()).join(' and ') : 'counted at ' + (L.countedAt && L.countedAt.length ? L.countedAt.map(x => x.toUpperCase()).join(' and ') : '--') + ', no QA station') + (L.awaitingQa ? ', ' + L.awaitingQa + ' awaiting result' : '');
     $('sUph').textContent = L.uph == null || L.elapsedSec < 60 ? '--' : L.uph.toFixed(0);
     $('sUphS').textContent = L.elapsedSec < 60 ? 'after the first minute' : 'over ' + fmtClock(L.elapsedSec * 1000);
     $('sFpy').textContent = L.fpy == null ? '--' : Math.round(L.fpy * 100) + '%';

@@ -1262,7 +1262,6 @@
         } else q.unknown++;
       }
     }
-    const units = qaSts.reduce((a, s) => a + stations[s.id].cycles, 0);
     const elapsedSec = Math.max(0, (tEnd - t0) / 1000);
     // Stages: stations next to each other in flow order with the same role work side by side. WIP is counted between
     // stages (null between two stations of one stage), and a station's pace is its average over the stations in its stage.
@@ -1274,6 +1273,10 @@
     }
     const stageUnits = k => stages[k].ids.reduce((a, id) => a + stations[id].units, 0);
     const pace = id => (stations[id].unitSec == null ? null : stations[id].unitSec / stages[stageOf[id]].ids.length);
+    // Units finish at the QA stations. A floor with none counts the last stage's units instead (insights-lib does the same with its last station).
+    const lastStage = stages[stages.length - 1];
+    const units = qaSts.length ? qaSts.reduce((a, s) => a + stations[s.id].cycles, 0) : (lastStage ? stageUnits(stages.length - 1) : 0);
+    const countedAt = qaSts.length ? qaSts.map(s => s.id) : (lastStage ? lastStage.ids.slice() : []);
     const wip = [];
     // Work in progress counts units (a station with perUnit 3 hands over one unit every 3 cycles), between stages.
     for (let i = 0; i + 1 < ids.length; i++) {
@@ -1289,7 +1292,7 @@
     return {
       stations,
       line: {
-        units, elapsedSec: r1(elapsedSec), uph: elapsedSec >= 1 ? r1(units * 3600 / elapsedSec) : null,
+        units, countedAt, elapsedSec: r1(elapsedSec), uph: elapsedSec >= 1 ? r1(units * 3600 / elapsedSec) : null,
         tested: q.passed + q.failed, passed: q.passed, failed: q.failed, defectFails: q.defectFails, nonDefectFails: q.nonDefectFails, unknown: q.unknown, awaitingQa: q.awaiting,
         fpy: q.passed + q.defectFails > 0 ? round(q.passed / (q.passed + q.defectFails), 4) : null,
         failsByCause: q.failsByCause, failsByReason: q.failsByReason, wip, bottleneck, cycleEnds,

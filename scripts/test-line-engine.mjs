@@ -1147,5 +1147,26 @@ console.log('S2 false "step skipped" and WIP');
   check('wipShown: never negative, a plain count passes', LE.wipShown(-1, true) === 0 && LE.wipShown(3, true) === 3 && LE.wipShown(0, true) === 0 && LE.wipShown(null, true) === null);
 }
 
+console.log('units on a floor with no QA station');
+{
+  const cfgOf = ids => { const c = JSON.parse(JSON.stringify(CFG)); c.stations = c.stations.filter(x => ids.includes(x.id)); return c; };
+  // One S2-role station, one detected cycle: the unit counts there and uph follows.
+  const one = [{ type: 'session_start', t: 0 }, { type: 'source_change', station: 's2', input: 'clip', t: 0 },
+    ...cycleEvents('s2', 1, 30, 2000, 5, ['s2_pick', 's2_get_splice', 's2_insert', 's2_handoff']), { type: 'session_end', t: 60000 }];
+  const L1 = LE.summarize(one, cfgOf(['s2'])).line;
+  check('no QA, one S2 station with one cycle: line.units 1', L1.units === 1, L1.units);
+  check('no QA: uph is not null and follows units', L1.uph != null && near(L1.uph, 60), L1.uph);
+  check('no QA: countedAt names the station', L1.countedAt.join() === 's2');
+  // Two stations, no QA: only the last station (s3) counts.
+  const two = [{ type: 'session_start', t: 0 }, { type: 'source_change', station: 's2', input: 'clip', t: 0 }, { type: 'source_change', station: 's3', input: 'clip', t: 0 },
+    ...cycleEvents('s2', 4, 30, 2000, 5, ['s2_pick', 's2_get_splice', 's2_insert', 's2_handoff']),
+    ...cycleEvents('s3', 3, 25, 3000, 5, ['s3_pick', 's3_insert', 's3_handoff']), { type: 'session_end', t: 200000 }];
+  const L2 = LE.summarize(two, cfgOf(['s2', 's3'])).line;
+  check('no QA, two stations: units come from the last station only', L2.units === 3 && L2.countedAt.join() === 's3', L2.units);
+  // With a QA station the old rule holds: s4 cycles, not the last-station fallback.
+  const L3 = LE.summarize(two.concat(cycleEvents('s4', 2, 15, 4000, 5, ['s4_pick', 's4_connect', 's4_test', 's4_sort'])), CFG).line;
+  check('with a QA station the count stays at QA', L3.units === 2 && L3.countedAt.join() === 's4', L3.units);
+}
+
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);
