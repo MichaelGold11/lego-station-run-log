@@ -1163,7 +1163,7 @@
       const waitSec = a && a.end != null ? sec(a.end, b ? b.start : now) : null, s3sec = b ? sec(b.start, b.end != null ? b.end : now) : null;
       const fin = stage === 'done' || (stage === 'needs_review' && last.end != null);
       const mkS2 = stationInfo(a), mkS3 = stationInfo(b);
-      if (stopped && stage !== 'done') {
+      if (stopped && stage !== 'done' && !(b && b.end != null && b.result === 'complete')) {   // C1 codex must-fix: a row S3 finished complete keeps its stage and result
         // After Stop: every unit not done at S3 is incomplete. cutOff: the Stop did it (it was in the line, or its open unit ended session_stopped).
         // A unit flagged before Stop (unlinked, or ended incomplete at a station on its own) keeps needsReview and is not cut off.
         const cutOff = stage !== 'needs_review' || [a, b].some(r => r && r.ended === 'session_stopped');
