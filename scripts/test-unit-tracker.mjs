@@ -258,5 +258,56 @@ console.log('\nunit tracker: step engine gated while a finished unit is still in
   check('stepStation without a tracker just updates the engine', LE.stepStation(eng, null, {}, 1).held === false);
 }
 
+console.log('\nline units: one row per unit across S2 and S3');
+{
+  const S3 = SHIPPED.stations.find(x => x.id === 's3');
+  const T0 = 1000000, at = sec => T0 + sec * 1000;
+  const st = (station, sec, no, unit, extra) => Object.assign({ type: 'unit', station, action: 'start', t: at(sec), unit, no, videoT: sec, videoFile: station + '.mp4' }, extra || {});
+  const en = (station, from, to, no, unit, extra) => Object.assign({ type: 'unit', station, action: 'end', t: at(to), start: at(from), end: at(to), unit, no, result: 'complete', needsReview: false, ended: 'departed', unlinked: false }, extra || {});
+  const vd = (station, sec, kind, message) => ({ type: 'verdict', station, t: at(sec), kind, message, videoT: sec, videoFile: station + '.mp4' });
+  const CFG2 = { stations: [S2, S3] };
+  const byNo = rows => Object.fromEntries(rows.map(r => [r.no, r]));
+  // 1: overlap. #001 done at S2 (0-20), at S3 from 30 (open); #002 at S2 from 25 (open).
+  let ev = [st('s2', 0, '#001', 1), en('s2', 0, 20, '#001', 1), st('s3', 30, '#001', 1, { from: 's2' }), st('s2', 25, '#002', 2)];
+  let rows = LE.lineUnits(ev, CFG2, { now: at(40) }), r = byNo(rows);
+  check('lineUnits: #001 at S3 while #002 is at S2, two rows', rows.length === 2 && r['#001'].stage === 's3' && r['#002'].stage === 's2', JSON.stringify(rows.map(x => x.stage)));
+  check('lineUnits: seconds in stage at now, and per-station seconds', r['#001'].stageSec === 10 && r['#001'].s2Sec === 20 && r['#001'].waitSec === 10 && r['#001'].s3Sec === 10 && r['#001'].totalSec === 40 && r['#002'].stageSec === 15 && r['#002'].s2Sec === 15 && r['#002'].s3Sec === null && r['#002'].waitSec === null, JSON.stringify([r['#001'], r['#002']]));
+  check('lineUnits: video file and start time per station, null where the station has none', r['#001'].s2.videoFile === 's2.mp4' && r['#001'].s2.videoT === 0 && r['#001'].s3.videoT === 30 && r['#002'].s3 === null);
+  check('lineUnits: in-line units sort oldest first', rows[0].no === '#001');
+  ev.push(en('s3', 30, 45, '#001', 1, { from: 's2' }));
+  rows = LE.lineUnits(ev, CFG2, { now: at(50) }); r = byNo(rows);
+  check('lineUnits: S3 completes it, #001 done with a total and result complete, listed after in-line #002', r['#001'].stage === 'done' && r['#001'].result === 'complete' && r['#001'].totalSec === 45 && r['#001'].stageSec === null && rows[0].no === '#002' && rows[1].no === '#001');
+  // 2: S2 hands over two units before S3 takes one: both waiting, oldest claimed first.
+  ev = [st('s2', 0, '#001', 1), en('s2', 0, 10, '#001', 1), st('s2', 15, '#002', 2), en('s2', 15, 25, '#002', 2)];
+  rows = LE.lineUnits(ev, CFG2, { now: at(40) }); r = byNo(rows);
+  check('lineUnits: two units handed over, both waiting_s3 with wait seconds from when each left S2', rows.length === 2 && rows.every(x => x.stage === 'waiting_s3') && r['#001'].stageSec === 30 && r['#002'].stageSec === 15 && r['#001'].waitSec === 30 && rows[0].no === '#001');
+  const link = LE.createUnitLink(CFG2), a = LE.createUnitTracker(S2, { link }), b = LE.createUnitTracker(S3, { link });
+  let t = 0; const evs = [];
+  const fr = (ut, ms, present, es) => { for (let k = 0; k < Math.round(ms / 125); k++) { t += 125; evs.push(...ut.update({ t, present, hand: false, events: k === 0 && es ? es.map(e => Object.assign({ station: ut === a ? 's2' : 's3', t, source: 'model' }, e)) : [] })); } };
+  const s2u = () => { fr(a, 1000, true, [{ type: 'substep', substep: 's2_arrive', move: 'start' }]); fr(a, 1000, true, [{ type: 'substep', substep: 's2_close', move: 'next' }, { type: 'cycle_end' }]); fr(a, 3000, false); };
+  fr(a, 500, false); fr(b, 500, false); s2u(); s2u();
+  fr(b, 1000, true, [{ type: 'substep', substep: 's3_arrive', move: 'start' }]);
+  rows = LE.lineUnits(evs, CFG2, { now: t }); r = byNo(rows);
+  check('lineUnits: with real trackers S3 claims #001 first, #002 still waiting_s3', r['#001'].stage === 's3' && r['#002'].stage === 'waiting_s3' && r['#001'].s3.station === 's3', JSON.stringify(rows.map(x => x.no + ':' + x.stage)));
+  // 3: unlinked ?01 at S3.
+  ev = [st('s3', 5, '?01', null, { from: 's2', unlinked: true }), en('s3', 5, 15, '?01', null, { from: 's2', unlinked: true, needsReview: true }), st('s2', 20, '#001', 1)];
+  rows = LE.lineUnits(ev, CFG2, { now: at(30) }); r = byNo(rows);
+  check('lineUnits: unlinked ?01 at S3 needs review and sorts before the in-line unit', rows[0].no === '?01' && r['?01'].stage === 'needs_review' && r['?01'].needsReview && r['?01'].unit === null && r['?01'].s2 === null && r['#001'].stage === 's2', JSON.stringify(rows.map(x => x.no + ':' + x.stage)));
+  // 4: stopped mid-cycle.
+  ev = [st('s2', 0, '#001', 1), en('s2', 0, 8, '#001', 1, { result: 'incomplete', needsReview: true, ended: 'session_stopped' }), st('s2', 20, '#002', 2), en('s2', 20, 30, '#002', 2)];
+  rows = LE.lineUnits(ev, CFG2, { now: at(40) }); r = byNo(rows);
+  check('lineUnits: a unit stopped mid-cycle is needs_review with result incomplete, ahead of the waiting one', rows[0].no === '#001' && r['#001'].stage === 'needs_review' && r['#001'].result === 'incomplete' && r['#002'].stage === 'waiting_s3');
+  // 5: messages land on the right unit, by station and window.
+  ev = [st('s2', 0, '#001', 1), vd('s2', 4, 'mistake', 'Red wire is missing'), en('s2', 0, 10, '#001', 1), st('s2', 12, '#002', 2), vd('s2', 14, 'review', 'Looks done but not sure'), vd('s3', 14, 'mistake', 'S3 other unit'),
+    en('s2', 12, 20, '#002', 2), st('s3', 22, '#001', 1, { from: 's2' }), vd('s3', 24, 'mistake', 'Connector is turned'), vd('s2', 25, 'mistake', 'S2 between units'), en('s3', 22, 30, '#001', 1, { from: 's2' })];
+  rows = LE.lineUnits(ev, CFG2, { now: at(40) }); r = byNo(rows);
+  const msgs = x => x.map(m => m.message).join('|');
+  check('lineUnits: mistakes by station and window', msgs(r['#001'].mistakes.s2) === 'Red wire is missing' && msgs(r['#001'].mistakes.s3) === 'Connector is turned' && msgs(r['#002'].mistakes.s2) === 'Looks done but not sure' && r['#002'].mistakes.s3.length === 0, JSON.stringify([r['#001'].mistakes, r['#002'].mistakes]));
+  check('lineUnits: counts on the station and a message carries its video time', r['#001'].s2.mistakes === 1 && r['#002'].s2.mistakes === 0 && r['#002'].s2.reviews === 1 && r['#001'].mistakes.s2[0].videoT === 4);
+  rows = LE.lineUnits([st('s2', 0, '#001', 1), en('s2', 0, 10, '#001', 1)], { stations: [S2] }, { now: at(12) });
+  check('lineUnits: with no S3 station a unit that left S2 is waiting_s3, never done', rows.length === 1 && rows[0].stage === 'waiting_s3' && rows[0].stageSec === 2);
+  check('lineUnits: no tracked events gives no rows', LE.lineUnits([], CFG2, { now: 0 }).length === 0);
+}
+
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);

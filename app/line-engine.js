@@ -1107,6 +1107,63 @@
     }
     return order.sort((a, b) => (a.unit != null && b.unit != null ? a.unit - b.unit : a.unit != null ? -1 : b.unit != null ? 1 : a.at - b.at));
   }
+  // One row per unit across the line, for the live board. Stations by role: the tracked station with no `from` is "s2" (upstream), the one with
+  // `from` (or role DONE_ROLE) is "s3" (downstream; its completion makes the unit done). Stage: needs_review (unlinked, or stopped mid-cycle),
+  // s3, done, s2, waiting_s3 (left s2, not claimed). Done is only ever S3's: with no S3 station a unit that left S2 stays waiting_s3. Mistakes are the verdict
+  // events (kind mistake or review) of that station inside the unit's start-to-end window there (open window runs to `now`).
+  // Order: needs_review first, then in-line units (s3, waiting_s3, s2; oldest first), then done, newest first.
+  function lineUnits(events, config, opts) {
+    const sorted = sortEvents(events), now = opts && isNum(opts.now) ? opts.now : (sorted.length ? sorted[sorted.length - 1].t : 0);
+    const tr = ((config && config.stations) || []).filter(unitTrackerOn);
+    const down = tr.filter(st => st.unitTracker.from || (st.role || st.id) === DONE_ROLE), up = tr.filter(st => down.indexOf(st) < 0);
+    const roleOf = {}; for (const st of up) roleOf[st.id] = 's2'; for (const st of down) roleOf[st.id] = 's3';
+    const sec = (a, b) => (isNum(a) && isNum(b) ? round((b - a) / 1000, 3) : null);
+    // Pair each station's start with its end (one unit at a time per station); a start without an end is open.
+    const open = {}, recs = [];
+    for (const e of sorted) {
+      if (e.type !== 'unit' || !roleOf[e.station]) continue;
+      if (e.action === 'start') open[e.station] = e;
+      else if (e.action === 'end') {
+        const s0 = open[e.station]; delete open[e.station];
+        recs.push({ role: roleOf[e.station], station: e.station, unit: e.unit, no: e.no, start: e.start != null ? e.start : e.t, end: e.end != null ? e.end : e.t, completeT: e.completeT, result: e.result, unlinked: !!e.unlinked, needsReview: !!e.needsReview, ended: e.ended, videoFile: (s0 && s0.videoFile) || e.videoFile || null, videoT: s0 && s0.videoT != null ? s0.videoT : (e.videoT != null ? e.videoT : null), videoEndT: e.videoT != null && s0 ? e.videoT : null });
+      }
+    }
+    for (const e of Object.values(open)) recs.push({ role: roleOf[e.station], station: e.station, unit: e.unit, no: e.no, start: e.t, end: null, completeT: null, result: null, unlinked: !!e.unlinked, needsReview: false, ended: null, videoFile: e.videoFile || null, videoT: e.videoT != null ? e.videoT : null, videoEndT: null });
+    const by = {}, list = [];
+    for (const r of recs) {
+      const key = r.unit != null ? 'n' + r.unit : 'u' + r.no + ':' + r.station;
+      if (!by[key]) { by[key] = { no: r.no, unit: r.unit, s2: null, s3: null }; list.push(by[key]); }
+      by[key][r.role] = r;
+    }
+    const verdicts = sorted.filter(e => e.type === 'verdict' && (e.kind === 'mistake' || e.kind === 'review'));
+    const stationInfo = r => {
+      if (!r) return null;
+      const hi = r.end != null ? r.end : now;
+      const msgs = verdicts.filter(v => v.station === r.station && v.t >= r.start && (r.end != null ? v.t < r.end : v.t <= hi))
+        .map(v => ({ kind: v.kind, message: v.message || null, t: v.t, videoT: v.videoT != null ? v.videoT : null, videoFile: v.videoFile || null }));
+      return { station: r.station, start: r.start, end: r.end, sec: sec(r.start, hi), result: r.result, ended: r.ended, mistakes: msgs.filter(m => m.kind === 'mistake').length, reviews: msgs.filter(m => m.kind === 'review').length, messages: msgs,
+        videoFile: r.videoFile, videoT: r.videoT, videoEndT: r.videoEndT };
+    };
+    const rows = list.map(u => {
+      const a = u.s2, b = u.s3;
+      const incomplete = [a, b].some(r => r && r.end != null && r.result === 'incomplete');
+      const review = !!(b && b.unlinked) || !!(a && a.unlinked) || incomplete;
+      let stage, since;
+      if (review) { stage = 'needs_review'; since = Math.max(...[a, b].filter(Boolean).map(r => (r.end != null ? r.end : r.start))); }
+      else if (b) { if (b.end == null) { stage = 's3'; since = b.start; } else { stage = 'done'; since = b.end; } }
+      else if (a && a.end == null) { stage = 's2'; since = a.start; }
+      else { stage = 'waiting_s3'; since = a.end; }   // left S2: waiting for S3 (also with no S3 on the floor: done is only ever S3's)
+      const first = a || b, last = b || a, s2sec = a ? sec(a.start, a.end != null ? a.end : now) : null;
+      const waitSec = a && a.end != null ? sec(a.end, b ? b.start : now) : null, s3sec = b ? sec(b.start, b.end != null ? b.end : now) : null;
+      const fin = stage === 'done' || (stage === 'needs_review' && last.end != null);
+      const mkS2 = stationInfo(a), mkS3 = stationInfo(b);
+      return { no: u.no, unit: u.unit, stage, stageSec: stage === 'done' ? null : sec(since, now), s2Sec: s2sec, waitSec, s3Sec: s3sec, totalSec: sec(first.start, fin ? last.end : now), start: first.start,
+        needsReview: stage === 'needs_review', result: incomplete ? 'incomplete' : (last.end != null ? last.result : null), s2: mkS2, s3: mkS3,
+        mistakes: { s2: mkS2 ? mkS2.messages : [], s3: mkS3 ? mkS3.messages : [] } };
+    });
+    const rank = { needs_review: 0, s3: 1, waiting_s3: 1, s2: 1, done: 2 };
+    return rows.sort((x, y) => (rank[x.stage] - rank[y.stage]) || (x.stage === 'done' ? y.start - x.start : x.start - y.start));
+  }
   function trackedUnitsCsv(events, config, meta) {
     const m = meta || {}, sorted = sortEvents(events), base = timeBase(sorted, m), ts = t => (t == null ? null : round((t - base) / 1000, 3));
     const tr = config.stations.filter(unitTrackerOn), lines = [trackedCols(config).join(',')];
@@ -1534,7 +1591,7 @@
     DEFAULTS, MOTION, MISMATCH_NOTE, EVENT_TYPES, CYCLE_ACTIONS, SUBSTEP_COLS, CYCLE_COLS, VERDICT_COLS, CHECK, LEVELS, OPERATOR_CODE, FLOOR, CLASS_TEST,
     members, activeRule, evalRule, missingOf, ruleText, checkConfig, captureDefaults, CAPTURE_DEFAULTS, captureWanted, nextSampleDue, modelFor, checkModelOutput, e2eBadClass, qaDecide, createStation,
     operatorCode, defaultName, shortName, classTestLayout, setupKey, nextStationId, freeSpot, saveScheduler, applyLayout,
-    zoneSignals, calibrationFrom, classSignals, trackedClasses, unitCheck, ASSEMBLY, handPresence, steadyClasses, mergeSignals, createChecker, createUnitTracker, createUnitLink, stepStation, checkerEvents, wipShown, unitRows, unitPresent, unitNo, unitTrackerOn, UNIT_TRACKER, trackedUnits, trackedUnitsCsv, TRACKED_COLS,
+    zoneSignals, calibrationFrom, classSignals, trackedClasses, unitCheck, ASSEMBLY, handPresence, steadyClasses, mergeSignals, createChecker, createUnitTracker, createUnitLink, stepStation, checkerEvents, wipShown, unitRows, lineUnits, unitPresent, unitNo, unitTrackerOn, UNIT_TRACKER, trackedUnits, trackedUnitsCsv, TRACKED_COLS,
     standardViews, pickStandardView, sameZones, sortEvents, ruleZones, unobserved, NO_DATA, detectedCycles, manualCycles, summarize, substepsCsv, cyclesCsv, verdictsCsv, linkUnits, unitCols, unitsCsv, csvCell
   };
 });

@@ -178,6 +178,8 @@ view) or `session_stopped`. A unit that ends before the step checker closed its 
   queue (`LineEngine.createUnitLink`, one per line). A finished unit S2 has not yet decided left is claimed
   directly. An S3 arrival with an empty queue is unlinked: `?01`, `?02`, `needsReview`, numbers untouched.
   `state().queue` is the length waiting between S2 and S3.
+- **One row per unit.** `LineEngine.lineUnits(events, config, { now })` merges S2 and S3 into one row per unit: stage
+  (`s2`, `waiting_s3`, `s3`, `done`, `needs_review`), seconds per stage, mistake messages per station, video file and time.
 - **Complete** is the step checker's `cycle_end`: on S2 that comes from the `unit_complete` detector, on S3
   from its steps (new connector, black wire inserted; zones only for the last step), then held through the
   same `departMs`. S3 has no complete detector of its own and is unverified on real footage.
