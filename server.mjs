@@ -29,13 +29,38 @@ const MAX_UPLOAD = 500 * 1024 * 1024;
 
 // /live runs the YOLO model and the hand model in the browser. WASM threads need cross-origin isolation, so /live and its
 // vendor and model files carry COOP and COEP (credentialless keeps the Google Fonts link working). /runs is left alone.
-// Libraries come from node_modules (npm install); if that is missing the request is sent on to the pinned jsdelivr copy.
+// Libraries come from node_modules (npm install); if a file is missing it is fetched once from the pinned jsdelivr copy,
+// cached under <DATA_DIR>/cache/vendor/<package>@<version>/ and served same-origin (a cross-origin worker is refused).
+// Test overrides: VENDOR_NODE_MODULES=<dir> replaces ./node_modules, VENDOR_CDN_BASE=<origin> replaces https://cdn.jsdelivr.net.
 const ISOLATE = { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'credentialless', 'Cross-Origin-Resource-Policy': 'same-origin' };
 const DEPS = (() => { try { return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).dependencies || {}; } catch (e) { return {}; } })();
+const NODE_MODULES = process.env.VENDOR_NODE_MODULES ? path.resolve(process.env.VENDOR_NODE_MODULES) : path.join(ROOT, 'node_modules');
+const CDN_BASE = (process.env.VENDOR_CDN_BASE || 'https://cdn.jsdelivr.net').replace(/\/+$/, '');
 const VENDOR = {
-  '/vendor/ort/': { dir: path.join(ROOT, 'node_modules', 'onnxruntime-web', 'dist'), cdn: 'https://cdn.jsdelivr.net/npm/onnxruntime-web@' + DEPS['onnxruntime-web'] + '/dist/' },
-  '/vendor/mediapipe/': { dir: path.join(ROOT, 'node_modules', '@mediapipe', 'tasks-vision'), cdn: 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@' + DEPS['@mediapipe/tasks-vision'] + '/' }
+  '/vendor/ort/': { dir: path.join(NODE_MODULES, 'onnxruntime-web', 'dist'), cdn: CDN_BASE + '/npm/onnxruntime-web@' + DEPS['onnxruntime-web'] + '/dist/', cache: path.join(DATA, 'cache', 'vendor', 'onnxruntime-web@' + DEPS['onnxruntime-web'], 'dist') },
+  '/vendor/mediapipe/': { dir: path.join(NODE_MODULES, '@mediapipe', 'tasks-vision'), cdn: CDN_BASE + '/npm/@mediapipe/tasks-vision@' + DEPS['@mediapipe/tasks-vision'] + '/', cache: path.join(DATA, 'cache', 'vendor', 'tasks-vision@' + DEPS['@mediapipe/tasks-vision']) }
 };
+const VENDOR_MAX = 64 * 1024 * 1024, VENDOR_TIMEOUT = 60000;
+const vendorInflight = new Map();
+// Fetch one file from the CDN into the cache: temp file, then rename; only a 200, at most VENDOR_MAX bytes.
+function vendorFetch(url, dest) {
+  if (vendorInflight.has(dest)) return vendorInflight.get(dest);
+  const job = (async () => {
+    const tmp = dest + '.' + process.pid + '.' + crypto.randomBytes(4).toString('hex') + '.tmp';
+    try {
+      const r = await fetch(url, { signal: AbortSignal.timeout(VENDOR_TIMEOUT), redirect: 'follow' });
+      if (r.status !== 200) throw new Error('CDN answered ' + r.status);
+      if (Number(r.headers.get('content-length')) > VENDOR_MAX) throw new Error('file too large');
+      const chunks = []; let n = 0;
+      for await (const c of r.body) { n += c.length; if (n > VENDOR_MAX) throw new Error('file too large'); chunks.push(c); }
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(tmp, Buffer.concat(chunks));
+      fs.renameSync(tmp, dest);
+    } catch (e) { try { fs.unlinkSync(tmp); } catch (e2) { /* none */ } throw e; }
+  })().finally(() => vendorInflight.delete(dest));
+  vendorInflight.set(dest, job);
+  return job;
+}
 const MODELS = path.join(ROOT, 'app', 'models');
 
 // Wire line (/line): config, per-station setup and recorded sessions. The CSV exports use the same engine as the page.
@@ -171,9 +196,17 @@ async function handle(req, res) {
   if (vend || p.startsWith('/models/')) {
     const rel = p.slice(vend ? vend.length : 8);
     if (!/^[A-Za-z0-9_.-]+(\/[A-Za-z0-9_.-]+)*$/.test(rel) || rel.includes('..')) return fail(res, 400, 'invalid_argument', 'Bad file path.');
-    const f = path.join(vend ? VENDOR[vend].dir : MODELS, rel);
-    if (fs.existsSync(f) && fs.statSync(f).isFile()) return serveFile(req, res, f, TYPES[path.extname(f).toLowerCase()] || 'application/octet-stream', Object.assign({ 'Cache-Control': vend ? 'public, max-age=3600' : 'no-store' }, ISOLATE));
-    if (vend) { res.writeHead(302, { Location: VENDOR[vend].cdn + rel }); return res.end(); }
+    let f = path.join(vend ? VENDOR[vend].dir : MODELS, rel);
+    const hdr = () => Object.assign({ 'Cache-Control': vend ? 'public, max-age=3600' : 'no-store' }, ISOLATE);
+    if (fs.existsSync(f) && fs.statSync(f).isFile()) return serveFile(req, res, f, TYPES[path.extname(f).toLowerCase()] || 'application/octet-stream', hdr());
+    if (vend) {
+      f = path.join(VENDOR[vend].cache, rel);
+      if (!(fs.existsSync(f) && fs.statSync(f).isFile())) {
+        try { await vendorFetch(VENDOR[vend].cdn + rel, f); }
+        catch (e) { return fail(res, 502, 'vendor_unavailable', 'Could not download ' + rel + ' (' + (e && e.message || 'network error') + '). Run npm ci, or check the internet connection.'); }
+      }
+      return serveFile(req, res, f, TYPES[path.extname(f).toLowerCase()] || 'application/octet-stream', hdr());
+    }
     return fail(res, 404, 'not_found', 'No such model file.');
   }
   if (p === '/dashboard') return send(res, 200, fs.readFileSync(path.join(ROOT, 'app', 'dashboard.html')), 'text/html; charset=utf-8');

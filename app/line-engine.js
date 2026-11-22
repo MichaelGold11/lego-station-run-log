@@ -1396,8 +1396,18 @@
     // done count (null). QA (S4) tests units that are already done: its tested, passed and failed numbers are separate.
     // The count is the station's units: tracker units when its unit tracker has events (incomplete and needsReview units never count), else cycles / perUnit.
     const doneIds = config.stations.filter(s => (s.role || s.id) === DONE_ROLE).map(s => s.id);
-    const units = doneIds.length ? doneIds.reduce((a, id) => a + stations[id].units, 0) : null;
+    let units = doneIds.length ? doneIds.reduce((a, id) => a + stations[id].units, 0) : null;
     const countedAt = doneIds.slice();
+    // C2: with a tracked S3 station the line count comes from the one board result (lineUnits rows through lineUnitStats), the same numbers as the board's
+    // tiles and alerts: done = complete at S3, an unlinked or flagged unit is to review (not done), and after Stop (opts.stopped) nothing is in progress.
+    // No tracked S3 station (or none with unit events): the old event count stays.
+    const trackedS3 = config.stations.filter(s => unitTrackerOn(s) && (s.unitTracker.from || (s.role || s.id) === DONE_ROLE) && sorted.some(e => e.type === 'unit' && e.station === s.id));   // a session with no unit events (recorded before the tracker) keeps the cycle count
+    let tr = null;
+    if (trackedS3.length) {
+      const rows = lineUnits(sorted, config, { now, stopped: !!o.stopped }), st = lineUnitStats(rows, { now });
+      tr = { rows, st };
+      units = st.done;
+    }
     // Units in progress (WIP): started at the first station in flow order and not yet done at S3. A unit being worked on counts as started.
     const wip = [];
     let wipUnits = null, wipStarted = null;
@@ -1417,11 +1427,30 @@
       }
       // No S3 station: nothing is ever done, so every started unit is in progress. Null only when a station's count is unknown.
       if (!wipUnknown.length) wipUnits = Math.max(0, wipStarted - (doneStage >= 0 ? units : 0));
+      if (tr) {
+        // Tracked: each in-line row counts once, at the station it is at (waiting_s3 waits after its S2 station; to review sits at its last station).
+        for (const g of wipBy) { g.working = 0; g.waitingForNext = 0; }
+        for (const r of tr.rows) {
+          if (r.stage === 'done' || r.stage === 'incomplete' || o.stopped) continue;   // after Stop nothing is in progress (a row flagged unlinked stays to review in the alerts, not in WIP)
+          const rec = r.stage === 'waiting_s3' ? r.s2 : r.stage === 's2' ? r.s2 : (r.s3 || r.s2), g = rec && wipBy[stageOf[rec.station]];
+          if (g) { if (r.stage === 'waiting_s3') g.waitingForNext++; else g.working++; }
+        }
+        wipStarted = tr.rows.length;
+        wipUnits = wipUnknown.length ? null : (o.stopped ? 0 : tr.st.inProgress.total);
+      }
     }
     // Work in progress counts units (a station with perUnit 3 hands over one unit every 3 cycles), between stages.
     for (let i = 0; i + 1 < ids.length; i++) {
       const a = stageOf[ids[i]], b = stageOf[ids[i + 1]];
-      wip.push({ from: ids[i], to: ids[i + 1], n: a === b ? null : stageUnits(a) - stageUnits(b) });
+      let n = a === b ? null : stageUnits(a) - stageUnits(b);
+      if (tr && n != null) {
+        // Tracked: the pair out of the tracked S2 station is its waiting_s3 queue, out of S3 the done units not yet taken on; after Stop every pair is 0.
+        const fromUp = tr.rows.some(r => r.s2 && r.s2.station === ids[i]), fromDown = trackedS3.some(x => x.id === ids[i]);
+        if (o.stopped) n = 0;
+        else if (fromUp && trackedS3.some(x => x.id === ids[i + 1])) n = tr.st.inProgress.waiting_s3;
+        else if (fromDown) n = Math.max(0, tr.st.done - stageUnits(b));
+      }
+      wip.push({ from: ids[i], to: ids[i + 1], n });
     }
     // The bottleneck is the station with the longest time per unit (averaged over its stage), not per cycle.
     let bottleneck = null;

@@ -44,10 +44,24 @@ function req(method, p, body, headers) {
 }
 const jsonHdr = { 'Content-Type': 'application/json' };
 
+// Stub CDN and an empty node_modules root for the /vendor/* tests (the server fetches missing files once).
+const NM = fs.mkdtempSync(path.join(os.tmpdir(), 'line-nm-'));
+fs.mkdirSync(path.join(NM, 'onnxruntime-web', 'dist'), { recursive: true });
+fs.writeFileSync(path.join(NM, 'onnxruntime-web', 'dist', 'local.js'), '// from node_modules');
+const stubHits = [];
+const stub = http.createServer((q, r) => {
+  stubHits.push(q.url);
+  if (/ort-wasm\.wasm$/.test(q.url)) { r.writeHead(200, { 'Content-Type': 'application/wasm' }); return r.end(Buffer.from([0, 97, 115, 109])); }
+  if (/vision_bundle\.mjs$/.test(q.url)) { r.writeHead(200); return setTimeout(() => r.end('export const x = 1;'), 150); }
+  r.writeHead(404); r.end('nope');
+});
+await new Promise(r => stub.listen(0, '127.0.0.1', r));
+const STUB_BASE = 'http://127.0.0.1:' + stub.address().port;
+
 let server, log = '';
 function startServer() {
   log = '';
-  server = spawn(process.execPath, [path.join(ROOT, 'server.mjs')], { env: Object.assign({}, process.env, { PORT: String(PORT), PHONE_PORT: String(PHONE_PORT), DATA_DIR: DATA }), stdio: ['ignore', 'pipe', 'pipe'] });
+  server = spawn(process.execPath, [path.join(ROOT, 'server.mjs')], { env: Object.assign({}, process.env, { PORT: String(PORT), PHONE_PORT: String(PHONE_PORT), DATA_DIR: DATA, VENDOR_NODE_MODULES: NM, VENDOR_CDN_BASE: STUB_BASE }), stdio: ['ignore', 'pipe', 'pipe'] });
   server.stdout.on('data', d => { log += d; });
   server.stderr.on('data', d => { log += d; });
 }
@@ -70,6 +84,28 @@ startServer();
 
 try {
   check('server starts on a spare port with DATA_DIR', await ready(), log);
+
+  console.log('vendor files, same origin');
+  {
+    const ORT = '/vendor/ort/', cacheDir = path.join(DATA, 'cache', 'vendor');
+    const hit = await req('GET', ORT + 'local.js');
+    check('a node_modules hit is served, no CDN call', hit.status === 200 && hit.text === '// from node_modules' && stubHits.length === 0, hit.status + ' ' + stubHits.length);
+    const miss = await req('GET', ORT + 'ort-wasm.wasm');
+    check('a missing file is fetched, served 200 with its type and the isolation headers', miss.status === 200 && miss.headers['content-type'] === 'application/wasm' && miss.raw.length === 4 && miss.headers['cross-origin-opener-policy'] === 'same-origin' && miss.headers['cross-origin-embedder-policy'] === 'credentialless' && /max-age/.test(miss.headers['cache-control']), miss.status + ' ' + miss.headers['content-type']);
+    check('the stub saw the pinned path once and the file is cached', stubHits.length === 1 && /^\/npm\/onnxruntime-web@[\d.]+\/dist\/ort-wasm\.wasm$/.test(stubHits[0]) && fs.existsSync(path.join(cacheDir, fs.readdirSync(cacheDir).find(d => /^onnxruntime-web@/.test(d)), 'dist', 'ort-wasm.wasm')), stubHits.join());
+    const again = await req('GET', ORT + 'ort-wasm.wasm');
+    check('the second request comes from the cache, the stub is not hit', again.status === 200 && again.raw.length === 4 && stubHits.length === 1, stubHits.length);
+    const before = stubHits.length;
+    const par = await Promise.all([1, 2, 3].map(() => req('GET', '/vendor/mediapipe/vision_bundle.mjs')));
+    check('three requests at once share one fetch, type is JavaScript', par.every(r => r.status === 200 && r.text === 'export const x = 1;' && /javascript/.test(r.headers['content-type'])) && stubHits.length === before + 1, stubHits.length - before);
+    const nf = await req('GET', ORT + 'nope.js');
+    const left = [];
+    (function walk(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) e.isDirectory() ? walk(path.join(d, e.name)) : left.push(e.name); })(cacheDir);
+    check('a stub 404 answers 502 with the JSON error and leaves no cache or temp file', nf.status === 502 && nf.json && nf.json.code === 'vendor_unavailable' && typeof nf.json.message === 'string' && !left.some(n => /nope/.test(n) || /\.tmp$/.test(n)), nf.status + ' ' + left.join());
+    const bad = [await req('GET', ORT + '..%2f..%2fpackage.json'), await req('GET', ORT + 'a/..%2fx.js'), await req('GET', '/vendor/mediapipe/a%20b.js')];
+    check('a bad path answers 400', bad.every(r => r.status === 400), bad.map(r => r.status).join());
+    check('no /vendor/ route answers 302', [hit, miss, again, nf, ...bad].every(r => r.status !== 302));
+  }
 
   console.log('pages');
   const root = await req('GET', '/'), rootQ = await req('GET', '/?gpu'), idx = await req('GET', '/index.html');
@@ -736,6 +772,8 @@ try {
 } finally {
   await stopServer();
   try { fs.rmSync(DATA, { recursive: true, force: true }); } catch (e) { /* temp folder */ }
+  try { fs.rmSync(NM, { recursive: true, force: true }); } catch (e) { /* temp folder */ }
+  stub.close();
 }
 
 console.log('\n' + passes + ' passed, ' + fails + ' failed');

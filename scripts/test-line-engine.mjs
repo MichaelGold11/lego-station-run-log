@@ -1226,5 +1226,36 @@ console.log('\nline units after Stop (C1)');
   check('finding 1: summarize counts no unit done when S3 ended it incomplete, and its row is incomplete after Stop', sm.units === 0 && row3.stage === 'incomplete' && row3.cutOff === true, JSON.stringify([sm.units, row3.stage]));
 }
 
+// C2: summarize counts the line from lineUnitStats when S3 is tracked; the real engine on a fixture with every unit kind.
+{
+  const pick = id => SHIPPED.stations.find(x => x.id === id);
+  const CFG3 = { stations: [pick('s2'), pick('s3'), pick('s4')] };
+  const T0 = 1000000, at = sec => T0 + sec * 1000;
+  const st = (station, sec, no, unit, extra) => Object.assign({ type: 'unit', station, action: 'start', t: at(sec), unit, no }, extra || {});
+  const en = (station, from, to, no, unit, extra) => Object.assign({ type: 'unit', station, action: 'end', t: at(to), start: at(from), end: at(to), unit, no, result: 'complete', needsReview: false, ended: 'departed', unlinked: false }, extra || {});
+  // #001 done at S3; #002 at S2; #003 waiting for S3; #004 at S3; #007 unlinked, S3 finished it complete; #005 flagged at S2 before Stop.
+  const ev = [{ type: 'session_start', t: T0 }, st('s2', 0, '#001', 1), en('s2', 0, 20, '#001', 1), st('s3', 30, '#001', 1, { from: 's2' }), en('s3', 30, 50, '#001', 1),
+    st('s2', 21, '#003', 3), en('s2', 21, 25, '#003', 3),
+    st('s2', 26, '#004', 4), en('s2', 26, 29, '#004', 4), st('s3', 62, '#004', 4, { from: 's2' }),
+    st('s2', 72, '#002', 2),
+    st('s2', 35, '#005', 5), en('s2', 35, 40, '#005', 5, { result: 'incomplete', needsReview: true }),
+    st('s3', 52, '#007', 7), en('s3', 52, 58, '#007', 7, { unlinked: true, needsReview: true })];
+  const now = at(80);
+  const live = LE.summarize(ev, CFG3, { now }), stp = LE.summarize(ev, CFG3, { now, stopped: true });
+  const stats = LE.lineUnitStats(LE.lineUnits(ev, CFG3, { now }), { now }), stats0 = LE.lineUnitStats(LE.lineUnits(ev, CFG3, { now, stopped: true }), { now });
+  const L = live.line, L0 = stp.line, ip = stats.inProgress;
+  check('C2 live: units is lineUnitStats.done (1), the unlinked complete unit is to review, not done', L.units === stats.done && L.units === 1 && ip.needs_review === 2, JSON.stringify([L.units, ip]));
+  check('C2 live: wipUnits is inProgress.total (s2 1, waiting 1, s3 1, review 2 = 5)', L.wipUnits === ip.total && L.wipUnits === 5, L.wipUnits);
+  check('C2 live: wipBy adds up to wipUnits and the S2 to S3 arrow is the waiting queue', L.wipBy.reduce((a, g) => a + g.working + g.waitingForNext, 0) === L.wipUnits && L.wip[0].n === ip.waiting_s3 && L.wip[0].n === 1, JSON.stringify([L.wipBy, L.wip]));
+  check('C2 live: the S3 to S4 arrow is done units not yet at S4 (nothing tested: 1)', L.wip[1].n === 1, JSON.stringify(L.wip));
+  check('C2 stopped: units still 1, every in-progress count and every wip[i] is 0', L0.units === stats0.done && L0.units === 1 && L0.wipUnits === 0 && L0.wipBy.every(g => g.working === 0 && g.waitingForNext === 0) && L0.wip.every(w => w.n === 0), JSON.stringify([L0.units, L0.wipUnits, L0.wipBy, L0.wip]));
+  check('C2 stopped: the unlinked complete unit is not done (it stays to review in the alerts)', stats0.alerts.some(a => a.kind === 'review' && a.no === '#007') && L0.units === 1);
+  // No tracked station: the old event count stays (these are the untracked shipped-style stations, no unit events).
+  const plain = { stations: CFG3.stations.map(x => Object.assign({}, x, { unitTracker: undefined })) };
+  const cyc = [{ type: 'session_start', t: T0 }, { type: 'manual', station: 's3', action: 'cycle_done', t: at(1) }, { type: 'manual', station: 's3', action: 'cycle_done', t: at(6) }];
+  const a = LE.summarize(cyc, plain, { now: at(10) }).line, b = LE.summarize(cyc, plain, { now: at(10), stopped: true }).line;
+  check('C2: with no tracked station the old counts stay, stopped or not', JSON.stringify(a) === JSON.stringify(b) && a.units === 2, JSON.stringify([a.units, b.units]));
+}
+
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);
