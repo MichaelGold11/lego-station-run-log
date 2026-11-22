@@ -399,6 +399,14 @@ console.log('\nline units: one row per unit across S2 and S3');
         st('s3', 44, '?01', null, { unlinked: true, needsReview: true })];
       const r2 = LE.lineUnits(e2, CFG2, { now: at(60), stopped: true }), s4 = LE.lineUnitStats(r2, { now: at(60), runStart: at(0) }), ip4 = s4.inProgress;
       const rv4 = { s2: 0, s3: 0 }; for (const al of s4.alerts) if (al.kind === 'review' && al.stage === 'needs_review') rv4[al.station === 's3' ? 's3' : 's2']++;
+      // W2 walk: ?01 unlinked, S3 finished it complete: after Stop it stays needs_review with an alert, so the strip must zero WIP on the stopped snapshot.
+      {
+        const e3 = [st('s2', 0, '#001', 1), en('s2', 0, 10, '#001', 1), st('s3', 12, '#001', 1), en('s3', 12, 20, '#001', 1),
+          st('s3', 30, '?01', null, { unlinked: true, needsReview: true }), en('s3', 30, 40, '?01', null, { unlinked: true, needsReview: true })];
+        const r3 = LE.lineUnits(e3, CFG2, { now: at(60), stopped: true }), s5 = LE.lineUnitStats(r3, { now: at(60), runStart: at(0) });
+        const html3 = fs.readFileSync(new URL('../app/line.html', import.meta.url), 'utf8'), sb3 = html3.slice(html3.indexOf('function stripBoard'), html3.indexOf('function stripBoard') + 1400);
+        check('W2 walk: stopped snapshot with an unlinked S3-complete unit: S3 done counts only stage done, strip WIP all 0', s5.done === 1 && r3.some(r => r.stage === 'needs_review') && s5.alerts.some(al => al.kind === 'review') && /stp \? 0 : ip\.s2 \+ rv\.s2/.test(sb3) && /out\.queue = stp \? 0/.test(sb3) && /out\.wip\[c\] = stp \? 0/.test(sb3), JSON.stringify([s5.done, r3.map(r => r.no + ':' + r.stage), s5.alerts]));
+      }
       check('W1 walk: after Stop the strip WIP at S2, the queue and WIP at S3 are 0 and S3 done is 1', s4.done === 1 && ip4.total === 0 && ip4.s2 + rv4.s2 === 0 && ip4.waiting_s3 === 0 && ip4.s3 + rv4.s3 === 0, JSON.stringify([s4.done, ip4, s4.alerts, r2.map(r => r.no + ':' + r.stage)]));
     }
     check('C1 codex should: line.html adds only needs_review alerts to station WIP', /al\.kind === 'review' && al\.stage === 'needs_review'\) \{ const k = /.test(fs.readFileSync(new URL('../app/line.html', import.meta.url), 'utf8')));
@@ -429,7 +437,7 @@ console.log('\nline units: one row per unit across S2 and S3');
   check('after-stop: insights has a neutral .ub-stage.incomplete style (no red, amber or coral)', /\.ub-stage\.incomplete \{[^}]*panel3/.test(ins) && !/\.ub-stage\.incomplete \{[^}]*(amber|coral|orange|crit)/.test(ins));
   check('after-stop: second tile is Incomplete after Stop (stats.incomplete, plain sub line), else Units in progress', /src\.stopped \? tile\('Incomplete', stats\.incomplete \|\| 0, 'not finished at S3 when the run stopped'\)\s*: tile\('Units in progress', ip\.total/.test(html));
   check('after-stop: a new Start clears the snapshot, so the tile reads Units in progress again', /G\.lastBoard = null;/.test(html) && /if \(!G\.session && G\.lastBoard\) return G\.lastBoard;/.test(html));
-  check('after-stop: the strip reads the board stats: S3 done is stats.done, WIP is in progress at each station plus the queue', /out\.done\[c\] = b\.stats\.done/.test(html) && /out\.wip\[a\] = ip\.s2 \+ rv\.s2; out\.queue = ip\.waiting_s3/.test(html) && /out\.wip\[c\] = ip\.s3 \+ rv\.s3/.test(html) && /renderSummary\(G\.summary, t\)/.test(html));
+  check('after-stop: the strip reads the board stats: S3 done is stats.done, WIP is in progress at each station plus the queue', /out\.done\[c\] = b\.stats\.done/.test(html) && /out\.wip\[a\] = stp \? 0 : ip\.s2 \+ rv\.s2; out\.queue = stp \? 0 : ip\.waiting_s3/.test(html) && /out\.wip\[c\] = stp \? 0 : ip\.s3 \+ rv\.s3/.test(html) && /renderSummary\(G\.summary, t\)/.test(html));
   check('after-stop: tiles and strip share one lineUnitStats call (boardNow)', /const rows = src\.rows, stats = boardNow\(t\)\.stats;/.test(html) && (html.match(/LE\.lineUnitStats\(/g) || []).length === 1);
   // The same arithmetic on engine rows: strip WIP (at S2 + queue + at S3, a review at the station its alert names) equals the tiles' in progress.
   const rows = [

@@ -2255,10 +2255,12 @@ button.chip:hover { border-color: var(--warn-ink); }
     if (!sts.any && !rows.length) return null;
     const out = { done: {}, wip: {}, queue: null, s2id: null }, a = sts.s2 && sts.s2.id, c = sts.s3 && sts.s3.id;
     const rv = { s2: 0, s3: 0 };
-    for (const al of b.stats.alerts) if (al.kind === 'review' && al.stage === 'needs_review') { const k = c && al.station === c ? 's3' : 's2'; rv[k]++; }
-    if (a) { out.done[a] = rows.filter(r => r.s2 && r.s2.end != null && r.s2.result !== 'incomplete').length; out.wip[a] = ip.s2 + rv.s2; out.queue = ip.waiting_s3; out.s2id = a; }
-    if (c) { out.done[c] = b.stats.done; out.wip[c] = ip.s3 + rv.s3; }
-    if (!a && c) out.wip[c] += rv.s2;
+    // After Stop (the snapshot) nothing is in progress: every strip WIP and the queue read 0; units to review stay in the board's alerts.
+    const stp = !!b.src.stopped;
+    if (!stp) for (const al of b.stats.alerts) if (al.kind === 'review' && al.stage === 'needs_review') { const k = c && al.station === c ? 's3' : 's2'; rv[k]++; }
+    if (a) { out.done[a] = rows.filter(r => r.s2 && r.s2.end != null && r.s2.result !== 'incomplete').length; out.wip[a] = stp ? 0 : ip.s2 + rv.s2; out.queue = stp ? 0 : ip.waiting_s3; out.s2id = a; }
+    if (c) { out.done[c] = b.stats.done; out.wip[c] = stp ? 0 : ip.s3 + rv.s3; }
+    if (!a && c && !stp) out.wip[c] += rv.s2;
     return out;
   }
   function renderBoard(t) {
