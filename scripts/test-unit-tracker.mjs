@@ -390,6 +390,17 @@ console.log('\nline units: one row per unit across S2 and S3');
     const rs = LE.lineUnits(evs, CFG2, { now, stopped: true }), ss = LE.lineUnitStats(rs, { now, runStart: at(0) }), ip = ss.inProgress;
     const rv = ss.alerts.filter(al => al.kind === 'review' && al.stage === 'needs_review').length;
     check('C1 codex should: after Stop a unit flagged before Stop leaves strip WIP (sum equals inProgress.total, 0)', rs[0].stage === 'incomplete' && ss.incomplete === 1 && ip.total === 0 && ip.s2 + ip.waiting_s3 + ip.s3 + rv === ip.total, JSON.stringify([rs[0].stage, ss.incomplete, ip, ss.alerts]));
+    // W1 walk mix after Stop: #001 done at S3, #002 at S3, #003 waiting for S3, #004 at S2, ?01 unlinked at S3 flagged. Strip: S2 WIP, queue, S3 WIP all 0, S3 done 1.
+    {
+      const e2 = [st('s2', 0, '#001', 1), en('s2', 0, 10, '#001', 1), st('s3', 12, '#001', 1), en('s3', 12, 20, '#001', 1),
+        st('s2', 21, '#002', 2), en('s2', 21, 30, '#002', 2), st('s3', 32, '#002', 2),
+        st('s2', 33, '#003', 3), en('s2', 33, 40, '#003', 3),
+        st('s2', 42, '#004', 4),
+        st('s3', 44, '?01', null, { unlinked: true, needsReview: true })];
+      const r2 = LE.lineUnits(e2, CFG2, { now: at(60), stopped: true }), s4 = LE.lineUnitStats(r2, { now: at(60), runStart: at(0) }), ip4 = s4.inProgress;
+      const rv4 = { s2: 0, s3: 0 }; for (const al of s4.alerts) if (al.kind === 'review' && al.stage === 'needs_review') rv4[al.station === 's3' ? 's3' : 's2']++;
+      check('W1 walk: after Stop the strip WIP at S2, the queue and WIP at S3 are 0 and S3 done is 1', s4.done === 1 && ip4.total === 0 && ip4.s2 + rv4.s2 === 0 && ip4.waiting_s3 === 0 && ip4.s3 + rv4.s3 === 0, JSON.stringify([s4.done, ip4, s4.alerts, r2.map(r => r.no + ':' + r.stage)]));
+    }
     check('C1 codex should: line.html adds only needs_review alerts to station WIP', /al\.kind === 'review' && al\.stage === 'needs_review'\) \{ const k = /.test(fs.readFileSync(new URL('../app/line.html', import.meta.url), 'utf8')));
   }
 }
