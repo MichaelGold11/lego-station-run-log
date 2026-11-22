@@ -5,9 +5,9 @@ People: start with `README.md`.
 
 | Page | What it is |
 |---|---|
-| `/line` (`/` opens it) | The wire line, the team's main tool (section "Wire line platform" below) |
+| `/line` (`/` opens it) | The wire line, the team's main tool (section "Wire line platform" below). Units board: tiles, units table, alerts, unit record after Stop |
 | `/phone` on port 4174 | A station's phone or tablet camera page (HTTPS) |
-| `/insights` | Assembly Insights: the plant manager view of the recorded runs (Overview, Stations, Trends, flag review). `app/insights.html`, `app/insights-lib.js`, `GET /api/insights`; review decisions in `data/insights-reviews/`. Camera Testing reads real sessions, Simulation runs a made-up week through the same calculation |
+| `/insights` | Assembly Insights: the plant manager view of the recorded runs (Overview, Stations, Trends, flag review, Units: per-run units table and unit timeline, click opens the unit record). `app/insights.html`, `app/insights-lib.js`, `GET /api/insights`; review decisions in `data/insights-reviews/`. Camera Testing reads real sessions, Simulation runs a made-up week through the same calculation |
 | `/runs` | Archived: the LEGO run log this section and "Analyze runs" are about ([docs/lego-run-log.md](docs/lego-run-log.md)) |
 | `/live` | Archived: the LEGO single-station live prototype |
 

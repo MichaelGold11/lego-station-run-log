@@ -157,7 +157,27 @@ td.n { font-family: var(--mono); font-size: 18px; text-align: right; } th.n { te
 .stepslow { font-family: var(--mono); }
 .obslist button { display: grid; grid-template-columns: 90px 1fr auto; gap: 12px; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); padding: 10px 4px; }
 .obslist button:hover { background: var(--panel2); }
-@media (max-width: 1100px) { .app { grid-template-columns: 1fr; } aside { position: static; height: auto; } .kpis { grid-template-columns: repeat(2, 1fr); } .panel, .grid2, .grid3 { grid-template-columns: 1fr; } .flow { flex-direction: column; } .flow .arr { display: none; } }
+#main { min-width: 0; }
+.card .cardhead { flex-wrap: wrap; }
+.ub-note { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+.ub-scroll { overflow-x: auto; max-width: 100%; }
+.ub-scroll table { min-width: 640px; }
+.ub-tr { cursor: pointer; } .ub-tr:hover td, .ub-tr:focus td { background: var(--panel2); } .ub-tr:focus { outline: 2px solid var(--mint); outline-offset: -2px; }
+.ub-stage { display: inline-block; padding: 2px 9px; border-radius: 6px; font-size: 13px; font-weight: 500; background: var(--panel3); }
+.ub-stage.needs_review { background: var(--amber); color: #3a2a05; } .ub-stage.done { background: var(--mint); color: #0e3427; }
+.tl { min-width: 560px; }
+.tl-ax { display: flex; margin-left: 74px; justify-content: space-between; color: var(--muted); font-size: 12px; font-family: var(--mono); margin-bottom: 6px; }
+.tl-row { display: flex; align-items: center; height: 34px; cursor: pointer; border-radius: 6px; } .tl-row:hover, .tl-row:focus { background: var(--panel2); } .tl-row:focus { outline: 2px solid var(--mint); }
+.tl-lab { width: 74px; flex: none; font: 500 14px var(--mono); }
+.tl-trk { position: relative; flex: 1; height: 100%; border-left: 1px solid var(--line2); }
+.tl-b { position: absolute; top: 9px; height: 16px; border-radius: 4px; min-width: 3px; }
+.tl-b.s2 { background: var(--mint); } .tl-b.s3 { background: #8fb4d6; } .tl-b.open { background-image: repeating-linear-gradient(135deg, rgba(0,0,0,.28) 0 4px, transparent 4px 8px); }
+.tl-w { position: absolute; top: 16px; height: 2px; background: var(--dim); }
+.tl-m { position: absolute; top: 4px; width: 3px; height: 26px; margin-left: -1px; background: var(--coral); border-radius: 2px; }
+.tl-open { position: absolute; top: 8px; font-size: 12px; color: var(--muted); }
+.tl-key { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); font-size: 13px; margin-top: 12px; } .tl-key i { display: inline-block; width: 14px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.ub-sel { background: var(--panel); color: var(--text); border: 1px solid var(--line2); border-radius: 8px; padding: 9px 12px; font: inherit; max-width: 100%; margin-bottom: 14px; }
+@media (max-width: 1100px) { .app { grid-template-columns: minmax(0, 1fr); } aside { position: static; height: auto; } .kpis { grid-template-columns: repeat(2, 1fr); } .panel, .grid2, .grid3 { grid-template-columns: 1fr; } .flow { flex-direction: column; } .flow .arr { display: none; } }
 </style>
 </head>
 <body>
@@ -167,6 +187,7 @@ td.n { font-family: var(--mono); font-size: 18px; text-align: right; } th.n { te
     <nav id="nav">
       <a href="#overview" data-v="overview"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></svg>Overview</a>
       <a href="#stations" data-v="stations"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="5" height="12" rx="1"/><rect x="9.5" y="6" width="5" height="12" rx="1"/><rect x="16" y="6" width="5" height="12" rx="1"/></svg>Stations</a>
+      <a href="#units" data-v="units"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="4" rx="1"/><rect x="4" y="11" width="16" height="4" rx="1"/><rect x="4" y="17" width="16" height="3" rx="1"/></svg>Units</a>
       <a href="#trends" data-v="trends"><svg viewBox="0 0 24 24"><path d="M4 18l5-6 4 3 7-8"/><path d="M4 21h16"/></svg>Trends &amp; Insights</a>
       <a href="/line"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M3 12h3M18 12h3M12 3v3M12 18v3"/></svg>Live line</a>
     </nav>
@@ -262,9 +283,9 @@ function render() {
   const main = document.getElementById('main');
   if (S.src === 'camera' && S.err) { main.innerHTML = topBar('Assembly Insights', '') + '<div class="banner"><b>' + esc(S.err) + '</b></div>'; bindTop(); return; }
   if (!S.model) { main.innerHTML = '<p class="empty">Loading…</p>'; return; }
-  const v = S.view === 'stations' ? viewStations() : S.view === 'station' ? viewStation() : S.view === 'trends' ? viewTrends() : viewOverview();
+  const v = S.view === 'stations' ? viewStations() : S.view === 'station' ? viewStation() : S.view === 'trends' ? viewTrends() : S.view === 'units' ? viewUnits() : viewOverview();
   main.innerHTML = v;
-  bindTop(); bindView();
+  bindTop(); bindView(); if (S.view === 'units') bindUnits();
 }
 function topBar(title, sub) {
   const opts = [['today', 'Today'], ['week', 'Last 7 days'], ['all', 'All runs']].map(([k, l]) => '<option value="' + k + '"' + (S.period === k ? ' selected' : '') + '>' + l + '</option>').join('');
@@ -534,6 +555,76 @@ function sparks() {
 }
 function foot() { return '<p class="foot">' + (S.src === 'sim' ? 'Academic prototype using fictional stations and metrics. Not a Molex production system.' : 'Built from this laptop\'s recorded wire line runs. Academic prototype, not a Molex production system.') + '</p>'; }
 
+// ---------- Units: per-run units table and timeline ----------
+const STAGE_LABEL = { s2: 'At S2', waiting_s3: 'Waiting for S3', s3: 'At S3', done: 'Done', needs_review: 'Needs review' };
+const fmtS = v => (v == null ? '–' : v >= 60 ? Math.floor(v / 60) + 'm ' + String(Math.round(v % 60)).padStart(2, '0') + 's' : Math.round(v * 10) / 10 + ' s');
+function unitRuns() {
+  if (S.src !== 'camera' || !S.real) return [];
+  const r = periodRange();
+  return S.real.digests.filter(d => d.units && d.units.length && ((d.startedAtMs >= r.from && d.startedAtMs <= r.to) || (d.endedAtMs && d.endedAtMs >= r.from && d.endedAtMs <= r.to)))
+    .sort((a, b) => b.startedAtMs - a.startedAtMs);
+}
+function unitName(r) { return r.no != null ? String(r.no) : r.unit != null ? '#' + String(r.unit).padStart(3, '0') : '?'; }
+function viewUnits() {
+  const runs = unitRuns();
+  let h = topBar('Units', subline());
+  if (!runs.length) return h + '<div class="card"><p class="empty">No units tracked in this run' + (S.src === 'sim' ? ' (the simulated week has no unit data).' : ' or period. Try another period or a recorded run with units.') + '</p></div>' + foot();
+  if (!S.unitRun || !runs.find(d => d.id === S.unitRun)) S.unitRun = runs[0].id;
+  const run = runs.find(d => d.id === S.unitRun), rows = run.units;
+  h += '<select class="ub-sel" id="unitRun" aria-label="Run">' + runs.map(d => '<option value="' + esc(d.id) + '"' + (d.id === S.unitRun ? ' selected' : '') + '>' + esc(fmtD(d.startedAtMs) + ' ' + fmtT(d.startedAtMs) + ' · ' + d.units.length + (d.units.length === 1 ? ' unit' : ' units')) + '</option>').join('') + '</select>';
+  if (S.unitMsg) h += '<div class="banner"><b>' + esc(S.unitMsg) + '</b></div>';
+  h += '<div class="card"><div class="cardhead"><h2>Units in this run</h2><span>Problems first. Select a unit to open its record.</span></div><div class="ub-scroll"><table><thead><tr><th>Unit</th><th>Stage</th><th class="n">S2 time</th><th class="n">Wait</th><th class="n">S3 time</th><th class="n">Total</th><th class="n">Mistakes</th><th>Needs review</th></tr></thead><tbody>';
+  rows.forEach((r, i) => {
+    const mk = (r.mistakes.s2 || []).filter(m => m.kind === 'mistake').length + (r.mistakes.s3 || []).filter(m => m.kind === 'mistake').length;
+    const open3 = r.stage === 's3', open2 = r.stage === 's2';
+    h += '<tr class="ub-tr" tabindex="0" data-unit="' + i + '"><td><b>' + esc(unitName(r)) + '</b></td><td><span class="ub-stage ' + esc(r.stage) + '">' + esc(STAGE_LABEL[r.stage] || r.stage) + '</span></td>' +
+      '<td class="n" style="font-size:15px">' + (r.s2 ? (open2 ? 'open' : fmtS(r.s2Sec)) : '–') + '</td><td class="n" style="font-size:15px">' + fmtS(r.waitSec) + '</td><td class="n" style="font-size:15px">' + (r.s3 ? (open3 ? 'open' : fmtS(r.s3Sec)) : '–') + '</td>' +
+      '<td class="n" style="font-size:15px">' + (r.stage === 'done' || (r.needsReview && ((r.s3 || r.s2) || {}).end != null) ? fmtS(r.totalSec) : 'open') + '</td><td class="n" style="font-size:15px"><span class="' + (mk ? 'c-coral b' : '') + '">' + mk + '</span></td><td>' + (r.needsReview ? '<span class="c-amber">Yes</span>' : 'No') + '</td></tr>';
+  });
+  h += '</tbody></table></div></div>' + unitTimeline(rows) + foot();
+  return h;
+}
+function unitTimeline(rows) {
+  const ts = [];
+  rows.forEach(r => { [r.s2, r.s3].forEach(x => { if (x) { ts.push(x.start); if (x.end != null) ts.push(x.end); } }); ['s2', 's3'].forEach(k => (r.mistakes[k] || []).forEach(m => ts.push(m.t))); });
+  if (!ts.length) return '';
+  const t0 = Math.min.apply(null, ts), t1 = Math.max.apply(null, ts), span = Math.max(1000, t1 - t0), X = t => (Math.max(0, Math.min(1, (t - t0) / span)) * 100).toFixed(2) + '%', W = (a, b) => (Math.max(0, (b - a) / span) * 100).toFixed(2) + '%';
+  let h = '<div class="card"><div class="cardhead"><h2>Unit timeline</h2><span>One row per unit, seconds from the first event</span></div><div class="ub-scroll"><div class="tl"><div class="tl-ax"><span>0 s</span><span>' + fmtS(span / 2000) + '</span><span>' + fmtS(span / 1000) + '</span></div>';
+  rows.forEach((r, i) => {
+    let b = '';
+    const bar = (x, k) => { if (!x) return ''; const end = x.end != null ? x.end : t1, op = x.end == null; return '<div class="tl-b ' + k + (op ? ' open' : '') + '" style="left:' + X(x.start) + ';width:' + W(x.start, end) + '" title="' + k.toUpperCase() + (op ? ' open' : ' ' + fmtS(x.sec)) + '"></div>' + (op ? '<span class="tl-open" style="left:calc(' + X(Math.min(end, t1 - span * 0.1)) + ' + 4px)">open</span>' : ''); };
+    b += bar(r.s2, 's2');
+    if (r.s2 && r.s2.end != null) { const to = r.s3 ? r.s3.start : t1; if (to > r.s2.end) b += '<div class="tl-w" style="left:' + X(r.s2.end) + ';width:' + W(r.s2.end, to) + '" title="Wait"></div>'; }
+    b += bar(r.s3, 's3');
+    ['s2', 's3'].forEach(k => (r.mistakes[k] || []).forEach(m => { if (m.kind === 'mistake') b += '<div class="tl-m" style="left:' + X(m.t) + '" title="Mistake at ' + k.toUpperCase() + '"></div>'; }));
+    h += '<div class="tl-row" tabindex="0" data-unit="' + i + '"><div class="tl-lab">' + esc(unitName(r)) + '</div><div class="tl-trk">' + b + '</div></div>';
+  });
+  return h + '</div></div><div class="tl-key"><span><i style="background:var(--mint)"></i>S2</span><span><i style="background:var(--dim);height:2px"></i>Wait</span><span><i style="background:#8fb4d6"></i>S3</span><span><i style="background:var(--coral);width:3px"></i>Mistake</span><span>Hatched: still open at the last event</span></div></div>';
+}
+let unitScripts = null;
+function loadScript(src) { return new Promise((ok, no) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => no(new Error(src)); document.head.appendChild(s); }); }
+function ensureUnitRecord() {
+  if (window.UnitRecord) return Promise.resolve();
+  if (!unitScripts) unitScripts = (window.LineEngine ? Promise.resolve() : loadScript('/line-engine.js')).then(() => loadScript('/unit-record.js')).catch(e => { unitScripts = null; throw e; });
+  return unitScripts;
+}
+async function openUnit(i) {
+  const run = unitRuns().find(d => d.id === S.unitRun), row = run && run.units[i]; if (!row) return;
+  try {
+    await ensureUnitRecord();
+    if (!(window.UnitRecord && window.UnitRecord.open)) throw new Error('missing');
+    const r = await fetch('/api/sessions/' + encodeURIComponent(run.id) + '/captures', { cache: 'no-store' });
+    const captures = r.ok ? ((await r.json()).captures || []) : [];
+    S.unitMsg = null;
+    window.UnitRecord.open(row, { sessionId: run.id, captures });
+  } catch (e) { S.unitMsg = 'The unit record could not be opened here.'; render(); }
+}
+function bindUnits() {
+  const main = document.getElementById('main'), sel = document.getElementById('unitRun');
+  if (sel) sel.onchange = () => { S.unitRun = sel.value; S.unitMsg = null; render(); };
+  main.querySelectorAll('[data-unit]').forEach(el => { el.onclick = () => openUnit(Number(el.dataset.unit)); el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openUnit(Number(el.dataset.unit)); } }; });
+}
+
 // ---------- events ----------
 function bindTop() {
   const sel = document.getElementById('period');
@@ -570,7 +661,7 @@ document.getElementById('resetDemo').onclick = () => { lsSet('insights-demo-revi
 function route() {
   const h = location.hash.replace(/^#/, '') || 'overview';
   if (h.startsWith('station/')) { S.view = 'station'; S.station = h.slice(8); }
-  else S.view = ['overview', 'stations', 'trends'].includes(h) ? h : 'overview';
+  else S.view = ['overview', 'stations', 'trends', 'units'].includes(h) ? h : 'overview';
   S.flash = null;
   render(); window.scrollTo(0, 0);
 }
