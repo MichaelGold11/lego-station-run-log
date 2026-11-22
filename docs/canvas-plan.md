@@ -91,7 +91,7 @@ page logs one `operator` event per station that has an operator, so `events.json
 
 ### Rules for shared roles (line-level numbers)
 
-- **Units and QA**: every station with a QA role counts: units, pass, fail and yield add up over all of them.
+- **Units and QA**: units are done at S3-role stations (side-by-side ones add up) and WIP counts units started and not done. Every QA station counts tested, passed, failed and yield, added up over all of them.
 - **Side by side**: stations next to each other in flow order with the same role work in parallel and form one stage.
   WIP is counted between stages (the stage's cycles added up); between two stations of one stage the flow row shows
   them as side by side, not a WIP number. The bottleneck and the takt check use a station's average cycle divided by

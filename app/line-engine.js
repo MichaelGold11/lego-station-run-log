@@ -1194,6 +1194,7 @@
     return obs;
   }
 
+  const DONE_ROLE = 's3';   // a unit is done when a station with this role completes it
   const perUnitOf = st => (st && Number.isInteger(st.perUnit) && st.perUnit >= 1 ? st.perUnit : 1);
 
   function reasonInfo(config, id) {
@@ -1232,14 +1233,21 @@
       };
       // A station with a unit tracker counts units, not step-engine cycles: a complete unit (departed, or still in view with its cycle closed).
       // (A session with no unit events from this station, e.g. recorded before the tracker, keeps the cycle count.)
-      if (unitTrackerOn(st) && sorted.some(e => e.type === 'unit' && e.station === st.id)) det.cycles = trackedUnits(sorted, st.id).filter(u => u.result === 'complete' || (u.action === 'open' && d.cycles.some(c => c.end >= u.start))).length;
+      let trackedOpen = null;
+      if (unitTrackerOn(st) && sorted.some(e => e.type === 'unit' && e.station === st.id)) {
+        const tu = trackedUnits(sorted, st.id), isDone = u => u.result === 'complete' || (u.action === 'open' && d.cycles.some(c => c.end >= u.start));
+        det.cycles = tu.filter(isDone).length;
+        trackedOpen = tu.filter(u => u.action === 'open' && !isDone(u)).length;
+      }
       const ms = m.map(x => x.sec).filter(isNum);
       const man = { cycles: m.length, lastSec: r1(ms.length ? ms[ms.length - 1] : null), avgSec: r1(mean(ms)), stdSec: r1(sd(ms)) };
       const basis = o.basis === 'detected' || o.basis === 'manual' ? o.basis : (det.cycles > 0 ? 'detected' : 'manual');
       const use = basis === 'detected' ? det : man;
       const per = perUnitOf(st);
+      // Units being worked on right now (started, not finished): an open tracker unit whose cycle has not closed, else an open cycle (or a part-built unit).
+      const working = trackedOpen != null ? trackedOpen : Math.ceil((use.cycles + (d.open ? 1 : 0)) / per) - Math.floor(use.cycles / per);
       stations[st.id] = { detected: det, manual: man, basis, unobserved: noData.filter((id, k) => noData.indexOf(id) === k), cycles: use.cycles, avgSec: use.avgSec, lastSec: use.lastSec, stdSec: use.stdSec,
-        perUnit: per, units: Math.floor(use.cycles / per), unitSec: use.avgSec == null ? null : r1(use.avgSec * per), _d: d, _m: m };
+        perUnit: per, units: Math.floor(use.cycles / per), working, unitSec: use.avgSec == null ? null : r1(use.avgSec * per), _d: d, _m: m };
     }
 
     // QA: every station with a qa block (two testers side by side both count)
@@ -1273,11 +1281,32 @@
     }
     const stageUnits = k => stages[k].ids.reduce((a, id) => a + stations[id].units, 0);
     const pace = id => (stations[id].unitSec == null ? null : stations[id].unitSec / stages[stageOf[id]].ids.length);
-    // Units finish at the QA stations. A floor with none counts the last stage's units instead (insights-lib does the same with its last station).
-    const lastStage = stages[stages.length - 1];
-    const units = qaSts.length ? qaSts.reduce((a, s) => a + stations[s.id].cycles, 0) : (lastStage ? stageUnits(stages.length - 1) : 0);
-    const countedAt = qaSts.length ? qaSts.map(s => s.id) : (lastStage ? lastStage.ids.slice() : []);
+    // A unit is done when an S3-role station completes it (the S3 stage; side-by-side S3 stations add up). A floor with no S3 station has no
+    // done count (null). QA (S4) tests units that are already done: its tested, passed and failed numbers are separate.
+    // The count is the station's units: tracker units when its unit tracker has events (incomplete and needsReview units never count), else cycles / perUnit.
+    const doneIds = config.stations.filter(s => (s.role || s.id) === DONE_ROLE).map(s => s.id);
+    const units = doneIds.length ? doneIds.reduce((a, id) => a + stations[id].units, 0) : null;
+    const countedAt = doneIds.slice();
+    // Units in progress (WIP): started at the first station in flow order and not yet done at S3. A unit being worked on counts as started.
     const wip = [];
+    let wipUnits = null, wipStarted = null;
+    const wipBy = [], wipUnknown = [];
+    if (stages.length) {
+      const startedOf = k => stageUnits(k) + stages[k].ids.reduce((a, id) => a + stations[id].working, 0);
+      const doneStage = stages.findIndex(g => g.role === DONE_ROLE);
+      // Stations from the first one up to the S3 stage need a camera or source, or the count is unknown (the same rule as LineEngine.wipShown).
+      const hasSource = id => sorted.some(e => e.station === id && (e.type === 'unit' || e.type === 'substep' || e.type === 'cycle_end' || (e.type === 'source_change' && e.input && e.input !== 'none')));
+      const lastK = doneStage >= 0 ? doneStage : stages.length - 1;
+      for (let k = 0; k <= lastK; k++) for (const id of stages[k].ids) if (!hasSource(id)) wipUnknown.push(id);
+      wipStarted = startedOf(0);
+      for (let k = 0; k <= lastK; k++) {
+        const working = stages[k].ids.reduce((a, id) => a + stations[id].working, 0);
+        const waiting = k < lastK ? Math.max(0, stageUnits(k) - startedOf(k + 1)) : 0;
+        wipBy.push({ role: stages[k].role, ids: stages[k].ids.slice(), working, waitingForNext: waiting });
+      }
+      // No S3 station: nothing is ever done, so every started unit is in progress. Null only when a station's count is unknown.
+      if (!wipUnknown.length) wipUnits = Math.max(0, wipStarted - (doneStage >= 0 ? units : 0));
+    }
     // Work in progress counts units (a station with perUnit 3 hands over one unit every 3 cycles), between stages.
     for (let i = 0; i + 1 < ids.length; i++) {
       const a = stageOf[ids[i]], b = stageOf[ids[i + 1]];
@@ -1292,7 +1321,7 @@
     return {
       stations,
       line: {
-        units, countedAt, elapsedSec: r1(elapsedSec), uph: elapsedSec >= 1 ? r1(units * 3600 / elapsedSec) : null,
+        units, countedAt, wipUnits, wipStarted, wipBy, wipUnknown, elapsedSec: r1(elapsedSec), uph: units != null && elapsedSec >= 1 ? r1(units * 3600 / elapsedSec) : null,
         tested: q.passed + q.failed, passed: q.passed, failed: q.failed, defectFails: q.defectFails, nonDefectFails: q.nonDefectFails, unknown: q.unknown, awaitingQa: q.awaiting,
         fpy: q.passed + q.defectFails > 0 ? round(q.passed / (q.passed + q.defectFails), 4) : null,
         failsByCause: q.failsByCause, failsByReason: q.failsByReason, wip, bottleneck, cycleEnds,

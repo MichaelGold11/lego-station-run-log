@@ -58,7 +58,26 @@ check('reference is the station\'s own median after 5 cycles', st.refSec === 12 
 check('pace: mean 13.3 s against 12 s is 11% slower and past the line', st.pacePct === 11 && st.slow, st.pacePct);
 check('time lost counts only the slow cycle', st.timeLostSec === 8, st.timeLostSec);
 check('two open Needs Review', st.review === 2 && st.action === 0 && r.line.open.review === 2);
-check('units finish at the last station', r.line.units === 6);
+check('S2-only layout: no S3 station, so units done is null', r.line.units === null && r.line.doneAt.length === 0, JSON.stringify([r.line.units, r.line.doneAt]));
+check('S2-only layout: the headline says no units done', /No units done \(no S3 station\)/.test(r.headline), r.headline);
+check('S2-only layout: units in progress are the engine\'s count at session end', d.wipAtEnd != null && r.line.wipUnits === d.wipAtEnd && r.line.wipUnits >= 6, JSON.stringify([d.wipAtEnd, r.line.wipUnits]));
+{
+  // An S2 then S3 floor: six S2 cycles, four S3 cycles. Done counts the S3 cycles; the other two S2 units are still in progress.
+  const s3 = config.stations.find(x => x.id === 's3'), subs3 = s3.substeps.map(x => x.id), ev3 = ev.filter(e => e.type !== 'session_end'), lay3 = { id: 'l2', name: 'S2 S3', stations: [{ id: 's2', name: 'S2', role: 's2', order: 1 }, { id: 's3', name: 'S3', role: 's3', order: 2 }] };
+  let t3 = T0 + 1000;
+  for (let c = 1; c <= 4; c++) {
+    subs3.forEach((id, k) => ev3.push({ type: 'substep', station: 's3', substep: id, move: k ? 'next' : 'start', source: 'zones', conf: 0.9, cycle: c, t: t3 + k * 3000, videoT: (t3 - T0) / 1000 }));
+    ev3.push({ type: 'cycle_end', station: 's3', cycle: c, source: 'zones', t: t3 + subs3.length * 3000 });
+    t3 += subs3.length * 3000 + 2000;
+  }
+  ev3.push({ type: 'session_end', t: t + 9000 });
+  const doc3 = { title: 'S2 S3', startedAtMs: T0, endedAtMs: t + 9000, layout: lay3 };
+  const d3 = L.digestSession({ id: '20261118-160000-abcd', doc: doc3, events: ev3, captures: [], config: LineEngine.applyLayout(config, lay3) }, LineEngine);
+  const r3 = L.rollup([d3], {}, { now: t + 10000 });
+  check('S3 layout: units done = S3 cycles (4), counted at s3', r3.line.units === 4 && r3.line.doneAt.join() === 's3', JSON.stringify([r3.line.units, r3.line.doneAt]));
+  check('S3 layout: wipUnits is a number from the engine (started at S2 minus done at S3)', typeof r3.line.wipUnits === 'number' && r3.line.wipUnits === d3.wipAtEnd && r3.line.wipUnits >= 2, JSON.stringify([d3.wipAtEnd, r3.line.wipUnits]));
+  check('S3 layout: headline counts 4 units done', /^4 units done/.test(r3.headline), r3.headline);
+}
 check('the slow station with open flags is the focus', r.focus === 's2');
 check('headline names it', /S2 Arrange and clamp is the one to look at/.test(r.headline), r.headline);
 check('a standard time wins over the median', L.rollup([d], {}, { refSec: { s2: 10 } }).stations[0].pacePct === 33);

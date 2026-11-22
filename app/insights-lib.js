@@ -100,12 +100,12 @@
       else if (e.type === 'flag' && /^skipped /.test(e.note || '') && e.source !== 'manual' && !mistakeTimes.some(m => m.s === e.station && Math.abs(m.t - e.t) <= 1500)) add(e, 'skipped', 'Skipped: ' + e.note.slice(8));
       else if (e.type === 'qa_result' && e.result === 'fail') add(e, 'qa_fail', reasonLabel(e.reason), { cause: (config.failReasons || []).find(x => x.id === e.reason) ? (config.failReasons.find(x => x.id === e.reason).cause || null) : null });
     }
-    let qa = { passed: 0, failed: 0, defectFails: 0 };
-    try { const s = LineEngine.summarize(input.events || [], config); qa = { passed: s.line.passed, failed: s.line.failed, defectFails: s.line.defectFails }; } catch (e) { /* keep zeros */ }
+    let qa = { passed: 0, failed: 0, defectFails: 0 }, wipAtEnd = null;
+    try { const s = LineEngine.summarize(input.events || [], config); qa = { passed: s.line.passed, failed: s.line.failed, defectFails: s.line.defectFails }; wipAtEnd = s.line.wipUnits == null ? null : s.line.wipUnits; } catch (e) { /* keep zeros */ }
     const order = (doc.layout && Array.isArray(doc.layout.stations)) ? doc.layout.stations.slice().sort((a, b) => (a.order || 0) - (b.order || 0)).map(s => s.id).filter(s => stIds.includes(s)) : stIds;
     return {
       id, title: doc.title || id, startedAtMs: doc.startedAtMs || (sorted[0] && sorted[0].t) || 0, endedAtMs: doc.endedAtMs || null,
-      layoutName: doc.layout && doc.layout.name || null, order, stations, observations, qa
+      layoutName: doc.layout && doc.layout.name || null, order, stations, observations, qa, wipAtEnd
     };
   }
 
@@ -195,9 +195,12 @@
       };
     });
 
-    // Line: units finish at the QA station (or the last station in flow order).
-    const last = stations.filter(s => s.qa).length ? stations.filter(s => s.qa) : stations.slice(-1);
-    const units = last.reduce((a, s) => a + s.cycles, 0);
+    // Line: a unit is done when an S3-role station completes it (cycles of the S3 stations, as the Stations tab counts them). No S3 station: null.
+    // QA tests units that are already done. WIP: units still in progress when each session ended (the engine's line.wipUnits), summed; null if no session knows it.
+    const doneSts = stations.filter(s => s.role === 's3');
+    const units = doneSts.length ? doneSts.reduce((a, s) => a + s.cycles, 0) : null;
+    const wips = inPeriod.map(d => d.wipAtEnd).filter(isNum);
+    const wipUnits = wips.length ? wips.reduce((a, b) => a + b, 0) : null;
     const qa = inPeriod.reduce((a, d) => ({ passed: a.passed + d.qa.passed, failed: a.failed + d.qa.failed, defectFails: a.defectFails + d.qa.defectFails }), { passed: 0, failed: 0, defectFails: 0 });
     const paced = stations.filter(s => s.pacePct != null && s.cycles);
     const totalRef = paced.reduce((a, s) => a + s.refSec * s.cycles, 0), totalAct = paced.reduce((a, s) => a + s.avgSec * s.cycles, 0);
@@ -207,7 +210,7 @@
     const oldestOpen = obs.filter(x => x.state === 'needs_review')[0] || null;
     const closedToday = obs.filter(x => !isOpen(x) && x.history.length && x.history[x.history.length - 1].at >= startOfDay(o.now || Date.now())).length;
     const line = {
-      units, sessions: inPeriod.length, cycles: stations.reduce((a, s) => a + s.cycles, 0),
+      units, wipUnits, doneAt: doneSts.map(s => s.id), sessions: inPeriod.length, cycles: stations.reduce((a, s) => a + s.cycles, 0),
       pacePct: totalRef ? Math.round((totalAct / totalRef - 1) * 100) : null,
       timeLostMin: paced.length ? r1(stations.reduce((a, s) => a + (s.timeLostSec || 0), 0) / 60) : null,
       fpy: qa.passed + qa.defectFails > 0 ? Math.round(qa.passed / (qa.passed + qa.defectFails) * 100) : null, qa,
@@ -283,7 +286,7 @@
 
   function headline(line, stations, focus) {
     const parts = [];
-    parts.push(line.units + (line.units === 1 ? ' unit done' : ' units done'));
+    parts.push(line.units == null ? 'No units done (no S3 station)' : line.units + (line.units === 1 ? ' unit done' : ' units done'));
     if (line.pacePct != null) parts.push(Math.abs(line.pacePct) + '% ' + (line.pacePct >= 0 ? 'slower' : 'faster') + ' than reference');
     const n = line.open.review + line.open.action;
     parts.push(n + (n === 1 ? ' flag open' : ' flags open'));

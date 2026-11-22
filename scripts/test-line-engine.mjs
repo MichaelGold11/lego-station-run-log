@@ -386,7 +386,7 @@ function cycleEvents(station, n, sec, start, gap, subIds) {
     { type: 'manual', station: 's4', action: 'pass', t: 150000 }, { type: 'manual', station: 's4', action: 'fail', reason: 'strip', t: 160000 },
     { type: 'manual', station: 's4', action: 'fail', reason: 'other', t: 170000 }, { type: 'manual', station: 's4', action: 'cycle_done', t: 180000 }
   ]), CFG, { basis: 'manual' });
-  check('manual basis: units from the buttons, FPY from Pass and Fail (1 / 3)', man.line.units === 4 && near(man.line.fpy, 1 / 3, 1e-3) && man.line.unknown === 1, JSON.stringify(man.line));
+  check('manual basis: units from the buttons, FPY from Pass and Fail (1 / 3)', man.line.units === 0 && near(man.line.fpy, 1 / 3, 1e-3) && man.line.unknown === 1, JSON.stringify(man.line));
   check('manual basis: "other" has no cause station', man.line.failsByCause.s1 === 1 && man.line.failsByCause.unknown === 1);
   const auto = LE.summarize([{ type: 'manual', station: 's3', action: 'cycle_done', t: 1 }, { type: 'manual', station: 's3', action: 'cycle_done', t: 5001 }], CFG);
   check('auto basis falls back to manual where nothing was detected', auto.stations.s3.basis === 'manual' && auto.stations.s3.cycles === 2 && auto.stations.s3.avgSec === 5);
@@ -1147,25 +1147,43 @@ console.log('S2 false "step skipped" and WIP');
   check('wipShown: never negative, a plain count passes', LE.wipShown(-1, true) === 0 && LE.wipShown(3, true) === 3 && LE.wipShown(0, true) === 0 && LE.wipShown(null, true) === null);
 }
 
-console.log('units on a floor with no QA station');
+console.log('units done at S3, units in progress (WIP)');
 {
   const cfgOf = ids => { const c = JSON.parse(JSON.stringify(CFG)); c.stations = c.stations.filter(x => ids.includes(x.id)); return c; };
-  // One S2-role station, one detected cycle: the unit counts there and uph follows.
-  const one = [{ type: 'session_start', t: 0 }, { type: 'source_change', station: 's2', input: 'clip', t: 0 },
-    ...cycleEvents('s2', 1, 30, 2000, 5, ['s2_pick', 's2_get_splice', 's2_insert', 's2_handoff']), { type: 'session_end', t: 60000 }];
+  const S2 = ['s2_pick', 's2_get_splice', 's2_insert', 's2_handoff'], S3 = ['s3_pick', 's3_insert', 's3_handoff'], S4 = ['s4_pick', 's4_connect', 's4_test', 's4_sort'];
+  const src = ids => ids.map(id => ({ type: 'source_change', station: id, input: 'clip', t: 0 }));
+  // S2-only floor (Michael's test floor): no S3, so Units done is null, and the finished unit is in progress.
+  const one = [{ type: 'session_start', t: 0 }, ...src(['s2']), ...cycleEvents('s2', 1, 30, 2000, 5, S2), { type: 'session_end', t: 60000 }];
   const L1 = LE.summarize(one, cfgOf(['s2'])).line;
-  check('no QA, one S2 station with one cycle: line.units 1', L1.units === 1, L1.units);
-  check('no QA: uph is not null and follows units', L1.uph != null && near(L1.uph, 60), L1.uph);
-  check('no QA: countedAt names the station', L1.countedAt.join() === 's2');
-  // Two stations, no QA: only the last station (s3) counts.
-  const two = [{ type: 'session_start', t: 0 }, { type: 'source_change', station: 's2', input: 'clip', t: 0 }, { type: 'source_change', station: 's3', input: 'clip', t: 0 },
-    ...cycleEvents('s2', 4, 30, 2000, 5, ['s2_pick', 's2_get_splice', 's2_insert', 's2_handoff']),
-    ...cycleEvents('s3', 3, 25, 3000, 5, ['s3_pick', 's3_insert', 's3_handoff']), { type: 'session_end', t: 200000 }];
-  const L2 = LE.summarize(two, cfgOf(['s2', 's3'])).line;
-  check('no QA, two stations: units come from the last station only', L2.units === 3 && L2.countedAt.join() === 's3', L2.units);
-  // With a QA station the old rule holds: s4 cycles, not the last-station fallback.
-  const L3 = LE.summarize(two.concat(cycleEvents('s4', 2, 15, 4000, 5, ['s4_pick', 's4_connect', 's4_test', 's4_sort'])), CFG).line;
-  check('with a QA station the count stays at QA', L3.units === 2 && L3.countedAt.join() === 's4', L3.units);
+  check('S2-only floor: units done is null and uph is null', L1.units === null && L1.uph === null && L1.countedAt.length === 0, JSON.stringify([L1.units, L1.uph]));
+  check('S2-only floor: one finished S2 cycle shows WIP 1', L1.wipUnits === 1 && L1.wipStarted === 1, JSON.stringify([L1.wipUnits, L1.wipBy]));
+  // Mid-cycle: before the cycle ends the unit is already started, so WIP is 1.
+  const mid = [{ type: 'session_start', t: 0 }, ...src(['s2']), ...cycleEvents('s2', 1, 30, 2000, 5, S2).filter(e => e.type === 'substep').slice(0, 2)];
+  const Lm = LE.summarize(mid, cfgOf(['s2'])).line;
+  check('mid-cycle at S2 counts in WIP (1, working 1)', Lm.wipUnits === 1 && Lm.wipBy[0].working === 1, JSON.stringify(Lm.wipBy));
+  // A station with no camera or source before S3: unknown, not a number.
+  const nosrc = LE.summarize([{ type: 'session_start', t: 0 }, { type: 'source_change', station: 's2', input: 'none', t: 0 }, { type: 'session_end', t: 1000 }], cfgOf(['s2', 's3'])).line;
+  check('no source at S2: WIP unknown (null), S2 and S3 named', nosrc.wipUnits === null && nosrc.wipUnknown.join() === 's2,s3', JSON.stringify(nosrc.wipUnknown));
+  // S2 then S3 then S4: done counts S3 completions only.
+  const flow = [{ type: 'session_start', t: 0 }, ...src(['s1', 's2', 's3', 's4']),
+    ...cycleEvents('s1', 3, 10, 1000, 2, ['s1_cut', 's1_check_length']),
+    ...cycleEvents('s2', 4, 30, 2000, 5, S2), ...cycleEvents('s3', 3, 25, 3000, 5, S3), ...cycleEvents('s4', 2, 15, 4000, 5, S4), { type: 'session_end', t: 200000 }];
+  const L2 = LE.summarize(flow, CFG).line;
+  check('S1-S4 floor: units done = S3 completions (3), not S4 cycles (2)', L2.units === 3 && L2.countedAt.join() === 's3', L2.units);
+  check('S1-S4 floor: QA keeps its own tested count (2 awaiting, none tested yet)', L2.tested === 0 && L2.awaitingQa === 2, JSON.stringify([L2.tested, L2.awaitingQa]));
+  check('S1-S4 floor: uph follows units done', near(L2.uph, 3 * 3600 / 200, 0.01), L2.uph);
+  check('S1-S4 floor: started at S1 minus done at S3 (3 - 3 = 0): a unit done at S3 but not tested is done, not WIP', L2.wipStarted === 3 && L2.wipUnits === 0, JSON.stringify([L2.wipStarted, L2.wipUnits]));
+  // One more S2 unit started and one S3 unit part-built: both in progress.
+  const more = [{ type: 'session_start', t: 0 }, ...src(['s1', 's2', 's3', 's4']), ...cycleEvents('s1', 5, 10, 1000, 2, ['s1_cut', 's1_check_length']), ...cycleEvents('s2', 4, 30, 2000, 5, S2), ...cycleEvents('s3', 3, 25, 3000, 5, S3), ...cycleEvents('s4', 2, 15, 4000, 5, S4), ...cycleEvents('s2', 1, 30, 120000, 5, S2), { type: 'session_end', t: 200000 }];
+  const L3 = LE.summarize(more, CFG).line;
+  check('a fifth S2 unit finishes (S1 5, S2 5, S3 3): WIP 2, 2 waiting for S3', L3.wipUnits === 2 && L3.wipBy[1].waitingForNext === 2, JSON.stringify(L3.wipBy));
+  // Two S3 stations side by side: completions add up.
+  const two = JSON.parse(JSON.stringify(CFG)); const s3b = JSON.parse(JSON.stringify(two.stations.find(x => x.id === 's3'))); s3b.id = 's5'; s3b.role = 's3';
+  two.stations.splice(three(two), 0, s3b);
+  const twoEv = flow.filter(e => e.type !== 'session_end').concat(src(['s5']), cycleEvents('s5', 2, 25, 3000, 5, S3), { type: 'session_end', t: 200000 });
+  const L4 = LE.summarize(twoEv, two).line;
+  check('two S3 stations side by side: done adds up (3 + 2)', L4.units === 5 && L4.countedAt.join() === 's3,s5', JSON.stringify([L4.units, L4.countedAt]));
+  function three(c) { return c.stations.findIndex(x => x.id === 's3') + 1; }
 }
 
 console.log('\n' + passes + ' passed, ' + fails + ' failed');

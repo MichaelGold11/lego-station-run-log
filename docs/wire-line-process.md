@@ -130,10 +130,15 @@ needs that role's boxes; giving it its old role back finds the old ones.
 
 **Two stations with one role.** The line numbers follow these rules:
 
-- Units, passes, fails and yield add up over every QA station.
+- Units done: a unit is done when an S3-role station completes it, so two S3 stations side by side
+  add up. A floor with no S3 station shows "--". QA does not finish units: it tests units that are
+  already done, and tested, passed, failed and yield add up over every QA station.
+- Units in progress (WIP): units started at the first station in flow order and not yet done at S3
+  (a unit being worked on counts). It is `line.wipUnits` in the summary (with `wipBy`, per stage, and
+  `wipUnknown`). A station before S3 with no camera or source makes the count unknown ("--").
 - Stations next to each other in the flow with the same role work side by side: one stage. The flow
-  row shows a **+** between them instead of a WIP number; WIP is counted between stages (each
-  stage's cycles added up). The bottleneck and the takt check use a station's average cycle divided
+  row shows a **+** between them instead of a WIP number; WIP between two stages is counted from each
+  stage's units added up. The bottleneck and the takt check use a station's average cycle divided
   by the number of stations in its stage.
 - A fail reason's cause is a role; the fail is charged to the first station in flow order running
   that role (the cameras cannot tell which of two crimpers made the unit).

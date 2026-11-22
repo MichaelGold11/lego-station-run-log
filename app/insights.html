@@ -297,7 +297,7 @@ function viewOverview() {
   let h = topBar('Overview', subline()) + noDataBanner();
   h += '<p class="headline">' + esc(m.headline) + '</p>';
   h += '<div class="kpis">' +
-    '<div class="kpi"><h5>Units done</h5><div class="big">' + ln.units + '</div><div class="note">Finished at ' + esc(lastStationName()) + '</div></div>' +
+    '<div class="kpi"><h5>Units done</h5><div class="big">' + (ln.units == null ? '–' : ln.units) + '</div><div class="note">' + (ln.units == null ? 'Done at S3, no S3 station' : 'Done at ' + esc(doneStationName())) + (ln.wipUnits != null ? ' · ' + ln.wipUnits + ' still in progress at session end' : '') + '</div></div>' +
     '<div class="kpi"><h5>Pace</h5><div class="big' + (ln.pacePct > L.SLOW_PCT ? ' c-coral' : '') + '">' + (ln.pacePct == null ? '–' : (ln.pacePct >= 0 ? '+' : '') + ln.pacePct + '%') + '</div><div class="note">' + paceNote + '</div></div>' +
     '<div class="kpi"><h5>Open flags</h5><div class="big">' + (ln.open.review + ln.open.action) + '</div><div class="note"><span class="c-amber">' + ln.open.review + ' Needs Review</span> · <span class="c-orange">' + ln.open.action + ' Action Required</span></div></div>' +
     '<div class="kpi"><h5>Time lost</h5><div class="big">' + (ln.timeLostMin == null ? '–' : ln.timeLostMin + '<span style="font-size:18px"> min</span>') + '</div><div class="note">' + (ln.bottleneck ? 'Slowest: ' + esc(ln.bottleneck.name) + ' (' + ln.bottleneck.avgSec + ' s)' : 'Over reference time, this period') + '</div></div>' +
@@ -315,7 +315,7 @@ function viewOverview() {
   h += foot();
   return h;
 }
-function lastStationName() { const m = S.model, q = m.stations.filter(s => s.qa); return (q.length ? q : m.stations.slice(-1)).map(s => sid(s.id)).join(', ') || 'the last station'; }
+function doneStationName() { const m = S.model, d = m.line.doneAt || []; return m.stations.filter(s => d.includes(s.id)).map(s => sid(s.id)).join(', ') || 'S3'; }
 function stationCard(s) {
   const cls = !s.cycles && !s.observations ? 'idle' : s.status === 'clear' ? '' : s.status;
   return '<button class="st ' + cls + (S.station === s.id ? ' sel' : '') + '" data-st="' + esc(s.id) + '">' +
