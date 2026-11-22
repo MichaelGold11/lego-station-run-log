@@ -53,6 +53,7 @@ const stub = http.createServer((q, r) => {
   stubHits.push(q.url);
   if (/ort-wasm\.wasm$/.test(q.url)) { r.writeHead(200, { 'Content-Type': 'application/wasm' }); return r.end(Buffer.from([0, 97, 115, 109])); }
   if (/vision_bundle\.mjs$/.test(q.url)) { r.writeHead(200); return setTimeout(() => r.end('export const x = 1;'), 150); }
+  if (/redir\.js$/.test(q.url)) { r.writeHead(302, { Location: '/elsewhere.js' }); return r.end(); }
   r.writeHead(404); r.end('nope');
 });
 await new Promise(r => stub.listen(0, '127.0.0.1', r));
@@ -102,6 +103,9 @@ try {
     const left = [];
     (function walk(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) e.isDirectory() ? walk(path.join(d, e.name)) : left.push(e.name); })(cacheDir);
     check('a stub 404 answers 502 with the JSON error and leaves no cache or temp file', nf.status === 502 && nf.json && nf.json.code === 'vendor_unavailable' && typeof nf.json.message === 'string' && !left.some(n => /nope/.test(n) || /\.tmp$/.test(n)), nf.status + ' ' + left.join());
+    const rd = await req('GET', ORT + 'redir.js'), rdFiles = [];
+    (function walk(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) e.isDirectory() ? walk(path.join(d, e.name)) : rdFiles.push(e.name); })(cacheDir);
+    check('a CDN redirect is a failure: 502, nothing fetched from the target, no cache file', rd.status === 502 && !stubHits.some(u => /elsewhere/.test(u)) && !rdFiles.some(n => /redir/.test(n)), rd.status + ' ' + stubHits.join());
     const bad = [await req('GET', ORT + '..%2f..%2fpackage.json'), await req('GET', ORT + 'a/..%2fx.js'), await req('GET', '/vendor/mediapipe/a%20b.js')];
     check('a bad path answers 400', bad.every(r => r.status === 400), bad.map(r => r.status).join());
     check('no /vendor/ route answers 302', [hit, miss, again, nf, ...bad].every(r => r.status !== 302));

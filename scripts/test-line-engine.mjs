@@ -1257,5 +1257,16 @@ console.log('\nline units after Stop (C1)');
   check('C2: with no tracked station the old counts stay, stopped or not', JSON.stringify(a) === JSON.stringify(b) && a.units === 2, JSON.stringify([a.units, b.units]));
 }
 
+// Z3: tracker mode with units at S2 only, and with a station whose legacy count is unknown.
+{
+  const pick = id => SHIPPED.stations.find(x => x.id === id);
+  const CFG3 = { stations: [pick('s2'), pick('s3')] };
+  const T0 = 1000000, at = sec => T0 + sec * 1000, now = at(30);
+  const ev = [{ type: 'session_start', t: T0 }, { type: 'unit', station: 's2', action: 'start', t: at(5), unit: 1, no: '#001' }];
+  const lv = LE.lineUnitStats(LE.lineUnits(ev, CFG3, { now }), { now }), live = LE.summarize(ev, CFG3, { now }).line, stp = LE.summarize(ev, CFG3, { now, stopped: true }).line;
+  check('Z3: units at S2 only, live WIP equals lineUnitStats', live.wipUnits === lv.inProgress.total && live.wipUnits === 1, JSON.stringify([live.wipUnits, lv.inProgress]));
+  check('Z3: units at S2 only, stopped: every in-progress count is 0 (wipUnits is 0 even with an unknown legacy count)', stp.wipUnits === 0 && stp.wipBy.every(g => g.working === 0 && g.waitingForNext === 0) && stp.wip.every(w => w.n == null || w.n === 0), JSON.stringify([stp.wipUnits, stp.wipBy, stp.wip, stp.wipUnknown]));
+}
+
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);

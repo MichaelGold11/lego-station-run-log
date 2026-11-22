@@ -48,7 +48,7 @@ function vendorFetch(url, dest) {
   const job = (async () => {
     const tmp = dest + '.' + process.pid + '.' + crypto.randomBytes(4).toString('hex') + '.tmp';
     try {
-      const r = await fetch(url, { signal: AbortSignal.timeout(VENDOR_TIMEOUT), redirect: 'follow' });
+      const r = await fetch(url, { signal: AbortSignal.timeout(VENDOR_TIMEOUT), redirect: 'error' });
       if (r.status !== 200) throw new Error('CDN answered ' + r.status);
       if (Number(r.headers.get('content-length')) > VENDOR_MAX) throw new Error('file too large');
       const chunks = []; let n = 0;
