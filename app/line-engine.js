@@ -1087,14 +1087,14 @@
     for (const e of sorted) {
       if (e.type !== 'unit' || (stationId && e.station !== stationId)) continue;
       if (e.action === 'start') open[e.station] = e;
-      else if (e.action === 'end') { delete open[e.station]; out.push(e); }
+      else if (e.action === 'end') { const s0 = open[e.station]; delete open[e.station]; out.push(s0 ? Object.assign({}, e, { videoFile: s0.videoFile != null ? s0.videoFile : e.videoFile, videoStartT: s0.videoT != null ? s0.videoT : null }) : e); }
     }
-    for (const e of Object.values(open)) out.push({ type: 'unit', station: e.station, action: 'open', t: e.t, unit: e.unit, no: e.no, start: e.t, end: null, result: null, needsReview: true, ended: null, steps: [], mistakes: 0, reviews: 0 });
+    for (const e of Object.values(open)) out.push({ type: 'unit', station: e.station, action: 'open', t: e.t, unit: e.unit, no: e.no, start: e.t, end: null, result: null, needsReview: true, ended: null, steps: [], mistakes: 0, reviews: 0, videoFile: e.videoFile || null, videoStartT: e.videoT != null ? e.videoT : null });
     return out.sort((a, b) => (a.start - b.start) || ((a.unit || 0) - (b.unit || 0)));
   }
   // One row per unit for the whole line: the unit's number is the key, and each tracked station adds its own columns (arrival, end, steps,
   // mistakes), so S2 and S3 sit on one row. Unlinked units (an S3 arrival with nothing from S2) get their own rows, numbered ?01, ?02.
-  const STATION_UNIT_COLS = ['arrive_ts', 'end_ts', 'dur_s', 'complete_ts', 'result', 'ended', 'steps', 'mistakes', 'reviews'];
+  const STATION_UNIT_COLS = ['arrive_ts', 'end_ts', 'dur_s', 'complete_ts', 'result', 'ended', 'steps', 'mistakes', 'reviews', 'video_file', 'video_t'];
   const TRACKED_COLS = ['session_id', 'crew', 'shift', 'unit_no', 'unit', 'needs_review'];
   const trackedCols = config => TRACKED_COLS.concat([].concat(...config.stations.filter(unitTrackerOn).map(st => STATION_UNIT_COLS.map(c => st.id + '_' + c))));
   function unitRows(events, config) {
@@ -1140,8 +1140,12 @@
       if (!r) return null;
       const hi = r.end != null ? r.end : now;
       const msgs = verdicts.filter(v => v.station === r.station && v.t >= r.start && (r.end != null ? v.t < r.end : v.t <= hi))
-        .map(v => ({ kind: v.kind, message: v.message || null, t: v.t, videoT: v.videoT != null ? v.videoT : null, videoFile: v.videoFile || null }));
-      return { station: r.station, start: r.start, end: r.end, sec: sec(r.start, hi), result: r.result, ended: r.ended, mistakes: msgs.filter(m => m.kind === 'mistake').length, reviews: msgs.filter(m => m.kind === 'review').length, messages: msgs,
+        .map(v => ({ kind: v.kind, code: v.reason || null, message: v.message || null, t: v.t, videoT: v.videoT != null ? v.videoT : null, videoFile: v.videoFile || null }));
+      // Steps: the station's substep events inside the window (repeats left out); a step runs to the next one, the last to the window end.
+      const stCfg = tr.find(x => x.id === r.station), label = id => { const s = ((stCfg && stCfg.substeps) || []).find(x => x.id === id); return s ? s.label : id; };
+      const evs = sorted.filter(e => e.type === 'substep' && e.station === r.station && e.move !== 'repeat' && e.t >= r.start && e.t <= hi);
+      const steps = evs.map((e, i) => { const nx = i + 1 < evs.length ? evs[i + 1].t : hi; return { key: e.substep, label: label(e.substep), start: e.t, end: nx, sec: sec(e.t, nx) }; });
+      return { station: r.station, start: r.start, end: r.end, sec: sec(r.start, hi), result: r.result, ended: r.ended, steps, mistakes: msgs.filter(m => m.kind === 'mistake').length, reviews: msgs.filter(m => m.kind === 'review').length, messages: msgs,
         videoFile: r.videoFile, videoT: r.videoT, videoEndT: r.videoEndT };
     };
     const rows = list.map(u => {
@@ -1164,6 +1168,44 @@
     const rank = { needs_review: 0, s3: 1, waiting_s3: 1, s2: 1, done: 2 };
     return rows.sort((x, y) => (rank[x.stage] - rank[y.stage]) || (x.stage === 'done' ? y.start - x.start : x.start - y.start));
   }
+  // Tiles and alerts of the units board from lineUnits rows (pure). now: the clock; runStart: when the run began (units per hour).
+  // inProgress.total counts all four stages. Alerts, problems first: review, wrong_order, stuck.
+  function lineUnitStats(rows, opts) {
+    const o = opts || {}, list = rows || [], now = isNum(o.now) ? o.now : null, runStart = isNum(o.runStart) ? o.runStart : null;
+    const inProgress = { total: 0, s2: 0, waiting_s3: 0, s3: 0, needs_review: 0 };
+    for (const r of list) if (r.stage !== 'done') { inProgress[r.stage]++; inProgress.total++; }
+    const done = list.filter(r => r.stage === 'done');
+    const avg = a => (a.length ? round(a.reduce((x, y) => x + y, 0) / a.length, 1) : null);
+    const times = k => list.map(r => r[k]).filter(x => x && x.end != null && x.result !== 'incomplete' && isNum(x.sec)).map(x => x.sec);
+    const stations = { s2: { avgSec: avg(times('s2')), n: times('s2').length }, s3: { avgSec: avg(times('s3')), n: times('s3').length } };
+    const bottleneck = stations.s2.n && stations.s3.n && stations.s2.avgSec !== stations.s3.avgSec ? (stations.s2.avgSec > stations.s3.avgSec ? 's2' : 's3') : null;
+    const el = now != null && runStart != null ? (now - runStart) / 1000 : null;
+    const unitsPerHour = el != null && el >= 60 ? round(done.length / (el / 3600), 1) : null;
+    const right = done.filter(r => ['s2', 's3'].every(k => !r[k] || (r[k].mistakes === 0 && r[k].reviews === 0)) && !r.needsReview).length;
+    const rightFirstTime = { n: right, of: done.length, pct: done.length ? Math.round(100 * right / done.length) : null };
+    const al = { review: [], wrong_order: [], stuck: [] }, who = r => (r.unit != null ? r.unit : r.no), STN = { s2: 'S2', s3: 'S3' };
+    for (const r of list) {
+      if (r.needsReview) {
+        const k = r.s3 && r.s3.result === 'incomplete' ? 's3' : r.s2 && r.s2.result === 'incomplete' ? 's2' : r.s3 ? 's3' : 's2';
+        al.review.push({ kind: 'review', unit: r.unit, no: r.no, station: r[k].station, stage: r.stage, sec: r.stageSec, message: 'Unit ' + who(r) + ' needs review at ' + STN[k] });
+      }
+      for (const k of ['s2', 's3']) for (const m of (r[k] ? r[k].messages : [])) if (m.code === 'wrong_order') {
+        al.wrong_order.push({ kind: 'wrong_order', unit: r.unit, no: r.no, station: r[k].station, stage: r.stage, sec: now != null ? round((now - m.t) / 1000, 1) : null, message: 'Unit ' + who(r) + ' at ' + STN[k] + ': ' + (m.message || 'wrong order') });
+      }
+      if ((r.stage === 's2' || r.stage === 's3') && stations[r.stage].n >= 3 && isNum(r.stageSec) && r.stageSec > 2 * stations[r.stage].avgSec) {
+        const k = r.stage;
+        al.stuck.push({ kind: 'stuck', unit: r.unit, no: r.no, station: r[k].station, stage: r.stage, sec: r.stageSec, message: 'Unit ' + who(r) + ' stuck at ' + STN[k] + ' for ' + Math.round(r.stageSec) + ' s, average ' + Math.round(stations[k].avgSec) + ' s' });
+      }
+    }
+    return { done: done.length, inProgress, avgUnitSec: avg(done.map(r => r.totalSec).filter(isNum)), stations, bottleneck, unitsPerHour, rightFirstTime, alerts: [].concat(al.review, al.wrong_order, al.stuck) };
+  }
+  // The photos of one unit row: captures stamped with its unit, else (older sessions) by station and time inside that station's window. Oldest first.
+  function unitPhotos(row, captures) {
+    if (!row) return [];
+    const wins = ['s2', 's3'].map(k => row[k]).filter(Boolean);
+    const inWin = c => wins.some(w => c.station === w.station && isNum(c.t) && c.t >= w.start && (w.end == null || c.t <= w.end));
+    return (captures || []).filter(c => c && (c.unit != null ? row.unit != null && c.unit === row.unit : inWin(c))).map((c, i) => [c, i]).sort((a, b) => ((a[0].t || 0) - (b[0].t || 0)) || (a[1] - b[1])).map(x => x[0]);
+  }
   function trackedUnitsCsv(events, config, meta) {
     const m = meta || {}, sorted = sortEvents(events), base = timeBase(sorted, m), ts = t => (t == null ? null : round((t - base) / 1000, 3));
     const tr = config.stations.filter(unitTrackerOn), lines = [trackedCols(config).join(',')];
@@ -1173,7 +1215,7 @@
       for (const st of tr) {
         const u = r.stations[st.id];
         if (!u) { cells.push(...STATION_UNIT_COLS.map(() => null)); continue; }
-        cells.push(ts(u.start), ts(u.end), u.end != null ? round((u.end - u.start) / 1000, 3) : null, ts(u.completeT), u.result || 'open', u.ended, (u.steps || []).map(x => x.id + ':' + x.sec).join('|'), u.mistakes, u.reviews);
+        cells.push(ts(u.start), ts(u.end), u.end != null ? round((u.end - u.start) / 1000, 3) : null, ts(u.completeT), u.result || 'open', u.ended, (u.steps || []).map(x => x.id + ':' + x.sec).join('|'), u.mistakes, u.reviews, u.videoFile || null, u.videoStartT != null ? u.videoStartT : null);
       }
       lines.push(csvLine(cells));
     }
@@ -1591,7 +1633,7 @@
     DEFAULTS, MOTION, MISMATCH_NOTE, EVENT_TYPES, CYCLE_ACTIONS, SUBSTEP_COLS, CYCLE_COLS, VERDICT_COLS, CHECK, LEVELS, OPERATOR_CODE, FLOOR, CLASS_TEST,
     members, activeRule, evalRule, missingOf, ruleText, checkConfig, captureDefaults, CAPTURE_DEFAULTS, captureWanted, nextSampleDue, modelFor, checkModelOutput, e2eBadClass, qaDecide, createStation,
     operatorCode, defaultName, shortName, classTestLayout, setupKey, nextStationId, freeSpot, saveScheduler, applyLayout,
-    zoneSignals, calibrationFrom, classSignals, trackedClasses, unitCheck, ASSEMBLY, handPresence, steadyClasses, mergeSignals, createChecker, createUnitTracker, createUnitLink, stepStation, checkerEvents, wipShown, unitRows, lineUnits, unitPresent, unitNo, unitTrackerOn, UNIT_TRACKER, trackedUnits, trackedUnitsCsv, TRACKED_COLS,
+    zoneSignals, calibrationFrom, classSignals, trackedClasses, unitCheck, ASSEMBLY, handPresence, steadyClasses, mergeSignals, createChecker, createUnitTracker, createUnitLink, stepStation, checkerEvents, wipShown, unitRows, lineUnits, lineUnitStats, unitPhotos, unitPresent, unitNo, unitTrackerOn, UNIT_TRACKER, trackedUnits, trackedUnitsCsv, TRACKED_COLS,
     standardViews, pickStandardView, sameZones, sortEvents, ruleZones, unobserved, NO_DATA, detectedCycles, manualCycles, summarize, substepsCsv, cyclesCsv, verdictsCsv, linkUnits, unitCols, unitsCsv, csvCell
   };
 });

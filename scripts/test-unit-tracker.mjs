@@ -307,6 +307,56 @@ console.log('\nline units: one row per unit across S2 and S3');
   rows = LE.lineUnits([st('s2', 0, '#001', 1), en('s2', 0, 10, '#001', 1)], { stations: [S2] }, { now: at(12) });
   check('lineUnits: with no S3 station a unit that left S2 is waiting_s3, never done', rows.length === 1 && rows[0].stage === 'waiting_s3' && rows[0].stageSec === 2);
   check('lineUnits: no tracked events gives no rows', LE.lineUnits([], CFG2, { now: 0 }).length === 0);
+  // C2: steps per station and the verdict code.
+  const sb = (station, sec, substep, move) => ({ type: 'substep', station, t: at(sec), substep, move: move || 'next' });
+  const vdc = (station, sec, kind, message, reason) => Object.assign(vd(station, sec, kind, message), { reason });
+  ev = [st('s2', 0, '#001', 1), sb('s2', 1, 's2_arrive', 'start'), sb('s2', 4, 's2_open'), sb('s2', 5, 's2_open', 'repeat'), vdc('s2', 6, 'mistake', 'Wrong order: Close before Open', 'wrong_order'), sb('s2', 9, 's2_close'), en('s2', 0, 10, '#001', 1), sb('s2', 12, 's2_arrive', 'start')];
+  rows = LE.lineUnits(ev, CFG2, { now: at(20) }); r = byNo(rows);
+  const stp = r['#001'].s2.steps;
+  check('lineUnits steps: key, label, start, end and seconds per step, repeats left out, the last step runs to the window end', stp.length === 3 && stp[0].key === 's2_arrive' && stp[0].start === at(1) && stp[0].end === at(4) && stp[0].sec === 3 && stp[1].key === 's2_open' && stp[1].sec === 5 && stp[2].key === 's2_close' && stp[2].end === at(10) && stp[2].sec === 1 && typeof stp[0].label === 'string' && stp[0].label.length > 0, JSON.stringify(stp));
+  check('lineUnits steps: events outside the unit window are not its steps; no S3 gives null', LE.lineUnits(ev, CFG2, { now: at(20) }).length === 1 && r['#001'].s3 === null);
+  check('lineUnits code: the verdict reason on the message, null when the verdict has none', r['#001'].mistakes.s2[0].code === 'wrong_order' && LE.lineUnits([st('s2', 0, '#001', 1), vd('s2', 2, 'mistake', 'x'), en('s2', 0, 10, '#001', 1)], CFG2, { now: at(20) })[0].mistakes.s2[0].code === null);
+
+  // C1: lineUnitStats. Four units done (S2 20 s, 40 s, 20 s, 40 s -> avg 30; S3 10 s each), one at S2 stuck, one waiting, one at S3, one to review.
+  const E = [];
+  let k = 0;
+  const unit = (n, s2a, s2b, s3a, s3b, extra) => { const no = '#00' + n; E.push(st('s2', s2a, no, n), en('s2', s2a, s2b, no, n, extra && extra.s2)); if (s3a != null) { E.push(st('s3', s3a, no, n, { from: 's2' })); if (s3b != null) E.push(en('s3', s3a, s3b, no, n, Object.assign({ from: 's2' }, extra && extra.s3))); } };
+  unit(1, 0, 20, 20, 30); unit(2, 20, 60, 60, 70); unit(3, 70, 90, 90, 100); unit(4, 100, 140, 140, 150);
+  E.push(vdc('s2', 105, 'mistake', 'Red wire is missing', 'missing_step'));
+  unit(5, 150, 160, 160, null);       // at S3 open
+  unit(6, 160, 170, null, null);      // waiting_s3
+  E.push(st('s2', 175, '#007', 7));   // at S2 open
+  let rs = LE.lineUnits(E, CFG2, { now: at(200) }), sx = LE.lineUnitStats(rs, { now: at(200), runStart: at(0) });
+  check('stats: done and in progress by stage', sx.done === 4 && sx.inProgress.s2 === 1 && sx.inProgress.waiting_s3 === 1 && sx.inProgress.s3 === 1 && sx.inProgress.needs_review === 0 && sx.inProgress.total === 3, JSON.stringify(sx.inProgress));
+  check('stats: avg unit time (S2 start to S3 done), station averages with n, bottleneck is the slower', sx.avgUnitSec === 40 && sx.stations.s2.n === 6 && sx.stations.s3.n === 4 && sx.stations.s3.avgSec === 10 && sx.stations.s2.avgSec === 23.3 && sx.bottleneck === 's2', JSON.stringify(sx));
+  check('stats: units per hour is done per hour since runStart (4 in 200 s = 72), null before 60 s', sx.unitsPerHour === 72 && LE.lineUnitStats(rs, { now: at(30), runStart: at(0) }).unitsPerHour === null && LE.lineUnitStats(rs, { now: at(200) }).unitsPerHour === null);
+  check('stats: right first time counts done units with no mistake or review (3 of 4 = 75)', sx.rightFirstTime.n === 3 && sx.rightFirstTime.of === 4 && sx.rightFirstTime.pct === 75, JSON.stringify(sx.rightFirstTime));
+  check('stats: stuck alert only for the over-twice unit: #005 at S3 40 s vs average 10 s; #007 at S2 25 s vs 23.3 s is not', sx.alerts.length === 1 && sx.alerts[0].kind === 'stuck' && sx.alerts[0].unit === 5 && sx.alerts[0].no === '#005' && sx.alerts[0].station === 's3' && sx.alerts[0].stage === 's3' && sx.alerts[0].sec === 40 && sx.alerts[0].message === 'Unit 5 stuck at S3 for 40 s, average 10 s', JSON.stringify(sx.alerts));
+  const emptyS = LE.lineUnitStats([], { now: at(100), runStart: at(0) });
+  check('stats: empty rows give zeros and nulls', emptyS.done === 0 && emptyS.avgUnitSec === null && emptyS.bottleneck === null && emptyS.rightFirstTime.pct === null && emptyS.rightFirstTime.of === 0 && emptyS.alerts.length === 0 && emptyS.stations.s2.n === 0 && emptyS.unitsPerHour === 0);
+  // Stuck: twice the average, and the review and wrong-order alerts come first.
+  const E2 = [];
+  const u2 = (n, a, b) => E2.push(st('s2', a, '#00' + n, n), en('s2', a, b, '#00' + n, n));
+  u2(1, 0, 40); u2(2, 40, 80); u2(3, 80, 120);   // s2 avg 40 n 3
+  E2.push(st('s2', 120, '#004', 4));              // open at S2
+  let r2 = LE.lineUnitStats(LE.lineUnits(E2, CFG2, { now: at(210) }), { now: at(210), runStart: at(0) });
+  check('stats stuck: more than twice the average at S2 (#004 at 90 s, avg 40 s) alerts, exactly 2x (80 s) does not', r2.alerts.some(a => a.unit === 4 && a.kind === 'stuck' && a.sec === 90 && a.message === 'Unit 4 stuck at S2 for 90 s, average 40 s') && LE.lineUnitStats(LE.lineUnits(E2, CFG2, { now: at(200) }), { now: at(200) }).alerts.length === 0, JSON.stringify(r2.alerts));
+  check('stats stuck: not before 3 finished units', LE.lineUnitStats(LE.lineUnits(E2.slice(0, 6), CFG2, { now: at(500) }), { now: at(500) }).alerts.length === 0);
+  const E3 = E2.concat([vdc('s2', 125, 'mistake', 'Wrong order: Close before Open', 'wrong_order'), st('s3', 140, '?01', null, { from: 's2', unlinked: true }), en('s3', 140, 150, '?01', null, { from: 's2', unlinked: true, needsReview: true })]);
+  r2 = LE.lineUnitStats(LE.lineUnits(E3, CFG2, { now: at(210) }), { now: at(210), runStart: at(0) });
+  check('stats alerts: problems first (review, wrong order, then stuck), each with the full shape', r2.alerts.map(a => a.kind).join() === 'review,wrong_order,stuck' && r2.alerts[0].no === '?01' && r2.alerts[0].message === 'Unit ?01 needs review at S3' && r2.alerts[1].unit === 4 && r2.alerts[1].sec === 85 && /Wrong order/.test(r2.alerts[1].message) && ['kind', 'unit', 'no', 'station', 'stage', 'sec', 'message'].every(f => f in r2.alerts[0]) && r2.inProgress.needs_review === 1, JSON.stringify(r2.alerts));
+
+  // C3: unitPhotos.
+  const cap = (t, o) => Object.assign({ t: at(t), station: 's2', path: 'p' + t }, o || {});
+  const prow = LE.lineUnits([st('s2', 0, '#001', 1), en('s2', 0, 20, '#001', 1), st('s3', 30, '#001', 1, { from: 's2' }), en('s3', 30, 40, '#001', 1, { from: 's2' }), st('s2', 50, '#002', 2)], CFG2, { now: at(60) }).find(x => x.unit === 1);
+  const ph = LE.unitPhotos(prow, [cap(35, { station: 's3' }), cap(5), cap(10, { unit: 2 }), cap(25), cap(15, { unit: 1 }), cap(32, { station: 's3', unit: 2 }), cap(55)]);
+  check('unitPhotos: stamped by unit, unstamped by station and window, in time order', ph.map(c => c.path).join() === 'p5,p15,p35', ph.map(c => c.path).join());
+  check('unitPhotos: an open window runs on, no row or no captures gives none', LE.unitPhotos(null, [cap(1)]).length === 0 && LE.unitPhotos(prow, []).length === 0 && LE.unitPhotos(prow, undefined).length === 0);
+
+  // C6: tracked-units.csv video columns.
+  const tcsv = LE.trackedUnitsCsv([st('s2', 0, '#001', 1), en('s2', 0, 10, '#001', 1), st('s3', 20, '#001', 1, { from: 's2' }), en('s3', 20, 30, '#001', 1, { from: 's2' }), st('s2', 40, '#002', 2)], CFG2, { id: 'x', crew: 'A', shift: 'Day' }).trim().split('\n');
+  const hdr = tcsv[0].split(','), c1 = tcsv[1].split(','), c2 = tcsv[2].split(',');
+  check('tracked-units: header gains <id>_video_file and <id>_video_t, units carry file and start time (open unit too)', hdr.includes('s2_video_file') && hdr.includes('s2_video_t') && hdr.includes('s3_video_file') && hdr.includes('s3_video_t') && c1[hdr.indexOf('s2_video_file')] === 's2.mp4' && c1[hdr.indexOf('s2_video_t')] === '0' && c1[hdr.indexOf('s3_video_file')] === 's3.mp4' && c1[hdr.indexOf('s3_video_t')] === '20' && c2[hdr.indexOf('s2_video_file')] === 's2.mp4' && c2[hdr.indexOf('s2_video_t')] === '40' && c2.length === hdr.length, tcsv.join(' / '));
 }
 
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
