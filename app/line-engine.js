@@ -1401,12 +1401,13 @@
     // C2: with a tracked S3 station the line count comes from the one board result (lineUnits rows through lineUnitStats), the same numbers as the board's
     // tiles and alerts: done = complete at S3, an unlinked or flagged unit is to review (not done), and after Stop (opts.stopped) nothing is in progress.
     // No tracked S3 station (or none with unit events): the old event count stays.
-    const trackedS3 = config.stations.filter(s => unitTrackerOn(s) && (s.unitTracker.from || (s.role || s.id) === DONE_ROLE) && sorted.some(e => e.type === 'unit' && e.station === s.id));   // a session with no unit events (recorded before the tracker) keeps the cycle count
+    const trackedS3 = config.stations.filter(s => unitTrackerOn(s) && (s.unitTracker.from || (s.role || s.id) === DONE_ROLE));
+    const anyTracked = config.stations.some(s => unitTrackerOn(s) && sorted.some(e => e.type === 'unit' && e.station === s.id));   // a session with no unit events (recorded before the tracker) keeps the cycle count
     let tr = null;
-    if (trackedS3.length) {
+    if (anyTracked) {
       const rows = lineUnits(sorted, config, { now, stopped: !!o.stopped }), st = lineUnitStats(rows, { now });
       tr = { rows, st };
-      units = st.done;
+      if (trackedS3.length) units = st.done;
     }
     // Units in progress (WIP): started at the first station in flow order and not yet done at S3. A unit being worked on counts as started.
     const wip = [];
@@ -1436,7 +1437,7 @@
           if (g) { if (r.stage === 'waiting_s3') g.waitingForNext++; else g.working++; }
         }
         wipStarted = tr.rows.length;
-        wipUnits = wipUnknown.length ? null : (o.stopped ? 0 : tr.st.inProgress.total);
+        wipUnits = o.stopped ? 0 : tr.st.inProgress.total;   // tracker mode: the rows decide, wipUnknown (legacy count) does not
       }
     }
     // Work in progress counts units (a station with perUnit 3 hands over one unit every 3 cycles), between stages.
