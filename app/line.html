@@ -305,6 +305,40 @@ button.chip:hover { border-color: var(--warn-ink); }
   .unitbox .urow { display: grid; grid-template-columns: 3.4em 4.5em minmax(0, 1fr); gap: 6px; padding: 2px 6px; border-radius: 4px; background: color-mix(in srgb, currentColor 6%, transparent) }
   .unitbox .urow.review { outline: 1px solid var(--crit, #c0392b) }
   .unitchip { font-weight: 700 }
+  /* units board (layout A): tiles, alerts, station cards with the queue, the units table */
+  .board { display: grid; gap: 8px }
+  .board .sum-row { border: 0 }
+  .bd-tiles { display: flex; flex-wrap: wrap }
+  .bd-tiles .sum-tile { flex: 1 1 150px }
+  .bd-tiles .sum-tile:last-child { border-right: 0 }
+  .bd-tiles .v small { font-size: 12px; font-weight: 500; color: var(--muted); margin: 0 4px 0 2px }
+  .bd-btl { font-weight: 700; color: var(--crit-ink) }
+  .bd-alerts { display: grid; gap: 4px }
+  .bd-alert { display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-radius: 6px; border: 1px solid color-mix(in srgb, var(--crit) 55%, transparent); background: color-mix(in srgb, var(--crit) 10%, var(--surface)); color: var(--crit-ink); font-weight: 600; font-size: 13.5px }
+  .bd-alert.stuck { border-color: color-mix(in srgb, var(--warn) 70%, transparent); background: color-mix(in srgb, var(--warn) 14%, var(--surface)); color: var(--warn-ink) }
+  .bd-alert span { flex: 1 1 auto; min-width: 0 }
+  .bd-cards { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; align-items: center }
+  .bd-card { padding: 10px 14px; border-left: 4px solid var(--line-2); display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; flex-wrap: wrap }
+  .bd-card.s2 { border-left-color: #3b82b0 } .bd-card.s3 { border-left-color: #7060d0 }
+  .bd-card .big { font-size: 28px; font-weight: 700; line-height: 1.1 }
+  .bd-card .tm { font-family: var(--f-mono); font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums }
+  .bd-card .nm { font-size: 12.5px; color: var(--muted) }
+  .bd-card .tm.over { color: var(--warn-ink) }
+  .bd-queue { text-align: center; font-size: 12px; color: var(--muted); min-width: 84px }
+  .bd-queue b { display: block; font-size: 20px; font-family: var(--f-mono); color: var(--ink) }
+  .wrap.hasboard { max-height: 80vh }
+  .bd-tbl { overflow-x: auto }
+  .bd-tbl table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 640px }
+  .bd-tbl th { text-align: left; padding: 6px 10px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); background: var(--surface); border-bottom: 1px solid var(--line) }
+  .bd-tbl td { padding: 6px 10px; border-bottom: 1px solid var(--line); font-family: var(--f-mono); font-variant-numeric: tabular-nums }
+  .bd-tbl td.t, .bd-tbl td.m { font-family: var(--f-ui) }
+  .bd-tbl tr.rv td { background: color-mix(in srgb, var(--crit) 9%, var(--surface)) }
+  .bd-tbl tr.rv td:first-child { box-shadow: inset 4px 0 0 var(--crit) }
+  .bd-tbl .no { font-weight: 700; font-size: 15px }
+  .bd-tbl .bad { color: var(--crit-ink); font-weight: 600 }
+  .bd-tbl .btn { padding: 2px 10px }
+  .bd-empty { padding: 10px 14px; color: var(--muted); font-size: 13px }
+  @media (max-width: 700px) { .bd-cards { grid-template-columns: 1fr } .bd-queue { display: flex; gap: 8px; align-items: baseline; justify-content: center } .bd-queue b { display: inline } }
 </style>
 </head>
 <body>
@@ -384,6 +418,13 @@ button.chip:hover { border-color: var(--warn-ink); }
     </div>
     <div class="flow" id="sFlow"></div>
   </section>
+
+  <section class="board" id="board" aria-label="Units board" hidden>
+    <div class="panel bd-tiles" id="bdTiles"></div>
+    <div class="bd-alerts" id="bdAlerts" role="status"></div>
+    <div class="bd-cards" id="bdCards"></div>
+    <div class="panel bd-tbl" id="bdTbl"></div>
+  </section>
 </div>
 
 <main class="floor" id="floor" aria-label="Floor: the stations where they stand">
@@ -423,6 +464,7 @@ button.chip:hover { border-color: var(--warn-ink); }
 <script src="/vendor/qrcode.js"></script>
 <script src="/line-engine.js"></script>
 <script src="/live-detect.js"></script>
+<script src="/unit-record.js"></script>
 <script>
 (() => {
   'use strict';
@@ -1785,6 +1827,8 @@ button.chip:hover { border-color: var(--warn-ink); }
       model: m && G.modelOn && st.mdl ? Object.assign({ file: m.file }, m.version != null ? { version: m.version } : {}) : undefined,
       standard: stdAt || undefined, operator: st.op ? { code: st.op.code, level: st.op.level } : undefined
     };
+    const cu = st.ut ? st.ut.state().unit : null;    // contract C4: the unit in front of this camera, when there is one
+    if (Number.isInteger(cu)) body.unit = cu;
     if (st.rec && st.rec.startedAt && t >= st.rec.startedAt) { body.videoT = Math.round((t - st.rec.startedAt) / 10) / 100; body.videoFile = st.rec.file; }
     // Count it now so a burst cannot pass the caps; give it back if the server did not keep it.
     c.n++; G.capTotal++; c.lastAt = t; G.capBusy++;
@@ -1928,7 +1972,7 @@ button.chip:hover { border-color: var(--warn-ink); }
       if (!r.ok) throw new Error(j.message || r.status);
       for (const st of LIST) if (st.rec) await stopRecording(st);
       G.session = { id: j.id, startedAtMs: j.startedAtMs, title: info.title, crew: info.crew, shift: info.shift, parts: {} };
-      G.events = []; G.queue = []; G.evSeen = -1;
+      G.events = []; G.queue = []; G.evSeen = -1; G.lastBoard = null;
       LIST.forEach(clearStation);
       capReset(j.startedAtMs);
       if (G.failPick) closeFail(true);
@@ -1956,6 +2000,7 @@ button.chip:hover { border-color: var(--warn-ink); }
       for (const st of LIST) { if (st.ut) st.ut.stop(now()).forEach(emit); st.eng.flush().forEach(emit); }
       await Promise.all(LIST.map(st => stopRecording(st)));
       emit({ type: 'session_end', t: now(), source: 'page' });
+      { const tn = now(); G.lastBoard = { sid: sess.id, now: tn, runStart: sess.startedAtMs, rows: LE.lineUnits(G.events, G.config, { now: tn }) }; }    // the board stays on screen after Stop, and its rows still open
       for (let i = 0; i < 20 && G.queue.length; i++) { await sendEvents(); if (G.queue.length) await sleep(300); }
       const r = await fetch('/api/sessions/' + sess.id + '/end', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       const doc = await r.json();
@@ -2180,6 +2225,70 @@ button.chip:hover { border-color: var(--warn-ink); }
     const mm = L.mismatches ? `<span class="chip crit">${L.mismatches} mismatch</span>` : '';
     $('sFails').innerHTML = (G.score ? 'Fails: ' + (causes.length ? esc(causes.join(', ')) : 'none') : 'Turn on Score the cameras to log reasons') + mm;
   }
+  // ---------- units board (layout A): tiles, alerts, a card per station with the queue between, every unit below ----------
+  const BD_STAGE = { s2: ['S2', ''], waiting_s3: ['Waiting for S3', 'warn'], s3: ['S3', ''], done: ['Done', 'good'], needs_review: ['Needs review', 'crit'] };
+  const bdClock = v => { if (v == null || !isFinite(v)) return '--'; const n = Math.round(v); return Math.floor(n / 60) + ':' + String(n % 60).padStart(2, '0'); };
+  function boardStations() {
+    const tr = ((G.config && G.config.stations) || []).filter(LE.unitTrackerOn);
+    const down = tr.filter(x => x.unitTracker.from || (x.role || x.id) === 's3');
+    return { any: tr.length > 0, s2: tr.find(x => down.indexOf(x) < 0) || null, s3: down[0] || null };
+  }
+  // The board's source: the live events, or the snapshot taken when the session stopped.
+  function boardSource(t) {
+    if (!G.session && G.lastBoard) return G.lastBoard;
+    const first = G.events.length ? G.events.reduce((m, e) => (e.t < m ? e.t : m), Infinity) : null;
+    const runStart = G.session ? G.session.startedAtMs : first;
+    return { sid: G.session ? G.session.id : null, now: t, runStart, rows: LE.lineUnits(G.events, G.config, { now: t }) };
+  }
+  function renderBoard(t) {
+    const sts = boardStations(), src = boardSource(t), on = sts.any || !!(src.rows && src.rows.length);
+    $('board').hidden = !on;
+    for (const id of ['sUnits', 'sWip', 'sUph']) $(id).closest('.sum-tile').hidden = on;   // the board's own tiles replace the older ones
+    document.querySelector('.wrap').classList.toggle('hasboard', on);
+    if (!on) return;
+    const rows = src.rows, stats = LE.lineUnitStats(rows, { now: src.now, runStart: src.runStart });
+    G.board = { rows, sid: src.sid };
+    const ip = stats.inProgress, bits = [['s2', 'at S2'], ['waiting_s3', 'waiting for S3'], ['s3', 'at S3'], ['needs_review', 'to review']].filter(x => ip[x[0]]).map(x => ip[x[0]] + ' ' + x[1]);
+    const st = stats.stations, tile = (e, v, sub) => `<div class="sum-tile"><div class="eyebrow">${e}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`;
+    $('bdTiles').innerHTML =
+      tile('Units done', stats.done, 'done at S3') +
+      tile('Units in progress', ip.total, esc(bits.join(', ') || 'none right now')) +
+      tile('Average per unit', bdClock(stats.avgUnitSec), 'S2 start to S3 done') +
+      tile('Stations', `<small>S2</small>${bdClock(st.s2.avgSec)} <small>S3</small>${bdClock(st.s3.avgSec)}`, 'average per station' + (stats.bottleneck ? `, slower: <span class="bd-btl">${stats.bottleneck.toUpperCase()}</span>` : '')) +
+      tile('Units per hour', stats.unitsPerHour == null ? '--' : Math.round(stats.unitsPerHour), stats.unitsPerHour == null ? 'after the first minute' : 'since start') +
+      tile('Done right first time', stats.rightFirstTime.pct == null ? '--' : stats.rightFirstTime.pct + '%', stats.rightFirstTime.pct == null ? 'no unit done yet' : stats.rightFirstTime.n + ' of ' + stats.rightFirstTime.of);
+    $('bdAlerts').innerHTML = stats.alerts.map(a => `<div class="bd-alert ${a.kind === 'stuck' ? 'stuck' : ''}"><span>${esc(a.message)}</span><button class="btn sm" type="button" data-open="${esc(a.no)}">Open ${esc(a.no)}</button></div>`).join('');
+    // station cards: the unit in front of each station now, and how many wait between them
+    const at = k => rows.find(r => r.stage === k), queue = ip.waiting_s3;
+    const card = (k, stn) => {
+      const r = at(k), name = stn ? stn.name || stn.id : k.toUpperCase(), info = r && r[k], step = info && info.steps && info.steps.length ? info.steps[info.steps.length - 1].label : '';
+      const takt = G.config.taktSec, over = r && takt && r.stageSec > takt;
+      return `<div class="panel bd-card ${k}"><div><div class="eyebrow">Station ${k.toUpperCase()}${stn && stn.name && stn.name.toUpperCase() !== k.toUpperCase() ? ' &middot; ' + esc(stn.name) : ''}</div>` +
+        (r ? `<div class="big">${esc(r.no)}</div><div class="nm">${esc(step ? 'now: ' + step : 'time in stage')}</div>` : `<div class="nm" style="margin-top:6px">Waiting for a unit</div>`) + '</div>' +
+        (r ? `<div style="text-align:right"><div class="tm${over ? ' over' : ''}">${bdClock(r.stageSec)}</div><div class="nm">time in stage</div></div>` : '<div class="tm">--</div>') + '</div>';
+    };
+    $('bdCards').innerHTML = card('s2', sts.s2) + `<div class="bd-queue"><span>waiting for S3</span><b>${queue}</b></div>` + card('s3', sts.s3);
+    // the table, problems first (the order lineUnits returns)
+    const mk = r => ['s2', 's3'].flatMap(k => ((r.mistakes && r.mistakes[k]) || []).map(m => k.toUpperCase() + ': ' + (m.message || (m.code ? m.code.replace(/_/g, ' ') : 'mistake'))));
+    const body = rows.map((r, i) => {
+      const sg = BD_STAGE[r.stage] || [r.stage, ''], m = mk(r);
+      return `<tr class="${r.needsReview ? 'rv' : ''}"><td class="no">${esc(r.no)}</td><td class="t"><span class="chip ${sg[1]}">${sg[0]}</span></td><td>${r.stage === 'done' ? '--' : bdClock(r.stageSec)}</td><td>${bdClock(r.s2Sec)}</td><td>${bdClock(r.s3Sec)}</td>` +
+        `<td class="m ${m.length ? 'bad' : ''}">${m.length ? esc(m.join('; ')) : 'none'}</td><td><button class="btn sm" type="button" data-open="${esc(r.no)}" aria-label="Open unit ${esc(r.no)}">Open</button></td></tr>`;
+    }).join('');
+    $('bdTbl').innerHTML = rows.length ? `<table><thead><tr><th>Unit</th><th>Stage</th><th>Time in stage</th><th>S2</th><th>S3</th><th>Mistakes</th><th></th></tr></thead><tbody>${body}</tbody></table>`
+      : '<div class="bd-empty">No units yet. Each unit shows here once it is in front of a station camera.</div>';
+  }
+  async function openUnit(no) {
+    const b = G.board, row = b && b.rows.find(r => r.no === no);
+    if (!row) return;
+    UnitRecord.open(row, { sessionId: b.sid, captures: [] });
+    if (!b.sid) return;
+    try {
+      const j = await (await fetch('/api/sessions/' + encodeURIComponent(b.sid) + '/captures', { cache: 'no-store' })).json();
+      UnitRecord.setPhotos(row, j.captures || [], b.sid);
+    } catch (e) { /* the record stays without photos */ }
+  }
+  document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-open]'); if (b && $('board').contains(b)) openUnit(b.dataset.open); });
   function renderSession() {
     const on = !!G.session;
     $('sessLive').hidden = !on; $('btnStop').hidden = !on; $('btnStart').hidden = on;
@@ -2214,6 +2323,7 @@ button.chip:hover { border-color: var(--warn-ink); }
       G.summary = LE.summarize(G.events, G.config, { now: t, basis: G.score ? G.basis : 'detected' });
       G.evSeen = G.events.length; G.sumAt = t;
       renderSummary(G.summary);
+      renderBoard(t);
       if (G.score) renderKeyCounts();
     }
     for (const st of LIST) renderStation(st, G.summary, t);
