@@ -413,6 +413,17 @@ try {
     const review = (id, o) => req('POST', `/api/sessions/${id}/review`, o, jsonHdr);
     const T = path.join(DATA, 'training', 's2');
 
+    // unit stamp on captures (C4): own session and caps, restored after
+    setCap({ maxPerSession: 50, maxPerStation: 30, reviewDays: 7, mediaCapMB: 1024 });
+    const SU = await mk({ s2: { input: 'clip' } }), unitIds = {};
+    const noUnit = await post(SU);
+    for (const [k, v] of [['good', 42], ['str', '7'], ['float', 3.5], ['zero', 0], ['big', 100000], ['max', 99999], ['min', 1]]) { const r = await post(SU, { unit: v }); unitIds[k] = r.json && r.json.id; }
+    setCap({ maxPerSession: 5, maxPerStation: 3, reviewDays: 7, mediaCapMB: 1024 });
+    const lu = (await req('GET', `/api/sessions/${SU}/captures`)).json.captures, un = k => lu.find(c => c.id === unitIds[k]);
+    check('unit 42, 1 and 99999 are kept on the record and in the list', !!unitIds.good && un('good').unit === 42 && un('min').unit === 1 && un('max').unit === 99999, JSON.stringify(lu.map(c => [c.id, c.unit])));
+    check('a string, a float, 0 and 100000 are dropped without an error (all 200)', ['str', 'float', 'zero', 'big'].every(k => unitIds[k] && !('unit' in un(k))) && !('unit' in lu.find(c => c.id === noUnit.json.id)), JSON.stringify(unitIds));
+    check('the stored captures.jsonl line has unit 42 and no unit key when dropped', lines(path.join(sdir(SU), 'captures.jsonl')).filter(c => c.unit === 42).length === 1 && lines(path.join(sdir(SU), 'captures.jsonl')).filter(c => 'unit' in c).length === 3);
+
     const c1 = await post(SA);
     check('POST captures stores the frame, appends a meta line without the image, and returns c0001', c1.status === 200 && c1.json.id === 'c0001' && fs.readFileSync(path.join(sdir(SA), 'captures', 'c0001.jpg')).equals(jpegBuf(300)), c1.text);
     const m1 = lines(path.join(sdir(SA), 'captures.jsonl'));

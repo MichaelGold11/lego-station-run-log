@@ -103,8 +103,10 @@
     let qa = { passed: 0, failed: 0, defectFails: 0 }, wipAtEnd = null;
     try { const s = LineEngine.summarize(input.events || [], config); qa = { passed: s.line.passed, failed: s.line.failed, defectFails: s.line.defectFails }; wipAtEnd = s.line.wipUnits == null ? null : s.line.wipUnits; } catch (e) { /* keep zeros */ }
     const order = (doc.layout && Array.isArray(doc.layout.stations)) ? doc.layout.stations.slice().sort((a, b) => (a.order || 0) - (b.order || 0)).map(s => s.id).filter(s => stIds.includes(s)) : stIds;
+    let units = [];
+    try { units = LineEngine.lineUnits(input.events || [], config, { now: sorted.length ? sorted[sorted.length - 1].t : 0 }); } catch (e) { /* keep none */ }
     return {
-      id, title: doc.title || id, startedAtMs: doc.startedAtMs || (sorted[0] && sorted[0].t) || 0, endedAtMs: doc.endedAtMs || null,
+      id, units, title: doc.title || id, startedAtMs: doc.startedAtMs || (sorted[0] && sorted[0].t) || 0, endedAtMs: doc.endedAtMs || null,
       layoutName: doc.layout && doc.layout.name || null, order, stations, observations, qa, wipAtEnd
     };
   }

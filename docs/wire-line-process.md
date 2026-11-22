@@ -525,6 +525,8 @@ Priority when several are due: manual, unsure, cycle_end, cycle_start, claim, st
 except a manual one. Caps per session: `capture.maxPerSession` in total and `capture.maxPerStation`
 per station; the server refuses over the cap with `capture_limit`.
 
+**Unit stamp.** A capture may carry `unit`, the unit number the page was tracking at that station when it took the frame. The server keeps it on the `captures.jsonl` record only when it is a whole number from 1 to 99999; anything else (text, a decimal, 0, 100000 or more) is dropped without an error. `GET .../captures` returns it unchanged.
+
 **Setup switch and privacy.** Setup has a **Capture frames** checkbox. This laptop remembers it
 (`wire-line:capture` in the browser); until someone touches it, `capture.enabled` in the config
 decides (default on). Capture only happens while a session records. Frames are full camera pictures
@@ -588,7 +590,7 @@ All on the localhost server, with the same Host and Origin checks as the rest of
 
 | Endpoint | What |
 |---|---|
-| `POST /api/sessions/<id>/captures` | one capture: JSON with the metadata and `image` as a `data:image/jpeg;base64,` string (body up to 600 KB, JPEG up to 400 KB). Returns `{ id }` |
+| `POST /api/sessions/<id>/captures` | one capture (optional `unit`, a whole number 1 to 99999, else dropped): JSON with the metadata and `image` as a `data:image/jpeg;base64,` string (body up to 600 KB, JPEG up to 400 KB). Returns `{ id }` |
 | `GET /api/sessions/<id>/captures` | all captures, each with its latest `review`, and the session's `split` |
 | `GET /api/sessions/<id>/captures/<cid>.jpg` | the frame |
 | `GET /api/sessions/<id>/captures/<cid>.mp4` | the 7 s clip (cut with ffmpeg and cached in `clips/`; 404 `no_video` with no recording, 503 without ffmpeg) |
