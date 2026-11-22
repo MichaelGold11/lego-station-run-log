@@ -386,5 +386,15 @@ console.log('\nline units: one row per unit across S2 and S3');
   check('tracked-units: header gains <id>_video_file and <id>_video_t, units carry file and start time (open unit too)', hdr.includes('s2_video_file') && hdr.includes('s2_video_t') && hdr.includes('s3_video_file') && hdr.includes('s3_video_t') && c1[hdr.indexOf('s2_video_file')] === 's2.mp4' && c1[hdr.indexOf('s2_video_t')] === '0' && c1[hdr.indexOf('s3_video_file')] === 's3.mp4' && c1[hdr.indexOf('s3_video_t')] === '20' && c2[hdr.indexOf('s2_video_file')] === 's2.mp4' && c2[hdr.indexOf('s2_video_t')] === '40' && c2.length === hdr.length, tcsv.join(' / '));
 }
 
+// C2 Q2 (unit-board S4): after Stop the flow strip shows the stopped run's summary, the same run the frozen board shows.
+{
+  const html = fs.readFileSync(new URL('../app/line.html', import.meta.url), 'utf8');
+  const stop = html.split('\n').find(l => l.includes('G.lastBoard = {') && l.includes('sid: sess.id')) || '';
+  const rd = html.slice(html.indexOf('function render() {'), html.indexOf('setInterval(render, 250)'));
+  check('C2 Q2: Stop keeps the run summary in the snapshot beside the board rows', /rows: LE\.lineUnits\(/.test(stop) && /summary: LE\.summarize\(G\.events/.test(stop), stop.trim().slice(0, 120));
+  check('C2 Q2: render() uses the kept summary while there is no session, else summarizes live', /G\.summary = \(!G\.session && G\.lastBoard && G\.lastBoard\.summary\) \|\| LE\.summarize\(/.test(rd));
+  check('C2 Q2: the next Start clears the snapshot', /G\.events = \[\]; G\.queue = \[\]; G\.evSeen = -1; G\.lastBoard = null;/.test(html));
+}
+
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);
