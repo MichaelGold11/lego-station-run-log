@@ -25,3 +25,5 @@ training/*/frames/
 training/*/*.zip
 data/server.log
 data/server.pid
+# Vendor files fetched once from the CDN when node_modules is missing (server.mjs).
+data/cache/
