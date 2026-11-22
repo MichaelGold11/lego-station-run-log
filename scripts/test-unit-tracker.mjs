@@ -371,9 +371,9 @@ console.log('\nline units: one row per unit across S2 and S3');
     const zH = [st('s2', 0, '#001', 1), sbz('s2', 1, 's2_arrive', 'start'), en('s2', 0, 10, '#001', 1), st('s2', 10, '#002', 2), sbz('s2', 10, 's2_arrive', 'start'), vz('s2', 10, 'mistake', 'x')];
     const hr = LE.lineUnits(zH, CFG2, { now: at(15) }), h1 = hr.find(x => x.unit === 1), h2 = hr.find(x => x.unit === 2);
     check('C1 4: a closed window is [start, end): the step and the verdict at the shared instant belong to the next unit', h1.s2.steps.length === 1 && h1.s2.steps[0].start === at(1) && h2.s2.steps.length === 1 && h2.s2.steps[0].start === at(10) && h1.s2.messages.length === 0 && h2.s2.messages.length === 1);
-    // C1 6: stuck compares with the unrounded mean. s2 times 10, 10, 11 -> mean 10.333, shown 10.3; 2x = 20.67; stage 20.5 is not stuck, 20.8 is.
+    // C1 6: stuck compares with the unrounded mean. s2 times 10, 10, 11 -> mean 10.333, shown 10.3; 2x = 20.67; stage 20.65 is not stuck (a rounded 10.3 would say stuck), 20.8 is.
     const zS = [st('s2', 0, '#001', 1), en('s2', 0, 10, '#001', 1), st('s2', 10, '#002', 2), en('s2', 10, 20, '#002', 2), st('s2', 20, '#003', 3), en('s2', 20, 31, '#003', 3), st('s2', 31, '#004', 4)];
-    const sa = LE.lineUnitStats(LE.lineUnits(zS, CFG2, { now: at(51.5) }), { now: at(51.5) }), sb2 = LE.lineUnitStats(LE.lineUnits(zS, CFG2, { now: at(51.8) }), { now: at(51.8) });
+    const sa = LE.lineUnitStats(LE.lineUnits(zS, CFG2, { now: at(51.65) }), { now: at(51.65) }), sb2 = LE.lineUnitStats(LE.lineUnits(zS, CFG2, { now: at(51.8) }), { now: at(51.8) });
     check('C1 6: stuck uses the unrounded average, only the shown avgSec is rounded', sa.stations.s2.avgSec === 10.3 && sa.alerts.length === 0 && sb2.alerts.length === 1 && sb2.alerts[0].kind === 'stuck', JSON.stringify([sa.alerts, sb2.alerts]));
     // W1 nit 4: alerts name the unit as the table does.
     check('W1 nit 4: alert messages use the table label (#001), not Unit 1', za[0].message.startsWith('Unit #001 at S2') && !/Unit 1\b/.test(za[0].message));
