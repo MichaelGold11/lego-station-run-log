@@ -1219,6 +1219,10 @@ console.log('\nline units after Stop (C1)');
   // Finding 1 (engine side): a unit that ended incomplete at S3 never counts as done at S3 in summarize.
   const ev3 = [st('s2', 0, '#001', 1), en('s2', 0, 20, '#001', 1), st('s3', 30, '#001', 1, { from: 's2' }), en('s3', 30, 50, '#001', 1, { result: 'incomplete', needsReview: true, ended: 'session_stopped' }), { type: 'session_end', t: at(60) }];
   const sm = LE.summarize(ev3, CFG2).line, row3 = LE.lineUnits(ev3, CFG2, { now: at(60), stopped: true })[0];
+  // C1 codex must-fix: an unlinked unit whose S3 part ended complete stays needs_review with result complete after Stop.
+  const ev4 = [st('s3', 30, '#007', 7), en('s3', 30, 50, '#007', 7, { unlinked: true, needsReview: true })];
+  const row4 = LE.lineUnits(ev4, CFG2, { now: at(60), stopped: true }), st4 = LE.lineUnitStats(row4, { now: at(60), runStart: T0 });
+  check('C1 codex must-fix: unlinked S3-complete row after Stop stays needs_review, result complete, incomplete 0', row4[0].stage === 'needs_review' && row4[0].result === 'complete' && st4.incomplete === 0, JSON.stringify([row4[0].stage, row4[0].result, st4.incomplete]));
   check('finding 1: summarize counts no unit done when S3 ended it incomplete, and its row is incomplete after Stop', sm.units === 0 && row3.stage === 'incomplete' && row3.cutOff === true, JSON.stringify([sm.units, row3.stage]));
 }
 
