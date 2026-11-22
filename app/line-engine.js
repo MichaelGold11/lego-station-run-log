@@ -1143,8 +1143,10 @@
         .map(v => ({ kind: v.kind, code: v.reason || null, message: v.message || null, t: v.t, videoT: v.videoT != null ? v.videoT : null, videoFile: v.videoFile || null }));
       // Steps: the station's substep events inside the window (repeats left out); a step runs to the next one, the last to the window end.
       const stCfg = tr.find(x => x.id === r.station), label = id => { const s = ((stCfg && stCfg.substeps) || []).find(x => x.id === id); return s ? s.label : id; };
-      const evs = sorted.filter(e => e.type === 'substep' && e.station === r.station && e.move !== 'repeat' && e.t >= r.start && e.t <= hi);
-      const steps = evs.map((e, i) => { const nx = i + 1 < evs.length ? evs[i + 1].t : hi; return { key: e.substep, label: label(e.substep), start: e.t, end: nx, sec: sec(e.t, nx) }; });
+      const evs = sorted.filter(e => e.type === 'substep' && e.station === r.station && e.move !== 'repeat' && e.t >= r.start && (r.end != null ? e.t < r.end : e.t <= hi));
+      // Consecutive events with the same step key are one step (W1 1): start of the first, end of the last.
+      const grp = []; for (const e of evs) { if (grp.length && grp[grp.length - 1].substep === e.substep) continue; grp.push(e); }
+      const steps = grp.map((e, i) => { const nx = i + 1 < grp.length ? grp[i + 1].t : hi; return { key: e.substep, label: label(e.substep), start: e.t, end: nx, sec: sec(e.t, nx) }; });
       return { station: r.station, start: r.start, end: r.end, sec: sec(r.start, hi), result: r.result, ended: r.ended, steps, mistakes: msgs.filter(m => m.kind === 'mistake').length, reviews: msgs.filter(m => m.kind === 'review').length, messages: msgs,
         videoFile: r.videoFile, videoT: r.videoT, videoEndT: r.videoEndT };
     };
@@ -1175,24 +1177,25 @@
     const inProgress = { total: 0, s2: 0, waiting_s3: 0, s3: 0, needs_review: 0 };
     for (const r of list) if (r.stage !== 'done') { inProgress[r.stage]++; inProgress.total++; }
     const done = list.filter(r => r.stage === 'done');
-    const avg = a => (a.length ? round(a.reduce((x, y) => x + y, 0) / a.length, 1) : null);
+    const mean = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null), avg = a => (a.length ? round(mean(a), 1) : null);
     const times = k => list.map(r => r[k]).filter(x => x && x.end != null && x.result !== 'incomplete' && isNum(x.sec)).map(x => x.sec);
     const stations = { s2: { avgSec: avg(times('s2')), n: times('s2').length }, s3: { avgSec: avg(times('s3')), n: times('s3').length } };
+    const trueAvg = { s2: mean(times('s2')), s3: mean(times('s3')) };   // unrounded, for the stuck test (C1 6)
     const bottleneck = stations.s2.n && stations.s3.n && stations.s2.avgSec !== stations.s3.avgSec ? (stations.s2.avgSec > stations.s3.avgSec ? 's2' : 's3') : null;
     const el = now != null && runStart != null ? (now - runStart) / 1000 : null;
     const unitsPerHour = el != null && el >= 60 ? round(done.length / (el / 3600), 1) : null;
     const right = done.filter(r => ['s2', 's3'].every(k => !r[k] || (r[k].mistakes === 0 && r[k].reviews === 0)) && !r.needsReview).length;
     const rightFirstTime = { n: right, of: done.length, pct: done.length ? Math.round(100 * right / done.length) : null };
-    const al = { review: [], wrong_order: [], stuck: [] }, who = r => (r.unit != null ? r.unit : r.no), STN = { s2: 'S2', s3: 'S3' };
+    const al = { review: [], wrong_order: [], stuck: [] }, who = r => r.no, STN = { s2: 'S2', s3: 'S3' };
     for (const r of list) {
       if (r.needsReview) {
         const k = r.s3 && r.s3.result === 'incomplete' ? 's3' : r.s2 && r.s2.result === 'incomplete' ? 's2' : r.s3 ? 's3' : 's2';
         al.review.push({ kind: 'review', unit: r.unit, no: r.no, station: r[k].station, stage: r.stage, sec: r.stageSec, message: 'Unit ' + who(r) + ' needs review at ' + STN[k] });
       }
-      for (const k of ['s2', 's3']) for (const m of (r[k] ? r[k].messages : [])) if (m.code === 'wrong_order') {
+      if (r.stage !== 'done') for (const k of ['s2', 's3']) for (const m of (r[k] ? r[k].messages : [])) if (m.kind === 'mistake' && m.code === 'wrong_order') {
         al.wrong_order.push({ kind: 'wrong_order', unit: r.unit, no: r.no, station: r[k].station, stage: r.stage, sec: now != null ? round((now - m.t) / 1000, 1) : null, message: 'Unit ' + who(r) + ' at ' + STN[k] + ': ' + (m.message || 'wrong order') });
       }
-      if ((r.stage === 's2' || r.stage === 's3') && stations[r.stage].n >= 3 && isNum(r.stageSec) && r.stageSec > 2 * stations[r.stage].avgSec) {
+      if ((r.stage === 's2' || r.stage === 's3') && stations[r.stage].n >= 3 && isNum(r.stageSec) && r.stageSec > 2 * trueAvg[r.stage]) {
         const k = r.stage;
         al.stuck.push({ kind: 'stuck', unit: r.unit, no: r.no, station: r[k].station, stage: r.stage, sec: r.stageSec, message: 'Unit ' + who(r) + ' stuck at ' + STN[k] + ' for ' + Math.round(r.stageSec) + ' s, average ' + Math.round(stations[k].avgSec) + ' s' });
       }
@@ -1203,7 +1206,7 @@
   function unitPhotos(row, captures) {
     if (!row) return [];
     const wins = ['s2', 's3'].map(k => row[k]).filter(Boolean);
-    const inWin = c => wins.some(w => c.station === w.station && isNum(c.t) && c.t >= w.start && (w.end == null || c.t <= w.end));
+    const inWin = c => wins.some(w => c.station === w.station && isNum(c.t) && c.t >= w.start && (w.end == null ? (!isNum(w.sec) || c.t <= w.start + w.sec * 1000) : c.t < w.end));
     return (captures || []).filter(c => c && (c.unit != null ? row.unit != null && c.unit === row.unit : inWin(c))).map((c, i) => [c, i]).sort((a, b) => ((a[0].t || 0) - (b[0].t || 0)) || (a[1] - b[1])).map(x => x[0]);
   }
   function trackedUnitsCsv(events, config, meta) {
