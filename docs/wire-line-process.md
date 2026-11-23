@@ -257,8 +257,12 @@ Config (all optional):
   arrange bounced back and forth ten times in one unit, and the close never came).
 - `holdSec` on one member of an `anyOf`, default the rule's own `holdSec`: that member only counts
   after the rule has stayed on this long, the others at once. `s2_close` uses it: the `unit_complete`
-  check ends the cycle at once, a plain `connector_closed` at 0.75+ only after 3 s (the black-wire
-  pixel check misses on dark wood tables, where the black wire barely stands out).
+  check ends the cycle at once, a plain `connector_closed` at 0.65+ only after 3 s (the black-wire
+  pixel check misses on dark wood tables, where the black wire barely stands out). S2's model steps
+  (arrive, open, close) look at the whole view (`"zone": "frame"`), like S3's, so they work wherever
+  the operator holds the connector and do not depend on where the zones are drawn (2026-11-22: a
+  connector held above the work zone was never seen open or closed). Zones still drive the steps
+  when the model is off.
 - `mustStay` in a substep's model rule, default off:
   `"model": { "zone": "work", "class": "connector_closed", "mustStay": true }`. Once that substep
   is verified, its class must stay visible in its zone until the cycle ends. Off on every wire

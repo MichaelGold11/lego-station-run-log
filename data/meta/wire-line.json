@@ -58,10 +58,10 @@
       "arrival": "s2_arrive",
       "positionCheck": { "anchor": "work", "classes": ["red_wire", "white_wire", "black_wire"], "tolerance": 0.14 },
       "substeps": [
-        { "id": "s2_arrive", "label": "Wires arrive from S1", "zones": { "zone": "wires", "signal": "activity" }, "model": { "anyOf": [{ "zone": "wires", "class": "red_wire" }, { "zone": "wires", "class": "white_wire" }, { "zone": "wires", "class": "black_wire" }] } },
-        { "id": "s2_open", "label": "Open the lever connector", "once": true, "zones": { "zone": "connectors", "signal": "activity" }, "model": { "zone": "work", "class": "connector_open" }, "note": "Once per cycle: the connector stays open while the wires are arranged, so seeing it open again is not a repeat." },
+        { "id": "s2_arrive", "label": "Wires arrive from S1", "zones": { "zone": "wires", "signal": "activity" }, "model": { "anyOf": [{ "zone": "frame", "class": "red_wire" }, { "zone": "frame", "class": "white_wire" }, { "zone": "frame", "class": "black_wire" }] } },
+        { "id": "s2_open", "label": "Open the lever connector", "once": true, "zones": { "zone": "connectors", "signal": "activity" }, "model": { "zone": "frame", "class": "connector_open" }, "note": "Once per cycle: the connector stays open while the wires are arranged, so seeing it open again is not a repeat." },
         { "id": "s2_arrange", "label": "Arrange the wires: red top, white middle, black bottom", "after": "s2_open", "zones": { "zone": "wires", "signal": "activity" }, "model": null, "note": "Only after the connector was seen open: hands moving over the wires before that are not arranging." },
-        { "id": "s2_close", "label": "Close the levers on the wires", "after": "s2_open", "zones": { "zone": "work", "signal": "activity" }, "model": { "anyOf": [{ "zone": "work", "class": "unit_complete" }, { "zone": "work", "class": "connector_closed", "min": 0.75, "holdSec": 3 }] }, "note": "Done = the unit_complete check, or the connector closed at 0.75+ for 3 s after it was seen open (the black-wire pixel check misses on dark wood tables)." }
+        { "id": "s2_close", "label": "Close the levers on the wires", "after": "s2_open", "zones": { "zone": "work", "signal": "activity" }, "model": { "anyOf": [{ "zone": "frame", "class": "unit_complete" }, { "zone": "frame", "class": "connector_closed", "min": 0.65, "holdSec": 3 }] }, "note": "Done = the unit_complete check, or the connector closed at 0.65+ for 3 s after it was seen open (the black-wire pixel check misses on dark wood tables). The model steps look at the whole view (frame), like S3, so they do not depend on where the zones are drawn." }
       ]
     },
     {

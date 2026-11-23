@@ -10,6 +10,25 @@ const CFG = JSON.parse(fs.readFileSync(new URL('./fixtures/wire-line-v1.json', i
 const SHIPPED = JSON.parse(fs.readFileSync(new URL('../data/meta/wire-line.json', import.meta.url), 'utf8'));
 
 const FRAME = 125;   // the page samples each station at about 8 Hz
+
+// The page's model signals always carry a whole-view 'frame' zone (classSignals). Synthetic signals here often set a class
+// in one drawn zone only, so give them the frame zone the page would have: the best of each class over the zones.
+// A test that builds its own frame zone keeps it.
+{
+  const create = LE.createStation;
+  LE.createStation = (st, o) => {
+    const eng = create(st, o), update = eng.update, idle = eng.idle;
+    const withFrame = sig => {
+      if (!sig || sig.frame) return sig;
+      const fr = {};
+      for (const z of Object.keys(sig)) for (const k of Object.keys(sig[z] || {})) if (k.startsWith('class:')) fr[k] = Math.max(fr[k] || 0, sig[z][k]);
+      return Object.keys(fr).length ? Object.assign({}, sig, { frame: fr }) : sig;
+    };
+    eng.update = (sig, t) => update(withFrame(sig), t);
+    eng.idle = (sig, t) => idle(withFrame(sig), t);
+    return eng;
+  };
+}
 let fails = 0, passes = 0;
 function check(name, cond, extra) {
   if (cond) { passes++; console.log('  pass  ' + name); }
