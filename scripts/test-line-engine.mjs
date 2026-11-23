@@ -729,6 +729,17 @@ console.log('shipped process (v2, lever connectors, arrivals)');
   check('S2: wires sliding in from S1 start a cycle at "Wires arrive", not a skipped step', subsOf(s2slide) === 's2_arrive' && !flagsOf(s2slide), subsOf(s2slide) + ' / ' + flagsOf(s2slide));
   const s2skip = run('s2', ['wires', 'connectors', 'work']);
   check('S2: closing without arranging flags "skipped Arrange the wires..."', /skipped Arrange the wires/.test(flagsOf(s2skip)), flagsOf(s2skip));
+  // 2026-11-22 S2 run (Sony's table): open and arrange bounced back and forth, and the close never came on a dark wood table.
+  const s2bounce = run('s2', ['wires', 'connectors', 'wires', 'connectors', 'wires', 'connectors', 'wires', 'work']);
+  check('S2: the connector seen again while arranging is not "open" again (once), the cycle still ends at close', subsOf(s2bounce) === 's2_arrive,s2_open,s2_arrange,s2_close' && !s2bounce.some(e => e.move === 'repeat'), subsOf(s2bounce));
+  const S2M = LE.trackedClasses(SHIPPED.stations.find(s => s.id === 's2'), SHIPPED.models.s2.classes.slice());
+  const arrive = { wires: { activity: 0.5, 'class:red_wire': 0.9 } }, open = { work: { 'class:connector_open': 0.8 } }, arrange = { wires: { activity: 0.5 }, work: { 'class:connector_open': 0.8 } }, shut = { work: { 'class:connector_closed': 0.85 } };
+  const s2hand = run('s2', [{ wires: { activity: 0.5 } }, { wires: { activity: 0 } }, { wires: { activity: 0.5 } }], S2M);
+  check('S2 with its model: hands moving over the wires before the connector is open are not "arrange"', !/s2_arrange/.test(subsOf(s2hand)), subsOf(s2hand));
+  const s2closed = run('s2', [arrive, open, arrange, arrange, shut, shut, shut, shut, shut, shut, shut], S2M);
+  check('S2 with its model: a connector closed at 0.75+ for 3 s after it was open ends the cycle (dark tables)', s2closed.filter(e => e.type === 'cycle_end').length === 1 && subsOf(s2closed) === 's2_arrive,s2_open,s2_arrange,s2_close', subsOf(s2closed));
+  const s2brief = run('s2', [arrive, open, arrange, arrange, shut, shut, shut, shut, arrange], S2M);
+  check('S2 with its model: closed for only 2 s is not done', !s2brief.some(e => e.type === 'cycle_end'), subsOf(s2brief));
   const s3 = run('s3', ['work', 'connectors', 'wires', 'work']);
   check('S3: unit arrives, connector, black wire, insert; the cycle ends at insert with no flag', subsOf(s3) === 's3_arrive,s3_add_connector,s3_get_black,s3_insert' && s3.some(e => e.type === 'cycle_end' && e.substep === 's3_insert') && !flagsOf(s3), subsOf(s3) + ' / ' + flagsOf(s3));
   const S3M = SHIPPED.suggestedClasses.s3;
@@ -1127,7 +1138,10 @@ console.log('S2 false "step skipped" and WIP');
   check('221220 order: the arrival repeating mid-cycle before the close raises no skipped open or arrange', /s2_arrive:repeat,s2_close/.test(subs) && later.length === 0, subs + ' / ' + JSON.stringify(later.map(f => f.note)));
   const bad = play([[{}, 500], [ARRIVE, 500], [{}, 500], [ARR, 500], [{}, 500]]);
   const f = bad.filter(e => e.type === 'flag').map(e => e.note).join(' | ');
-  check('a real wrong order still flags: arrange with the connector never opened in this cycle', /skipped Open the lever connector/.test(f), f);
+  // Changed 2026-11-22: "arrange" waits for the connector to be seen open. Before, hands moving over the wires before
+  // opening raised a false "skipped Open" (2 per unit on the 2026-11-22 S2 run). Wires cannot go into a closed lever
+  // connector, and a close without an open still never ends the cycle, so the unit stays incomplete instead.
+  check('hands over the wires before the connector is open are not a wrong order: arrange waits for open', !/s2_arrange/.test(bad.filter(e => e.type === 'substep').map(e => e.substep).join()) && !/skipped Open the lever connector/.test(f), f);
   const bad2 = play([[{}, 500], [OPEN, 500], [{}, 500], [CLOSE, 500], [{}, 500]]);
   check('a real wrong order still flags: close without arranging', /skipped Arrange the wires/.test(bad2.filter(e => e.type === 'flag').map(e => e.note).join()));
   // Tracker gate: no unit in progress, no mistake from the checker; with one, the mistake shows.

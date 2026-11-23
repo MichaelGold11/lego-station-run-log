@@ -47,6 +47,14 @@
     return null;
   }
 
+  // How long a rule must stay on before it fires, given its member values now: a member's own holdSec, else the rule's.
+  function holdOf(rule, vals, defaults) {
+    const ms = members(rule);
+    let hs = Infinity;
+    ms.forEach((m, k) => { const x = vals && vals[k]; if (isNum(x) && x >= memberMin(m, defaults)) hs = Math.min(hs, isNum(m.holdSec) ? m.holdSec : (rule.holdSec || 0)); });
+    return hs === Infinity ? (rule.holdSec || 0) : hs;
+  }
+
   // ready: at least one member has its signal. ok: some member is at or over its min. v: the highest member value.
   function evalRule(rule, signals, defaults) {
     let ready = false, ok = false, v = 0;
@@ -99,12 +107,14 @@
             if (!zones[m.zone] && !(kind === 'model' && m.zone === FRAME_ZONE)) errs.push(sub.id + ' (' + kind + ' rule) uses zone "' + m.zone + '", which ' + st.id + ' does not have.');
             if (m.count != null && !(Number.isInteger(m.count) && m.count >= 1 && m.count <= 3)) errs.push(sub.id + ': count must be 1, 2 or 3.');
             if (kind === 'model' && !m.class) errs.push(sub.id + ': a model rule needs a class.');
+            if (m !== sub[kind] && m.holdSec != null && !(isNum(m.holdSec) && m.holdSec >= 0)) errs.push(sub.id + ': holdSec must be a number of seconds, 0 or more.');
             if (kind === 'zones' && m.signal && m.signal !== 'activity' && m.signal !== 'bright') errs.push(sub.id + ': signal "' + m.signal + '" is not activity or bright.');
           }
         }
         if (sub.model && sub.model.mustStay != null && typeof sub.model.mustStay !== 'boolean') errs.push(sub.id + ': mustStay must be true or false.');
         if (sub.after != null && !st.substeps.slice(0, st.substeps.indexOf(sub)).some(x => x.id === sub.after)) errs.push(sub.id + ': after must name an earlier substep of ' + st.id + '.');
         if (sub.optional != null && typeof sub.optional !== 'boolean') errs.push(sub.id + ': optional must be true or false.');
+        if (sub.once != null && typeof sub.once !== 'boolean') errs.push(sub.id + ': once must be true or false.');
         for (const kind of ['zones', 'model']) if (sub[kind] && sub[kind].holdSec != null && !(isNum(sub[kind].holdSec) && sub[kind].holdSec >= 0)) errs.push(sub.id + ': holdSec must be a number of seconds, 0 or more.');
         if (sub.standardSec != null && !(isNum(sub.standardSec) && sub.standardSec > 0)) errs.push(sub.id + ': standardSec must be a number of seconds above 0.');
       }
@@ -424,7 +434,9 @@
 
     // Forward moves need the rule held N frames. Going back (a repeat) and starting a cycle also need the rule
     // to have been off since we were last there, so a hand resting in a zone cannot bounce the state back and forth.
-    // The arrival substep counts once per cycle: once entered, it is never a repeat target until the next cycle.
+    // The arrival substep counts once per cycle: once entered, it is never a repeat target until the next cycle. So does a
+    // substep marked "once": S2's open connector stays open while the wires are arranged, and a hand passing over it
+    // must not read as opening it again (2026-11-22 S2 run: open and arrange bounced back and forth ten times a unit).
     // A substep with "after" waits until that earlier substep happened in this cycle. S2: the connector sits closed before
     // work starts, so seeing it closed only ends a cycle once it was seen open. If the earlier step cannot be seen at all
     // right now (its zone or signal is missing), nothing waits for it.
@@ -438,7 +450,7 @@
       for (const i of cands) {
         if (i === S.pos || waiting(i)) continue;
         if (S.pos < 0) { if (i !== endIdx && S.off[i] && (fwd == null || i < fwd)) fwd = i; continue; }
-        if (i > S.pos) { if (fwd == null || i < fwd) fwd = i; } else if (S.off[i] && !(i === arrIdx && S.arrived) && (back == null || i > back)) back = i;
+        if (i > S.pos) { if (fwd == null || i < fwd) fwd = i; } else if (S.off[i] && !(i === arrIdx && S.arrived) && !(subs[i].once && S.occ.some(o => o.id === subs[i].id)) && (back == null || i > back)) back = i;
       }
       return fwd != null ? fwd : back;
     }
@@ -497,7 +509,9 @@
         c.n++; c.sum += r.v;
         r.vals.forEach((x, k) => { c.msum[k] += x || 0; });
         // holdSec on a rule: it must also have stayed on this long (S3 model: two closed connectors for 3 s = unit done).
-        const hs = ar.rule.holdSec;
+        // holdSec on an anyOf member applies to that member only: the shortest hold among the members that are on now wins
+        // (S2 close: unit_complete counts at once, a plain closed connector only after 3 s).
+        const hs = holdOf(ar.rule, r.vals, defaults);
         if (c.n >= N && !(hs > 0 && t - c.t0 < hs * 1000)) cands.push(i);
       }
       const pick = choose(cands);

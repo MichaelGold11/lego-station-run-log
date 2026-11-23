@@ -248,7 +248,17 @@ Config (all optional):
 - `after` on a substep, default none: `"after": "s2_open"`. That substep cannot fire until the named
   earlier substep has happened in this cycle. `s2_close` uses it: the connector sits closed before
   work starts, so a closed connector only ends a cycle after it was seen open. If the earlier substep
-  cannot be seen at all (its zone or signal is missing), nothing waits for it.
+  cannot be seen at all (its zone or signal is missing), nothing waits for it. `s2_arrange` waits
+  for `s2_open` too: hands moving over the wires before the connector is open are not arranging
+  (2026-11-22: they raised two false "skipped Open" mistakes per unit).
+- `once` on a substep, default off: `"once": true`. Like the arrival step, it counts once per cycle and
+  is never a repeat target after that. `s2_open` uses it: the connector stays open while the wires
+  are arranged, so a hand passing over it must not read as opening it again (2026-11-22: open and
+  arrange bounced back and forth ten times in one unit, and the close never came).
+- `holdSec` on one member of an `anyOf`, default the rule's own `holdSec`: that member only counts
+  after the rule has stayed on this long, the others at once. `s2_close` uses it: the `unit_complete`
+  check ends the cycle at once, a plain `connector_closed` at 0.75+ only after 3 s (the black-wire
+  pixel check misses on dark wood tables, where the black wire barely stands out).
 - `mustStay` in a substep's model rule, default off:
   `"model": { "zone": "work", "class": "connector_closed", "mustStay": true }`. Once that substep
   is verified, its class must stay visible in its zone until the cycle ends. Off on every wire
