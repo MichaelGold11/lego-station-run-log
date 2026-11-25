@@ -229,6 +229,8 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&a
 const fmtT = t => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 const fmtD = t => new Date(t).toLocaleDateString([], { month: 'short', day: 'numeric' });
 const sid = id => String(id).toUpperCase();
+// Display code of a station: its floor name's S<n>, else the id. Links and routes keep using the id.
+const sl = id => { const st = S.model && S.model.stations.find(x => x.id === id); return st && st.code ? st.code : sid(id); };
 const pct = p => (p == null ? '–' : (p >= 0 ? p + '% slower' : -p + '% faster'));
 const dur = m => (m == null ? '' : m >= 60 ? Math.floor(m / 60) + 'h ' + (m % 60) + 'm' : m + 'm');
 
@@ -344,7 +346,7 @@ function viewOverview() {
     '<div class="kpi"><h5>Units done</h5><div class="big">' + (ln.units == null ? '–' : ln.units) + '</div><div class="note">' + (ln.units == null ? 'Done at S3, no S3 station' : 'Done at ' + esc(doneStationName())) + (ln.wipUnits != null ? ' · ' + ln.wipUnits + ' still in progress at session end' : '') + '</div></div>' +
     '<div class="kpi"><h5>Pace</h5><div class="big' + (ln.pacePct > L.SLOW_PCT ? ' c-coral' : '') + '">' + (ln.pacePct == null ? '–' : (ln.pacePct >= 0 ? '+' : '') + ln.pacePct + '%') + '</div><div class="note">' + paceNote + '</div></div>' +
     '<div class="kpi"><h5>Open flags</h5><div class="big">' + (ln.open.review + ln.open.action) + '</div><div class="note"><span class="c-amber">' + ln.open.review + ' Needs Review</span> · <span class="c-orange">' + ln.open.action + ' Action Required</span></div></div>' +
-    '<div class="kpi"><h5>Time lost</h5><div class="big">' + (ln.timeLostMin == null ? '–' : ln.timeLostMin + '<span style="font-size:18px"> min</span>') + '</div><div class="note">' + (ln.bottleneck ? 'Slowest: ' + esc(ln.bottleneck.name) + ' (' + ln.bottleneck.avgSec + ' s)' : 'Over reference time, this period') + '</div></div>' +
+    '<div class="kpi"><h5>Time lost</h5><div class="big">' + (ln.timeLostMin == null ? '–' : ln.timeLostMin + '<span style="font-size:18px"> min</span>') + '</div><div class="note">' + (ln.bottleneck ? 'Slowest: ' + esc(ln.bottleneck.code + ' ' + ln.bottleneck.desc) + ' (' + ln.bottleneck.avgSec + ' s)' : 'Over reference time, this period') + '</div></div>' +
     fpy + '</div>';
   h += '<div class="meta">' + (ln.oldestOpenMin != null ? 'Oldest awaiting review ' + dur(ln.oldestOpenMin) + '. ' : 'Nothing awaiting review. ') + 'Closed today ' + ln.closedToday + '.</div>';
   h += '<div class="card"><div class="cardhead"><h2>Production flow</h2><span>Recorded station cycles</span></div>';
@@ -359,11 +361,11 @@ function viewOverview() {
   h += foot();
   return h;
 }
-function doneStationName() { const m = S.model, d = m.line.doneAt || []; return m.stations.filter(s => d.includes(s.id)).map(s => sid(s.id)).join(', ') || 'S3'; }
+function doneStationName() { const m = S.model, d = m.line.doneAt || []; return m.stations.filter(s => d.includes(s.id)).map(s => sl(s.id)).join(', ') || 'S3'; }
 function stationCard(s) {
   const cls = !s.cycles && !s.observations ? 'idle' : s.status === 'clear' ? '' : s.status;
   return '<button class="st ' + cls + (S.station === s.id ? ' sel' : '') + '" data-st="' + esc(s.id) + '">' +
-    '<div class="id"><span class="dot ' + cls + '"></span>' + sid(s.id) + '</div><div class="nm">' + esc(s.name.replace(/^S\d+\s*/i, '')) + '</div>' +
+    '<div class="id"><span class="dot ' + cls + '"></span>' + sl(s.id) + '</div><div class="nm">' + esc(s.desc) + '</div>' +
     '<div class="num">' + s.cycles + '</div>' +
     (s.review || s.action ? '<div class="ln c-amber">' + s.review + ' Needs Review</div><div class="ln c-orange">' + s.action + ' Action Required</div>' : '<div class="ln">No open issues.</div>') +
     '<div class="ln' + (s.slow ? ' c-coral b' : '') + '">' + (s.pacePct == null ? (s.cycles ? 'Reference after 5 units' : 'No units yet') : pct(s.pacePct)) + '</div>' +
@@ -384,7 +386,7 @@ function reviewPanel(st) {
   S.obsIdx[st.id] = i;
   const o = list[i];
   let h = '<div class="panel"><div>';
-  h += '<div class="crumb">' + sid(st.id) + ' · ' + esc(st.name.replace(/^S\d+\s*/i, '')) + '</div><div class="crumb2">Station · all checkpoints · <a href="#station/' + esc(st.id) + '">Open station detail</a></div>';
+  h += '<div class="crumb">' + sl(st.id) + ' · ' + esc(st.desc) + '</div><div class="crumb2">Station · all checkpoints · <a href="#station/' + esc(st.id) + '">Open station detail</a></div>';
   if (!o) {
     h += '<p class="empty">No flags at this station in this period.' + (st.cycles ? ' ' + st.cycles + ' cycles recorded.' : '') + '</p></div><div></div></div>';
     return h;
@@ -414,7 +416,7 @@ function evidence(st, o) {
   const missing = o.kind === 'wrong_order' || o.kind === 'skipped' ? exp.slice(0, exp.indexOf(o.substep) + 1).filter(id => seen.indexOf(id) < 0) : [];
   seenHtml += missing.map(id => '<li class="missing moved"><span>' + (exp.indexOf(id) + 1) + '</span><span>' + esc(label(id)) + ' (not seen)</span></li>').join('');
   let h = '<div class="evid"><div class="evbox"><h6>Expected order</h6><ol>' + expHtml + '</ol></div><div class="evbox"><h6>Camera saw</h6>' +
-    (seenHtml ? '<ol>' + seenHtml + '</ol>' : '<p class="none">' + (o.kind === 'qa_fail' ? 'The tester failed this unit: ' + esc(o.message) + (o.cause ? '. Likely cause: ' + sid(o.cause) : '') : 'No step order recorded for this flag.') + '</p>') + '</div></div>';
+    (seenHtml ? '<ol>' + seenHtml + '</ol>' : '<p class="none">' + (o.kind === 'qa_fail' ? 'The tester failed this unit: ' + esc(o.message) + (o.cause ? '. Likely cause: ' + sl(o.cause) : '') : 'No step order recorded for this flag.') + '</p>') + '</div></div>';
   if (o.photo) h += '<div class="photo"><a href="' + esc(o.photo) + '" target="_blank" rel="noopener"><img src="' + esc(o.photo) + '" alt="What the camera saw at ' + fmtT(o.t) + '" loading="lazy"></a><span>Camera frame at the moment of the flag. Dashed rows moved or were skipped.</span></div>';
   else h += '<p class="small" style="margin-top:8px">Dashed rows moved or were skipped.</p>';
   return h;
@@ -458,8 +460,8 @@ function heatmap() {
   const hl = x => (x % 12 || 12) + (x < 12 ? 'a' : 'p');
   let g = '<div class="heat" style="grid-template-columns:60px repeat(' + hrs.length + ',1fr)"><span></span>' + hrs.map(x => '<span class="hh">' + hl(x) + '</span>').join('');
   for (const s of m.stations) {
-    g += '<span class="hl">' + sid(s.id) + '</span>';
-    for (const x of hrs) { const c = m.hours.find(q => q.station === s.id && q.hour === x); g += '<span class="cell' + (c && c.review ? ' mk' : '') + '" style="background:' + shade(c ? c.n : 0) + '" title="' + sid(s.id) + ' ' + hl(x) + ': ' + (c ? c.n : 0) + ' flags' + (c && c.review ? ', ' + c.review + ' to review' : '') + '"></span>'; }
+    g += '<span class="hl">' + sl(s.id) + '</span>';
+    for (const x of hrs) { const c = m.hours.find(q => q.station === s.id && q.hour === x); g += '<span class="cell' + (c && c.review ? ' mk' : '') + '" style="background:' + shade(c ? c.n : 0) + '" title="' + sl(s.id) + ' ' + hl(x) + ': ' + (c ? c.n : 0) + ' flags' + (c && c.review ? ', ' + c.review + ' to review' : '') + '"></span>'; }
   }
   g += '</div>';
   return '<div class="card"><div class="cardhead"><h2>Observations by hour</h2><span>One cell = one station in one hour</span></div>' + g +
@@ -474,7 +476,7 @@ function viewStations() {
   if (!m.stations.length) h += '<tr><td colspan="7" class="empty">No stations recorded yet.</td></tr>';
   for (const s of m.stations) {
     const cls = s.status === 'clear' ? '' : s.status;
-    h += '<tr class="row" data-goto="station/' + esc(s.id) + '"><td><div class="stname" style="display:flex;gap:12px;align-items:center"><span class="dot ' + cls + '"></span><div><b>' + sid(s.id) + '</b><span>' + esc(s.name.replace(/^S\d+\s*/i, '')) + '</span></div></div></td>' +
+    h += '<tr class="row" data-goto="station/' + esc(s.id) + '"><td><div class="stname" style="display:flex;gap:12px;align-items:center"><span class="dot ' + cls + '"></span><div><b>' + sl(s.id) + '</b><span>' + esc(s.desc) + '</span></div></div></td>' +
       '<td>' + (s.mainIssue ? esc(s.mainIssue) : '<span class="small" style="font-size:15px">No open observations</span>') + '</td>' +
       '<td class="n">' + s.cycles + '</td><td class="n" style="font-size:16px"><span class="' + (s.slow ? 'c-coral b' : '') + '">' + (s.pacePct == null ? (s.avgSec != null ? s.avgSec + ' s' : '–') : pct(s.pacePct)) + '</span>' + (s.avgSec != null && s.refSec ? '<div class="small">' + s.avgSec + ' s vs ' + s.refSec + ' s</div>' : '') + '</td>' +
       '<td class="n" style="font-size:16px">' + (s.timeLostSec == null ? '–' : Math.round(s.timeLostSec / 6) / 10 + ' min') + '</td>' +
@@ -487,7 +489,7 @@ function viewStations() {
 function viewStation() {
   const m = S.model, s = m.stations.find(x => x.id === S.station);
   if (!s) { S.view = 'stations'; return viewStations(); }
-  let h = topBar(sid(s.id) + ' · ' + s.name.replace(/^S\d+\s*/i, ''), '<a href="#stations">‹ Stations</a> · ' + subline()) + noDataBanner();
+  let h = topBar(s.full, '<a href="#stations">‹ Stations</a> · ' + subline()) + noDataBanner();
   h += '<p class="headline">' + esc(stationSentence(s)) + '</p>';
   h += '<div class="kpis" style="grid-template-columns:repeat(4,1fr)">' +
     '<div class="kpi"><h5>Cycles</h5><div class="big">' + s.cycles + '</div></div>' +
@@ -506,7 +508,7 @@ function stationSentence(s) {
   const flagStep = s.steps.slice().sort((a, b) => b.flags - a.flags)[0];
   if (!s.cycles && !s.observations) return 'Nothing recorded at this station in this period.';
   const parts = [];
-  if (s.pacePct != null) parts.push(s.name.replace(/^S\d+\s*/i, '') + ' is ' + pct(s.pacePct) + ' (' + s.avgSec + ' s vs ' + s.refSec + ' s)');
+  if (s.pacePct != null) parts.push(s.desc + ' is ' + pct(s.pacePct) + ' (' + s.avgSec + ' s vs ' + s.refSec + ' s)');
   else parts.push(s.cycles + ' cycles recorded, reference time after 5 finished units');
   if (slowStep && slowStep.pct > 0) parts.push('the slowest step is "' + slowStep.short + '" at ' + pct(slowStep.pct));
   if (flagStep && flagStep.flags) parts.push('most flags are at "' + flagStep.short + '" (' + flagStep.flags + ')');
@@ -521,13 +523,13 @@ function viewTrends() {
   if (t && t.worst) head += '<p class="small" style="font-size:16px;max-width:820px">Cycle time moved from ' + pct(t.worst.paceFrom) + ' than its reference to ' + pct(t.worst.paceTo) + ' between the first and second half of this period' + (t.worst.flagsFrom != null && t.worst.flagsTo != null ? ', and its flags went from ' + t.worst.flagsFrom + ' to ' + t.worst.flagsTo + ' per 100 cycles' : '') + '.</p>';
   else head += '<p class="small" style="font-size:16px">Trends need finished units on at least two different days. Pick "Last 7 days" or "All runs" once you have them.</p>';
   const closed = m.observations.filter(x => !(x.state === 'needs_review' || x.state === 'action_required')).length, openF = m.observations.filter(x => x.state === 'action_required').length;
-  head += '<p class="small" style="font-size:15px">This period: ' + closed + ' observations closed · ' + openF + ' follow-ups still open' + (m.focus ? ' · <a href="#station/' + esc(m.focus) + '">Review ' + sid(m.focus) + ' →</a>' : '') + '</p>';
+  head += '<p class="small" style="font-size:15px">This period: ' + closed + ' observations closed · ' + openF + ' follow-ups still open' + (m.focus ? ' · <a href="#station/' + esc(m.focus) + '">Review ' + sl(m.focus) + ' →</a>' : '') + '</p>';
   h += '<div class="card">' + head + '</div>';
   const cam = m.camera, ln = m.line;
   h += '<div class="grid3">' +
-    '<div class="kpi"><h5>False alarm rate</h5><div class="big">' + (cam.faRate == null ? '–' : cam.faRate + '%') + '</div><div class="note">' + (cam.reviewed ? cam.falseAlarms + ' of ' + cam.reviewed + ' reviewed flags' : 'No reviewed flags yet') + (cam.top ? '<br>Highest at ' + sid(cam.top.station) + ' ' + esc(cam.top.label) + ' (' + cam.top.faRate + '%, ' + cam.top.reviewed + ' reviews)' : '') + '</div></div>' +
+    '<div class="kpi"><h5>False alarm rate</h5><div class="big">' + (cam.faRate == null ? '–' : cam.faRate + '%') + '</div><div class="note">' + (cam.reviewed ? cam.falseAlarms + ' of ' + cam.reviewed + ' reviewed flags' : 'No reviewed flags yet') + (cam.top ? '<br>Highest at ' + sl(cam.top.station) + ' ' + esc(cam.top.label) + ' (' + cam.top.faRate + '%, ' + cam.top.reviewed + ' reviews)' : '') + '</div></div>' +
     '<div class="kpi"><h5>Flags per 100 cycles</h5><div class="big">' + (ln.cycles ? Math.round(m.observations.length / ln.cycles * 1000) / 10 : '–') + '</div><div class="note">' + (t && t.flagsFrom != null && t.flagsTo != null ? (t.flagsTo > t.flagsFrom ? 'Up to ' + t.flagsTo + ' from ' + t.flagsFrom : t.flagsTo < t.flagsFrom ? 'Down to ' + t.flagsTo + ' from ' + t.flagsFrom : 'Steady at ' + t.flagsTo) + ', second half of the period against the first' : m.observations.length + ' flags in this period') + '</div></div>' +
-    '<div class="kpi"><h5>Cycle time vs reference</h5><div class="big">' + (ln.pacePct == null ? '–' : pct(ln.pacePct)) + '</div><div class="note">' + (() => { const w = m.stations.filter(s => s.pacePct != null).sort((a, b) => b.pacePct - a.pacePct)[0]; return w ? sid(w.id) + ' is at ' + pct(w.pacePct) : 'Needs 5+ finished units per station'; })() + '</div></div></div>';
+    '<div class="kpi"><h5>Cycle time vs reference</h5><div class="big">' + (ln.pacePct == null ? '–' : pct(ln.pacePct)) + '</div><div class="note">' + (() => { const w = m.stations.filter(s => s.pacePct != null).sort((a, b) => b.pacePct - a.pacePct)[0]; return w ? sl(w.id) + ' is at ' + pct(w.pacePct) : 'Needs 5+ finished units per station'; })() + '</div></div></div>';
   h += '<div class="grid2"><div class="card"><h2>Where are observations concentrating?</h2>' + concentration() + '</div><div class="card"><h2>How is cycle time changing?</h2>' + sparks() + '</div></div>';
   return h + foot();
 }
@@ -536,10 +538,10 @@ function trendHeadline() {
   if (t && t.worst && t.worst.paceTo - t.worst.paceFrom >= 3) {
     const st = m.stations.find(s => s.id === t.worst.id);
     const more = t.worst.flagsTo != null && t.worst.flagsFrom != null && t.worst.flagsTo > t.worst.flagsFrom;
-    return sid(t.worst.id) + ' ' + (st ? st.name.replace(/^S\d+\s*/i, '') : '') + ' is getting slower' + (more ? ' and showing more flags.' : '.');
+    return sl(t.worst.id) + ' ' + (st ? esc(st.desc) : '') + ' is getting slower' + (more ? ' and showing more flags.' : '.');
   }
-  if (m.camera.top && m.camera.top.faRate >= 50) return sid(m.camera.top.station) + ' ' + m.camera.top.label + ' flags are mostly false alarms: check that camera before trusting its flags.';
-  if (m.focus) { const s = m.stations.find(x => x.id === m.focus); return 'Most open flags are at ' + s.name + '.'; }
+  if (m.camera.top && m.camera.top.faRate >= 50) return sl(m.camera.top.station) + ' ' + m.camera.top.label + ' flags are mostly false alarms: check that camera before trusting its flags.';
+  if (m.focus) { const s = m.stations.find(x => x.id === m.focus); return 'Most open flags are at ' + s.code + ' ' + s.desc + '.'; }
   return 'No pattern yet in this period.';
 }
 function concentration() {
@@ -549,16 +551,16 @@ function concentration() {
   let h = '<div class="legend" style="margin:0 0 14px"><span><i style="background:var(--amber)"></i>Unreviewed</span><span><i style="background:#c9cbcf"></i>Confirmed</span><span><i style="background:#5d6168"></i>False alarm</span></div><div class="bars">';
   for (const c of cps) {
     const tot = c.per100 != null ? c.per100 : c.n, w = tot / max * 100, f = n => (c.n ? n / c.n * w : 0);
-    h += '<div class="lab"><small>' + sid(c.station) + '</small>' + esc(c.label) + '</div><div class="bar"><i style="width:' + f(c.unreviewed) + '%;background:var(--amber)"></i><i style="width:' + f(c.confirmed) + '%;background:#c9cbcf"></i><i style="width:' + f(c.falseAlarm) + '%;background:#5d6168"></i></div><div class="v">' + (c.per100 != null ? c.per100 : c.n) + '</div>';
+    h += '<div class="lab"><small>' + sl(c.station) + '</small>' + esc(c.label) + '</div><div class="bar"><i style="width:' + f(c.unreviewed) + '%;background:var(--amber)"></i><i style="width:' + f(c.confirmed) + '%;background:#c9cbcf"></i><i style="width:' + f(c.falseAlarm) + '%;background:#5d6168"></i></div><div class="v">' + (c.per100 != null ? c.per100 : c.n) + '</div>';
   }
   h += '</div><p class="small" style="margin-top:14px">Flags per 100 cycles of that station' + (cps.some(c => c.per100 == null) ? ' (a plain count where the station has no finished units)' : '') + '. A checkpoint\'s false-alarm rate is named only after ' + L.MIN_FA_REVIEWS + ' reviews.</p>';
   const fa = cps.filter(c => c.faRate != null && c.faRate >= 50);
-  if (fa.length) h += '<p style="margin:6px 0 0">' + fa.map(c => sid(c.station) + ' ' + esc(c.label) + ' flags are ' + c.faRate + '% false alarms').join('; ') + ': the camera check there may need a better model or zone.</p>';
+  if (fa.length) h += '<p style="margin:6px 0 0">' + fa.map(c => sl(c.station) + ' ' + esc(c.label) + ' flags are ' + c.faRate + '% false alarms').join('; ') + ': the camera check there may need a better model or zone.</p>';
   return h;
 }
 function sparks() {
   const m = S.model, days = m.days.filter(d => Object.keys(d.cycles).length);
-  if (days.length < 2) return '<p class="empty">Needs finished units on two or more days.</p>' + (m.stations.some(s => s.avgSec != null) ? '<p class="small">This period: ' + m.stations.filter(s => s.avgSec != null).map(s => sid(s.id) + ' ' + s.avgSec + ' s').join(' · ') + '</p>' : '');
+  if (days.length < 2) return '<p class="empty">Needs finished units on two or more days.</p>' + (m.stations.some(s => s.avgSec != null) ? '<p class="small">This period: ' + m.stations.filter(s => s.avgSec != null).map(s => sl(s.id) + ' ' + s.avgSec + ' s').join(' · ') + '</p>' : '');
   const W = 300, H = 56, vals = [].concat(...m.stations.map(s => days.map(d => d.pct[s.id]).filter(v => v != null)), [10, 0]);
   const lo = Math.min(...vals) - 2, hi = Math.max(...vals) + 2, y = v => H - 4 - (v - lo) / (hi - lo) * (H - 8), x = k => 6 + k * (W - 12) / (days.length - 1);
   let h = '<p class="small" style="margin-top:-6px">Percent slower than each station\'s own reference. The dashed line is 10% slower.</p>';
@@ -566,14 +568,14 @@ function sparks() {
     const pts = days.map((d, k) => d.pct[s.id] == null ? null : [x(k), y(d.pct[s.id])]).filter(Boolean);
     const lastV = days.map(d => d.pct[s.id]).filter(v => v != null).slice(-1)[0];
     const hot = lastV != null && lastV > L.SLOW_PCT;
-    h += '<div class="spark"><span class="mono" style="font-family:var(--mono)">' + sid(s.id) + '</span><svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:56px"><line x1="6" x2="' + (W - 6) + '" y1="' + y(10) + '" y2="' + y(10) + '" stroke="' + 'var(--coral)' + '" stroke-dasharray="3 4" stroke-width="1" opacity=".7"/><line x1="6" x2="' + (W - 6) + '" y1="' + y(0) + '" y2="' + y(0) + '" stroke="var(--line2)" stroke-width="1"/>' +
+    h += '<div class="spark"><span class="mono" style="font-family:var(--mono)">' + sl(s.id) + '</span><svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:56px"><line x1="6" x2="' + (W - 6) + '" y1="' + y(10) + '" y2="' + y(10) + '" stroke="' + 'var(--coral)' + '" stroke-dasharray="3 4" stroke-width="1" opacity=".7"/><line x1="6" x2="' + (W - 6) + '" y1="' + y(0) + '" y2="' + y(0) + '" stroke="var(--line2)" stroke-width="1"/>' +
       (pts.length > 1 ? '<polyline fill="none" stroke="var(--text)" stroke-width="1.5" points="' + pts.map(p => p.join(',')).join(' ') + '"/>' : '') + pts.map((p, k) => '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="3" fill="' + (k === pts.length - 1 && hot ? 'var(--coral)' : 'var(--text)') + '"/>').join('') + '</svg>' +
       '<span class="v' + (hot ? ' c-coral' : '') + '">' + (lastV == null ? '–' : pct(lastV).replace(' ', '<br>')) + '</span></div>';
   }
   h += '<div class="small" style="display:flex;justify-content:space-between;padding:0 80px 0 80px"><span>' + fmtD(new Date(days[0].day + 'T12:00').getTime()) + '</span><span>' + fmtD(new Date(days[days.length - 1].day + 'T12:00').getTime()) + '</span></div>';
   const w = m.trend && m.trend.worst;
-  if (w) h += '<p style="margin:14px 0 4px;border-top:1px solid var(--line);padding-top:12px">' + esc(sid(w.id)) + ' moved from ' + pct(w.paceFrom) + ' to ' + pct(w.paceTo) + ' than its reference.</p>';
-  h += '<p class="small">Completed cycles ' + m.stations.map(s => sid(s.id) + ' ' + s.cycles).join(' → ') + '.' + (m.line.bottleneck ? ' The slowest station, ' + sid(m.line.bottleneck.id) + ', sets the pace of the line.' : '') + '</p>';
+  if (w) h += '<p style="margin:14px 0 4px;border-top:1px solid var(--line);padding-top:12px">' + esc(sl(w.id)) + ' moved from ' + pct(w.paceFrom) + ' to ' + pct(w.paceTo) + ' than its reference.</p>';
+  h += '<p class="small">Completed cycles ' + m.stations.map(s => sl(s.id) + ' ' + s.cycles).join(' → ') + '.' + (m.line.bottleneck ? ' The slowest station, ' + sl(m.line.bottleneck.id) + ', sets the pace of the line.' : '') + '</p>';
   return h;
 }
 function foot() { return '<p class="foot">' + (S.src === 'sim' ? 'Academic prototype using fictional stations and metrics. Not a Molex production system.' : 'Built from this laptop\'s recorded wire line runs. Academic prototype, not a Molex production system.') + '</p>'; }

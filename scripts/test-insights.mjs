@@ -160,5 +160,25 @@ console.log('one run at a time');
   check('review decisions of the picked run still apply', (() => { const id = older.observations[0].id; const rv = L.decide(null, { type: 'confirm' }, Date.now()); return L.rollup(L.scopeRuns(both, older.id), { [id]: rv }, {}).observations.find(o => o.id === id).state === 'action_required'; })());
 }
 
+// Station display names: the floor layout's name wins over the id.
+{
+  const P = L.stationParts;
+  const custom = P('s4', 'S2', 'Arrange and clamp');
+  check('custom name "S2" on id s4 shows code S2 and the role label', custom.code === 'S2' && custom.desc === 'Arrange and clamp' && custom.full === 'S2 \u00b7 Arrange and clamp');
+  const def = P('s2', 'S2 Arrange and clamp', 'Arrange and clamp');
+  check('a default-named station is unchanged', def.code === 'S2' && def.desc === 'Arrange and clamp');
+  const custom2 = P('s4', 'S2 Clamp bench', 'Arrange and clamp');
+  check('a custom name with text keeps that text', custom2.code === 'S2' && custom2.desc === 'Clamp bench');
+  const plain = P('s3', 'Bench B', 'Pull test');
+  check('a name with no S<n> uses the id as code', plain.code === 'S3' && plain.desc === 'Bench B');
+  const sess = L.digestSession({ id: 'x', doc: { title: 'x' }, events: [], captures: [], config: { stations: [{ id: 's2', label: 'Cut', substeps: [] }] } }, LineEngine);
+  check('no layout: base station reads as before', L.stationParts('s2', sess.stations.s2.name, sess.stations.s2.roleLabel).full === 'S2 \u00b7 Cut');
+  const lay = LineEngine.applyLayout(config, { id: 'l1', name: 'T', stations: [{ id: 's4', name: 'S2', role: 's2', x: 0, y: 0 }] });
+  const d2 = L.digestSession({ id: 'y', doc: { title: 'y', layout: { name: 'T', stations: [{ id: 's4', order: 1 }] } }, events: [], captures: [], config: lay }, LineEngine);
+  const r2 = L.rollup([d2], {}, {});
+  const row = r2.stations.find(x => x.id === 's4');
+  check('rollup carries code and description for the layout station', row && row.code === 'S2' && row.desc === 'Arrange and clamp' && row.full === 'S2 \u00b7 Arrange and clamp', JSON.stringify(row && [row.code, row.desc]));
+}
+
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);
