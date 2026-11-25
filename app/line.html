@@ -404,6 +404,38 @@ button.chip:hover { border-color: var(--warn-ink); }
     .sv-row > .st { min-height: 640px; }
     .sv-arrow { width: auto; flex-direction: row; padding: 6px; }
   }
+  /* Full screen: only the station cameras and each station's steps. The cards move in (same elements), so cameras, the checker and the alerts keep running */
+  .fs { position: fixed; inset: 0; z-index: 1000; background: var(--bg); color: var(--ink); display: flex; cursor: default; user-select: text; -webkit-user-select: text; }
+  .fs[hidden] { display: none; }
+  .fs-grid { flex: 1; min-width: 0; min-height: 0; display: grid; gap: 10px; padding: 10px; grid-template-columns: repeat(var(--fsc, 1), minmax(0, 1fr)); grid-template-rows: repeat(var(--fsr, 1), minmax(0, 1fr)); }
+  .fs-exit { position: absolute; top: 8px; right: 8px; z-index: 5; opacity: .75; }
+  .fs-exit:hover, .fs-exit:focus { opacity: 1; }
+  .fs-grid > .st { position: relative; left: auto !important; top: auto !important; width: auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .fs-grid .st-head { padding: 4px 10px; }
+  .fs-grid .st-head > :not(.st-badge):not(h2):not(.role) { display: none !important; }
+  .fs-grid .edit-panel, .fs-grid .setup-panel, .fs-grid .oppop { display: none !important; }
+  .fs-grid .st-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; padding: 10px; }
+  .fs-grid .stage { flex: 0 1 auto; align-self: center; width: min(100%, calc((var(--fsh, 50vh)) * 4 / 3)); aspect-ratio: 4 / 3; min-height: 0; }
+  .fs-grid .info { flex: 1 1 0; min-height: 0; overflow-y: auto; gap: 8px; font-size: clamp(14px, 2.4vmin, 30px); }
+  .fs-grid .nowbox .cur { font-size: 1.15em; }
+  .fs-grid .nowbox .big { font-size: 1.5em; }
+  .fs-grid .kv, .fs-grid .prog, .fs-grid .qa:empty { display: none; }
+  .fs-grid .check { border-top: 0; display: grid; gap: 6px; }
+  .fs-grid .check li { grid-template-columns: 1.3em minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: .35em .6em; font-size: 1em; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+  .fs-grid .check li .ic { width: .9em; height: .9em; margin-top: .2em; }
+  .fs-grid .check li.done { background: color-mix(in srgb, var(--good) 7%, var(--surface)); border-color: color-mix(in srgb, var(--good) 35%, var(--line)); }
+  .fs-grid .check li.now { border: 3px solid var(--accent); font-weight: 700; }
+  .fs-grid .check li.mistake { border-color: var(--crit); } .fs-grid .check li.review { border-color: var(--warn); }
+  .fs-grid .check li small { font-size: .7em; }
+  .fs-grid .check li .num { font-size: .8em; }
+  .fs-grid .check li.now .how { display: block; margin-top: 3px; font-size: .8em; font-weight: 400; line-height: 1.35; color: var(--ink-2); }
+  /* one station: camera big on the left, steps on the right. Two: side by side, steps under each camera. Three or four: a grid, steps beside each camera */
+  .fs-grid.n1 > .st .st-body, .fs-grid.n3 > .st .st-body, .fs-grid.n4 > .st .st-body { flex-direction: row; align-items: stretch; }
+  .fs-grid.n1 > .st .stage, .fs-grid.n3 > .st .stage, .fs-grid.n4 > .st .stage { flex: 0 1 58%; width: auto; min-width: 0; max-height: 100%; align-self: center; }
+  .fs-grid.n1 > .st .info, .fs-grid.n3 > .st .info, .fs-grid.n4 > .st .info { flex: 1 1 0; min-width: 0; }
+  .fs-grid.n2 { --fsh: 52vh; }
+  .fs-grid.n2 .st-body { align-items: stretch; }
+  @media (max-width: 900px) { .fs-grid > .st .st-body { flex-direction: column !important; } .fs-grid > .st .stage { flex: 0 1 auto !important; width: 100% !important; } }
   @media (max-width: 700px) { .bd-cards { grid-template-columns: 1fr } .bd-queue { display: flex; gap: 8px; align-items: baseline; justify-content: center } .bd-queue b { display: inline } }
 </style>
 </head>
@@ -422,6 +454,7 @@ button.chip:hover { border-color: var(--warn-ink); }
       <button class="btn" id="btnStop" type="button" hidden>Stop session</button>
       <button class="btn" id="btnSessions" type="button">Sessions</button>
       <button class="btn" id="btnView" type="button" title="Switch between the station view (the stations you work at, big, with their steps) and the floor (every station where it stands)">Floor view</button>
+      <button class="btn" id="btnFs" type="button" title="Full screen: only the station cameras and their steps (key V, Esc leaves)">Full screen</button>
       <button class="btn" id="btnDemo" type="button" aria-pressed="false" title="Demo view: only each station's camera and what the system sees, with the stations listed on the left">Demo view</button>
       <a class="btn" href="/insights" target="_blank" rel="noopener" title="Assembly Insights: the manager view of the recorded runs. Opens in a new tab, so recording keeps going here">Insights</a>
       <button class="btn" id="btnSetup" type="button" title="Cameras, boxes, calibration and the line's switches">Setup</button>
@@ -542,6 +575,10 @@ button.chip:hover { border-color: var(--warn-ink); }
 <script src="/line-engine.js"></script>
 <script src="/live-detect.js"></script>
 <script src="/unit-record.js"></script>
+<div class="fs" id="fs" hidden aria-label="Full screen stations">
+  <button class="btn sm fs-exit" id="fsExit" type="button" title="Leave full screen (Esc)">Exit full screen (Esc)</button>
+  <div class="fs-grid" id="fsGrid"></div>
+</div>
 <script>
 (() => {
   'use strict';
@@ -569,7 +606,7 @@ button.chip:hover { border-color: var(--warn-ink); }
   // config: the effective config (G.base, the file, with the floor layout applied: one station per layout entry).
   const G = {
     config: null, base: null, standard: { roles: {} }, layout: null, layouts: [], roles: [], editMode: false, qaIds: [], setup: {}, events: [], queue: [], session: null, lastSession: null, basis: store.get('wire-line:basis') || 'auto',
-    demo: store.get('wire-line:demo') === true, svPref: store.get('wire-line:sview') !== false, sview: false, svWide: store.get('wire-line:svwide') === true, svHow: false, modelOn: false, handsOn: false, cameras: [], clips: [], camAllowed: false, failPick: null, sending: false, summary: null, sumAt: 0, evSeen: -1,
+    demo: store.get('wire-line:demo') === true, fs: false, fsDemo: false, svPref: store.get('wire-line:sview') !== false, sview: false, svWide: store.get('wire-line:svwide') === true, svHow: false, modelOn: false, handsOn: false, cameras: [], clips: [], camAllowed: false, failPick: null, sending: false, summary: null, sumAt: 0, evSeen: -1,
     qaId: null, saveTimer: null, starting: false, stopping: false, soundOn: store.get('wire-line:sound') !== false, setupMode: false,
     score: store.get('wire-line:scoreOn') !== false,    // Score the cameras: the answer key shows (on by default; a new key, because the page saved false under the old one on every load)
     capOn: store.get('wire-line:capture'), capTotal: 0, capBusy: 0, capWarned: false    // capture switch (null: the config decides), frames this session, uploads in flight
@@ -1839,7 +1876,8 @@ button.chip:hover { border-color: var(--warn-ink); }
     else if (e.key === 'p' || e.key === 'P') { e.preventDefault(); manualPass(); }
     else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); openFail(); }
     else if (key === 'x') { e.preventDefault(); captureManual(null); }
-    else if (e.key === 'Escape') closeFail(true);
+    else if (key === 'v') { e.preventDefault(); if (G.fs) exitFs(); else enterFs(); }
+    else if (e.key === 'Escape') { if (G.fs) exitFs(); else closeFail(true); }
   });
 
   // ---------- capture: still frames for the review page (docs/capture plan, section 1) ----------
@@ -2660,6 +2698,7 @@ button.chip:hover { border-color: var(--warn-ink); }
     G.qaIds = LIST.filter(st => st.isQa).map(st => st.id);
     if (G.demo) buildDemo();
     if (G.sview) buildSview();
+    if (G.fs) buildFs();
     for (const st of added) { st.editPanel.hidden = !G.editMode; sizeCanvas(st); emit({ type: 'source_change', station: st.id, t, input: 'none', note: st.source.label }); }
     $('hdrNote').textContent = (G.config.name || 'Line') + ', ' + LIST.length + ' station' + (LIST.length === 1 ? '' : 's') + ', one overhead camera each';
     $('hdrNote').title = G.config.product || '';
@@ -2849,6 +2888,7 @@ button.chip:hover { border-color: var(--warn-ink); }
     if (html !== G.demoSideHtml) { $('demoSide').innerHTML = html; G.demoSideHtml = html; }
   }
   function buildDemo() {
+    if (G.fs) return;
     const grid = $('demoGrid');
     for (const st of LIST) { st.el.querySelector('.st-body').prepend(st.stage); st.demoStrip = null; }    // everything back to its card first
     grid.textContent = '';
@@ -2909,6 +2949,7 @@ button.chip:hover { border-color: var(--warn-ink); }
   }
   function svResize() { requestAnimationFrame(() => { for (const st of LIST) { sizeCanvas(st); drawOverlay(st); } }); }
   function buildSview() {
+    if (G.fs) return;
     svBack();
     const row = $('svRow'), shown = svStations();
     row.textContent = '';
@@ -2923,6 +2964,7 @@ button.chip:hover { border-color: var(--warn-ink); }
     svResize();
   }
   function applySview() {
+    if (G.fs) return;
     const on = !!(G.svPref && !G.setupMode && !G.editMode && !G.demo && LIST.length);
     const b = $('btnView');
     b.textContent = G.svPref ? 'Floor view' : 'Station view';
@@ -2946,6 +2988,48 @@ button.chip:hover { border-color: var(--warn-ink); }
   $('svHow').onclick = () => { G.svHow = !G.svHow; renderSvToggles(); };
   renderSvToggles();
   for (const ev of ['pointerdown', 'wheel', 'touchstart']) $('sview').addEventListener(ev, e => e.stopPropagation(), { passive: true });    // the floor must not pan under it
+
+  // ---------- Full screen: only the station cameras and their steps. The cards move into #fsGrid (same elements, no second video),
+  // and go back to where they were (floor, station view or Demo view) when it ends. Key V; Esc, the corner button or the browser's own exit leave.
+  function buildFs() {
+    const grid = $('fsGrid'), n = Math.min(LIST.length, 4) || 1;
+    for (const st of LIST) if (st.el.parentNode !== grid) grid.appendChild(st.el);
+    grid.className = 'fs-grid n' + n;
+    grid.style.setProperty('--fsc', n === 1 ? 1 : 2); grid.style.setProperty('--fsr', n <= 2 ? 1 : 2);
+    for (const st of LIST) st.el.hidden = false;
+    for (const st of LIST.slice(4)) st.el.hidden = true;
+    for (const st of LIST) { sizeCanvas(st); drawOverlay(st); }
+  }
+  function enterFs() {
+    if (G.fs || !LIST.length) return;
+    if (G.setupMode) setSetupMode(false);
+    if (G.editMode) setEditMode(false);
+    G.fsDemo = G.demo;
+    if (G.demo) for (const st of LIST) { st.el.querySelector('.st-body').prepend(st.stage); st.demoStrip = null; }
+    G.fs = true;
+    $('fs').hidden = false; document.body.classList.add('fs-mode');
+    buildFs();
+    const r = document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
+    if (r && r.catch) r.catch(() => { /* the browser said no: the full screen layout still fills the window */ });
+    $('fsExit').focus();
+  }
+  function exitFs() {
+    if (!G.fs) return;
+    G.fs = false;
+    $('fs').hidden = true; document.body.classList.remove('fs-mode');
+    if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    for (const st of LIST) st.el.hidden = false;
+    svBack();    // the cards go home first (the floor), then the station view or Demo view takes what it needs
+    if (G.fsDemo && G.demo) buildDemo();
+    else if (G.sview) buildSview();
+    else scheduleArrows();
+    for (const st of LIST) { sizeCanvas(st); drawOverlay(st); }
+    const b = $('btnFs'); if (b) b.focus();
+  }
+  $('btnFs').onclick = () => enterFs();
+  $('fsExit').onclick = () => exitFs();
+  document.addEventListener('fullscreenchange', () => { if (G.fs && !document.fullscreenElement) exitFs(); });
+  for (const ev of ['pointerdown', 'wheel', 'touchstart']) $('fs').addEventListener(ev, e => e.stopPropagation(), { passive: true });
 
   // ---------- operator at each station: an anonymous code and a training level (docs/dashboard-plan.md, decision 1) ----------
   const levelLabel = id => (LE.LEVELS.find(l => l.id === id) || {}).label || '';
