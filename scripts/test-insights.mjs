@@ -137,5 +137,28 @@ console.log('units per session (C5)');
   check('a session with no unit events has units []', Array.isArray(d.units) && d.units.length === 0);
 }
 
+console.log('one run at a time');
+{
+  const clone = x => JSON.parse(JSON.stringify(x));
+  const older = d;                                       // S2 only: 6 cycles, 2 flags, ended
+  const s3Like = clone(d.stations.s2); s3Like.cycles = s3Like.cycles.slice(0, 3);
+  const idle = clone(d.stations.s2); idle.cycles = []; idle.active = false;
+  const newer = Object.assign(clone(d), { id: '20261119-150000-beef', title: 'Newer run', startedAtMs: d.startedAtMs + 86400000, endedAtMs: null, stations: { s3: s3Like, s2: idle }, order: ['s3', 's2'], observations: [], units: [{ unit: 1 }, { unit: 2 }] });
+  const both = [older, newer];
+  const list = L.runList(both);
+  check('runList is newest first', list.map(r => r.id).join() === newer.id + ',' + older.id, list.map(r => r.id).join());
+  check('runList carries unit count and the stations that ran', list[0].units === 2 && list[0].stations.join() === 's3' && list[1].stations.join() === 's2', JSON.stringify(list.map(r => [r.units, r.stations])));
+  const rNew = L.rollup(L.scopeRuns(both, newer.id), {}, {});
+  check('newest run only: one session, its 3 cycles, no S2 card', rNew.line.sessions === 1 && rNew.line.cycles === 3 && rNew.stations.map(x => x.id).join() === 's3', JSON.stringify([rNew.line.sessions, rNew.line.cycles, rNew.stations.map(x => x.id)]));
+  check('newest run only: none of the older run\'s flags', rNew.observations.length === 0);
+  const rOld = L.rollup(L.scopeRuns(both, older.id), {}, {});
+  check('older run only: its 6 cycles, 2 flags, only S2', rOld.line.sessions === 1 && rOld.line.cycles === 6 && rOld.observations.length === 2 && rOld.stations.map(x => x.id).join() === 's2');
+  const rAll = L.rollup(L.scopeRuns(both, 'all'), {}, {});
+  check('"all" still adds every run together', rAll.line.sessions === 2 && rAll.line.cycles === 9);
+  check('an unknown run id falls back to the newest', L.scopeRuns(both, 'nope')[0].id === newer.id);
+  check('no runs gives an empty scope', L.scopeRuns([], null).length === 0 && L.runList([]).length === 0);
+  check('review decisions of the picked run still apply', (() => { const id = older.observations[0].id; const rv = L.decide(null, { type: 'confirm' }, Date.now()); return L.rollup(L.scopeRuns(both, older.id), { [id]: rv }, {}).observations.find(o => o.id === id).state === 'action_required'; })());
+}
+
 console.log('\n' + passes + ' passed, ' + fails + ' failed');
 process.exit(fails ? 1 : 0);

@@ -111,6 +111,30 @@
     };
   }
 
+  // ---------- one run at a time ----------
+  // The page shows one session (a run). runList is every session newest first, scopeRuns picks the digests a view is
+  // computed from: one run id, or 'all' for the old whole-laptop aggregate. An unknown id falls back to the newest.
+  function runList(digests) {
+    return (digests || []).slice().sort((a, b) => (b.startedAtMs - a.startedAtMs) || (a.id < b.id ? 1 : -1)).map(d => ({
+      id: d.id, title: d.title, startedAtMs: d.startedAtMs, endedAtMs: d.endedAtMs, units: (d.units || []).length, stations: Object.keys(d.stations || {}).filter(k => d.stations[k].active || d.stations[k].cycles.length)
+    }));
+  }
+  function scopeRuns(digests, runId) {
+    if (runId === 'all') return digests || [];
+    const list = runList(digests), pick = list.find(r => r.id === runId) || list[0];
+    const d = pick && (digests || []).find(x => x.id === pick.id);
+    return d ? [ranOnly(d)] : [];
+  }
+  // A run shows only the stations that did something in it (a step seen, a cycle, a flag, or a QA result).
+  function ranOnly(d) {
+    const qaRan = (d.qa && (d.qa.passed || d.qa.failed)) > 0;
+    const ran = k => { const s = d.stations[k]; return s.active || s.cycles.length || d.observations.some(o => o.station === k) || (s.qa && qaRan); };
+    const keep = Object.keys(d.stations).filter(ran);
+    if (keep.length === Object.keys(d.stations).length) return d;
+    const stations = {}; for (const k of keep) stations[k] = d.stations[k];
+    return Object.assign({}, d, { stations, order: (d.order || []).filter(k => stations[k]) });
+  }
+
   // ---------- review state ----------
   function stateOf(review) { return review && STATES.includes(review.state) ? review.state : 'needs_review'; }
   // A decision -> the next review record (the life of a flag: Flagged, Reviewed, Action Required, Resolved).
@@ -347,5 +371,5 @@
     return { digests, reviews, refSec };
   }
 
-  return { KIND, STATES, STATE_LABEL, PLANS, SLOW_PCT, MIN_FA_REVIEWS, digestSession, decide, stateOf, rollup, makeDemo, median };
+  return { KIND, STATES, STATE_LABEL, PLANS, SLOW_PCT, MIN_FA_REVIEWS, digestSession, decide, stateOf, rollup, runList, scopeRuns, makeDemo, median };
 });
