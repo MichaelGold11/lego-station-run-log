@@ -124,6 +124,8 @@ try {
   const urP = await req('GET', '/unit-record.js');
   check('GET /unit-record.js serves the unit record script /line and /insights load', urP.status === 200 && /UnitRecord/.test(urP.text));
   check('line.html script has the Demo view wiring: remembered toggle, stages move into tiles, status strip, no names', /wire-line:demo/.test(lineP.text) && /function buildDemo/.test(lineP.text) && /function renderDemoStrips/.test(lineP.text) && /anonymous codes/.test(lineP.text));
+  check('GET /line has the station view: the toggle, the stations row, the side panel and its switches', /id="btnView"/.test(lineP.text) && /id="svRow"/.test(lineP.text) && /id="svSide"/.test(lineP.text) && /id="svHow"/.test(lineP.text) && /id="svWide"/.test(lineP.text) && /id="bdMini"/.test(lineP.text));
+  check('station view wiring: remembered, follows the unit tracker (no hard-coded station), steps aside for Setup, Edit layout and Demo view', /wire-line:sview/.test(lineP.text) && /LE\.unitTrackerOn\(st\.cfg\)/.test(lineP.text) && /G\.svPref && !G\.setupMode && !G\.editMode && !G\.demo/.test(lineP.text) && /class="how"/.test(lineP.text));
   check('Demo view: an unconnected tile is a placeholder, a waiting phone shows its QR only on request, and Clip works from the panel', /No camera yet/.test(lineP.text) && /dnocam/.test(lineP.text) && /class="dclip"/.test(lineP.text) && /\(live \|\| !G\.demo \? \(!live \|\| ph\.showQr\) : ph\.showQr\)/.test(lineP.text));
 
   console.log('config and setup');

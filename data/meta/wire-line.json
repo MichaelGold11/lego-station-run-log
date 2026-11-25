@@ -58,10 +58,10 @@
       "arrival": "s2_arrive",
       "positionCheck": { "anchor": "work", "classes": ["red_wire", "white_wire", "black_wire"], "tolerance": 0.14 },
       "substeps": [
-        { "id": "s2_arrive", "label": "Wires arrive from S1", "zones": { "zone": "wires", "signal": "activity" }, "model": { "anyOf": [{ "zone": "wires", "class": "red_wire" }, { "zone": "wires", "class": "white_wire" }, { "zone": "wires", "class": "black_wire" }] } },
-        { "id": "s2_open", "label": "Open the lever connector", "zones": { "zone": "connectors", "signal": "activity" }, "model": { "zone": "work", "class": "connector_open" } },
-        { "id": "s2_arrange", "label": "Arrange the wires: red top, white middle, black bottom", "zones": { "zone": "wires", "signal": "activity" }, "model": null },
-        { "id": "s2_close", "label": "Close the levers on the wires", "after": "s2_open", "zones": { "zone": "work", "signal": "activity" }, "model": { "zone": "work", "class": "unit_complete" } }
+        { "id": "s2_arrive", "label": "Wires arrive from S1", "instruction": "Take the red, white and black wires from S1 and lay them in the work area.", "zones": { "zone": "wires", "signal": "activity" }, "model": { "anyOf": [{ "zone": "wires", "class": "red_wire" }, { "zone": "wires", "class": "white_wire" }, { "zone": "wires", "class": "black_wire" }] } },
+        { "id": "s2_open", "label": "Open the lever connector", "instruction": "Lift all three orange levers straight up so the holes are open.", "zones": { "zone": "connectors", "signal": "activity" }, "model": { "zone": "work", "class": "connector_open" } },
+        { "id": "s2_arrange", "label": "Arrange the wires: red top, white middle, black bottom", "instruction": "Push each stripped end fully into its hole: red in the top hole, white in the middle, black at the bottom.", "zones": { "zone": "wires", "signal": "activity" }, "model": null },
+        { "id": "s2_close", "label": "Close the levers on the wires", "instruction": "Press each lever down until it clicks, then set the unit down and let go.", "after": "s2_open", "zones": { "zone": "work", "signal": "activity" }, "model": { "zone": "work", "class": "unit_complete" } }
       ]
     },
     {
@@ -77,10 +77,10 @@
       "arrival": "s3_arrive",
       "unitTracker": { "enabled": true, "from": "s2", "departMs": 2000, "enterMs": 500, "presentConf": 0.35, "startNeedsEmpty": true, "newUnitNeedsEmpty": true, "presenceClasses": ["red_wire", "black_wire", "connector_open", "connector_closed"] },
       "substeps": [
-        { "id": "s3_arrive", "label": "Unit arrives from S2", "zones": { "zone": "work", "signal": "activity" }, "model": { "zone": "frame", "class": "connector_closed" } },
-        { "id": "s3_add_connector", "label": "Add a new lever connector to the other end of the red wire", "zones": { "zone": "connectors", "signal": "activity" }, "model": { "zone": "frame", "class": "connector_open" } },
-        { "id": "s3_get_black", "label": "Get a black wire", "after": "s3_add_connector", "optional": true, "zones": { "zone": "wires", "signal": "activity" }, "model": { "zone": "frame", "class": "black_wire", "count": 2, "min": 0.35, "holdSec": 1 }, "note": "Model: a second black wire in view (the unit already has one). Optional: a black wire on a dark table is easy to miss, so a miss is not a mistake." },
-        { "id": "s3_insert", "label": "Insert the black wire into the new connector", "after": "s3_add_connector", "zones": { "zone": "work", "signal": "activity" }, "model": { "zone": "frame", "class": "connector_closed", "count": 2, "min": 0.35, "holdSec": 3 }, "note": "Done = the model sees two closed connectors (the arrived one and the new one) for 3 s, only after the new connector was seen open. Zones only when the model is off." }
+        { "id": "s3_arrive", "label": "Unit arrives from S2", "instruction": "Take the finished unit from S2 and place it in the work area.", "zones": { "zone": "work", "signal": "activity" }, "model": { "zone": "frame", "class": "connector_closed" } },
+        { "id": "s3_add_connector", "label": "Add a new lever connector to the other end of the red wire", "instruction": "Open a new connector and clamp it onto the free end of the red wire.", "zones": { "zone": "connectors", "signal": "activity" }, "model": { "zone": "frame", "class": "connector_open" } },
+        { "id": "s3_get_black", "label": "Get a black wire", "instruction": "Pick up a new black wire and hold it in view of the camera.", "after": "s3_add_connector", "optional": true, "zones": { "zone": "wires", "signal": "activity" }, "model": { "zone": "frame", "class": "black_wire", "count": 2, "min": 0.35, "holdSec": 1 }, "note": "Model: a second black wire in view (the unit already has one). Optional: a black wire on a dark table is easy to miss, so a miss is not a mistake." },
+        { "id": "s3_insert", "label": "Insert the black wire into the new connector", "instruction": "Push the black wire into the new connector, close its lever, then set the unit down.", "after": "s3_add_connector", "zones": { "zone": "work", "signal": "activity" }, "model": { "zone": "frame", "class": "connector_closed", "count": 2, "min": 0.35, "holdSec": 3 }, "note": "Done = the model sees two closed connectors (the arrived one and the new one) for 3 s, only after the new connector was seen open. Zones only when the model is off." }
       ]
     },
     {

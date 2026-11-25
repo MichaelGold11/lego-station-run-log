@@ -338,6 +338,72 @@ button.chip:hover { border-color: var(--warn-ink); }
   .bd-tbl .bad { color: var(--crit-ink); font-weight: 600 }
   .bd-tbl .btn { padding: 2px 10px }
   .bd-empty { padding: 10px 14px; color: var(--muted); font-size: 13px }
+  .bd-tbl tr.mx { display: none }
+  .bd-mini { display: none }
+  /* Station view (the default): the tracked stations stay put on the left, big, with their steps; the line's numbers, alerts and units scroll on the right */
+  .sview { position: absolute; inset: 0; z-index: 6; display: flex; background: var(--bg); cursor: default; user-select: text; -webkit-user-select: text; touch-action: pan-y; }
+  .sv-main { flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 10px 6px 10px 12px; }
+  .sv-tools { display: flex; align-items: center; gap: 8px; }
+  .sv-tools .muted { flex: 1; font-size: 12.5px; }
+  .sv-row { flex: 1; min-height: 0; display: flex; align-items: stretch; }
+  .sv-row > .st { position: relative; left: auto !important; top: auto !important; width: auto; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; overflow-y: auto; }
+  .sv-row .st-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+  .sv-row .stage { flex: 1 1 0; min-height: 130px; aspect-ratio: auto; align-self: stretch; }
+  .sv-row .info { flex: none; gap: 8px; }
+  .sv-row .unitbox { display: none !important; }
+  .sv-row .nowbox .cur { font-size: 16px; }
+  .sv-row .kv { grid-template-columns: repeat(4, auto); justify-content: space-between; padding: 5px 10px; background: var(--surface-2); border-radius: 6px; }
+  .sv-row .kv small { display: none; }
+  .prog { display: none; }
+  .sv-row .prog { display: flex; gap: 4px; }
+  .prog i { flex: 1; height: 5px; border-radius: 3px; background: var(--line-2); }
+  .prog i.done { background: var(--good); } .prog i.now { background: var(--accent); }
+  .sv-row .check { border-top: 0; display: grid; gap: 5px; }
+  .sv-row .check li { grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 7px 10px; font-size: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+  .sv-row .check li .ic { width: 18px; height: 18px; margin-top: 2px; }
+  .sv-row .check li.done { background: color-mix(in srgb, var(--good) 7%, var(--surface)); border-color: color-mix(in srgb, var(--good) 35%, var(--line)); }
+  .sv-row .check li.now { font-size: 16px; padding: 10px; border: 2px solid var(--accent); }
+  .sv-row .check li.mistake { border-color: var(--crit); } .sv-row .check li.review { border-color: var(--warn); }
+  .sv-row .check li .num { font-size: 13px; }
+  .check li .how { display: none; }
+  .sv-row .check li.now .how, .sview.allhow .check li .how { display: block; margin-top: 3px; font-size: 13.5px; font-weight: 400; line-height: 1.4; color: var(--ink-2); }
+  .sv-arrow { flex: none; width: 62px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 11px; line-height: 1.25; color: var(--muted); text-align: center; }
+  .sv-arrow i { font-style: normal; font-size: 22px; color: var(--accent); }
+  .sv-arrow b { font: 600 20px var(--f-mono); color: var(--ink); }
+  .sv-side { flex: 1 1 440px; max-width: 470px; min-width: 320px; overflow-y: auto; padding: 10px 12px 16px 6px; display: flex; flex-direction: column; gap: 10px; }
+  .sview.wide .sv-side { flex-basis: 62%; max-width: 980px; }
+  .sv-side .board, .sv-side .summary { flex: none; }
+  .sv-bar { display: flex; align-items: center; gap: 8px; }
+  .sv-bar .eyebrow { flex: 1; }
+  .sv-side .bd-cards, .sv-side .bd-alerts { display: none; }
+  body.sview-mode #board { display: none !important; }
+  .sv-side.noboard .bd-mini, .sv-side.noboard .bd-tiles, .sv-side.noboard .bd-tbl { display: none !important; }
+  .sv-side .bd-tiles, .sv-side .bd-tbl, .sv-side .summary { flex: none; }
+  .sv-side .sum-row .sum-tile { flex: 1 1 150px; }
+  .sv-side .bd-mini { display: grid; gap: 8px; padding: 10px 12px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--crit) 55%, transparent); background: color-mix(in srgb, var(--crit) 10%, var(--surface)); }
+  .sv-side .bd-mini:empty { display: none; }
+  .bd-mini b { color: var(--crit-ink); }
+  .bd-mini .bm-b { display: flex; flex-wrap: wrap; gap: 6px; }
+  .bd-mini .btn { color: var(--crit-ink); border-color: color-mix(in srgb, var(--crit) 55%, transparent); font-family: var(--f-mono); }
+  .bd-mini .btn.stuck { color: var(--warn-ink); border-color: color-mix(in srgb, var(--warn) 70%, transparent); }
+  .sv-side .bd-tbl { overflow: visible; }
+  .sv-side .bd-tbl table { min-width: 0; }
+  .sv-side .bd-tbl thead th { position: sticky; top: -10px; z-index: 1; }
+  .sv-side .bd-tbl th, .sv-side .bd-tbl td { padding: 6px 7px; }
+  .sv-side .bd-tbl th:nth-child(6), .sv-side .bd-tbl td.m { display: none; }
+  .sv-side .bd-tbl tr.mx { display: table-row; }
+  .sv-side .bd-tbl tr.mx td { padding-top: 0; color: var(--crit-ink); font-family: var(--f-ui); font-size: 13px; line-height: 1.35; }
+  .sv-side .bd-tbl tr.has td { border-bottom: 0; }
+  .sview.wide .bd-tbl th:nth-child(6), .sview.wide .bd-tbl td.m { display: table-cell; }
+  .sview.wide .bd-tbl tr.mx { display: none; }
+  .sview.wide .bd-tbl tr.has td { border-bottom: 1px solid var(--line); }
+  @media (max-width: 900px) {
+    .sview { flex-direction: column; overflow: auto; }
+    .sv-main, .sv-side { flex: none; max-width: none; overflow: visible; padding: 10px 12px; }
+    .sv-row { flex-direction: column; }
+    .sv-row > .st { min-height: 640px; }
+    .sv-arrow { width: auto; flex-direction: row; padding: 6px; }
+  }
   @media (max-width: 700px) { .bd-cards { grid-template-columns: 1fr } .bd-queue { display: flex; gap: 8px; align-items: baseline; justify-content: center } .bd-queue b { display: inline } }
 </style>
 </head>
@@ -355,6 +421,7 @@ button.chip:hover { border-color: var(--warn-ink); }
       <button class="btn primary" id="btnStart" type="button">Start session</button>
       <button class="btn" id="btnStop" type="button" hidden>Stop session</button>
       <button class="btn" id="btnSessions" type="button">Sessions</button>
+      <button class="btn" id="btnView" type="button" title="Switch between the station view (the stations you work at, big, with their steps) and the floor (every station where it stands)">Floor view</button>
       <button class="btn" id="btnDemo" type="button" aria-pressed="false" title="Demo view: only each station's camera and what the system sees, with the stations listed on the left">Demo view</button>
       <a class="btn" href="/insights" target="_blank" rel="noopener" title="Assembly Insights: the manager view of the recorded runs. Opens in a new tab, so recording keeps going here">Insights</a>
       <button class="btn" id="btnSetup" type="button" title="Cameras, boxes, calibration and the line's switches">Setup</button>
@@ -422,6 +489,7 @@ button.chip:hover { border-color: var(--warn-ink); }
   <section class="board" id="board" aria-label="Units board" hidden>
     <div class="panel bd-tiles" id="bdTiles"></div>
     <div class="bd-alerts" id="bdAlerts" role="status"></div>
+    <div class="bd-mini" id="bdMini" role="status"></div>
     <div class="bd-cards" id="bdCards"></div>
     <div class="panel bd-tbl" id="bdTbl"></div>
   </section>
@@ -443,6 +511,15 @@ button.chip:hover { border-color: var(--warn-ink); }
     <span class="muted" style="font-size:12px">It goes in the middle of the screen. Then connect its camera.</span>
     <div class="acts"><button class="btn primary" type="submit">Add station</button><button class="btn" id="btnAddX" type="button">Cancel</button></div>
   </form>
+  <div class="sview" id="sview" hidden aria-label="Station view">
+    <div class="sv-main">
+      <div class="sv-tools"><span class="muted" id="svNote"></span><button class="btn sm" id="svHow" type="button">Show all instructions</button></div>
+      <div class="sv-row" id="svRow"></div>
+    </div>
+    <aside class="sv-side" id="svSide" aria-label="The line">
+      <div class="sv-bar"><span class="eyebrow">The line</span><button class="btn sm" id="svWide" type="button" title="Widen this panel to see the whole units table">Expand table</button></div>
+    </aside>
+  </div>
   <div class="demo" id="demo" hidden aria-label="Demo view">
     <aside class="demo-side" id="demoSide" aria-label="Stations"></aside>
     <div class="demo-grid" id="demoGrid"></div>
@@ -492,7 +569,7 @@ button.chip:hover { border-color: var(--warn-ink); }
   // config: the effective config (G.base, the file, with the floor layout applied: one station per layout entry).
   const G = {
     config: null, base: null, standard: { roles: {} }, layout: null, layouts: [], roles: [], editMode: false, qaIds: [], setup: {}, events: [], queue: [], session: null, lastSession: null, basis: store.get('wire-line:basis') || 'auto',
-    demo: store.get('wire-line:demo') === true, modelOn: false, handsOn: false, cameras: [], clips: [], camAllowed: false, failPick: null, sending: false, summary: null, sumAt: 0, evSeen: -1,
+    demo: store.get('wire-line:demo') === true, svPref: store.get('wire-line:sview') !== false, sview: false, svWide: store.get('wire-line:svwide') === true, svHow: false, modelOn: false, handsOn: false, cameras: [], clips: [], camAllowed: false, failPick: null, sending: false, summary: null, sumAt: 0, evSeen: -1,
     qaId: null, saveTimer: null, starting: false, stopping: false, soundOn: store.get('wire-line:sound') !== false, setupMode: false,
     score: store.get('wire-line:scoreOn') !== false,    // Score the cameras: the answer key shows (on by default; a new key, because the page saved false under the old one on every load)
     capOn: store.get('wire-line:capture'), capTotal: 0, capBusy: 0, capWarned: false    // capture switch (null: the config decides), frames this session, uploads in flight
@@ -729,6 +806,7 @@ button.chip:hover { border-color: var(--warn-ink); }
           <div class="kv mono"></div>
           <div class="qa"${isQa ? '' : ' hidden'}></div>
           <span class="stmsg"></span>
+          <div class="prog" aria-hidden="true"></div>
           <ol class="check"></ol>
         </div>
       </div>
@@ -749,7 +827,7 @@ button.chip:hover { border-color: var(--warn-ink); }
     Object.assign(st, {
       el, video: q('video'), canvas: q('canvas'), stage: q('.stage'), nosrc: q('.nosrc'), sel: q('.src'), recBox: q('.rec'),
       elSrc: q('.srcst'), elRdy: q('.rdy'), needBtn: q('.needb'), elRec: q('.recst'), capBtn: q('.capb'),
-      elUnit: q('.unitbox'), elNow: q('.nowbox'), elNowLab: q('.nowlab'), elCur: q('.cur'), elBig: q('.big'), elKv: q('.kv'), elQa: q('.qa'), elCheck: q('.check'),
+      elUnit: q('.unitbox'), elNow: q('.nowbox'), elNowLab: q('.nowlab'), elCur: q('.cur'), elBig: q('.big'), elKv: q('.kv'), elQa: q('.qa'), elCheck: q('.check'), elProg: q('.prog'),
       elMeta: q('.diag'), elMsg: q('.stmsg'), setupPanel: q('.setup-panel'), zbtns: q('.zbtns'), calst: q('.calst'),
       vcard: q('.vcard'), vcTitle: q('.vc-title'), vcMsg: q('.vc-msg'), refst: q('.refst'), phoneEl: q('.phonep'), pchip: q('.pchip'), qrBtn: q('.pqr'),
       con: { btn: q('.conb'), opts: q('.con-opts'), list: q('.con-list'), msg: q('.con-msg'), back: q('.con-x'), step: null },
@@ -1502,7 +1580,7 @@ button.chip:hover { border-color: var(--warn-ink); }
       renderSetup(st); drawOverlay(st);
     }
     if (G.setupMode && G.editMode) setEditMode(false);    // one mode at a time
-    renderSetupBar(); scheduleArrows();
+    renderSetupBar(); scheduleArrows(); applySview();
   }
   // "Setup needed" on a card: Setup mode, with that card brought into view.
   function openSetup(st) { if (!G.setupMode) setSetupMode(true); requestAnimationFrame(() => focusCard(st)); }
@@ -2173,10 +2251,12 @@ button.chip:hover { border-color: var(--warn-ink); }
       if (s.current === r.id) c += ' now'; else if (counts[r.id]) c += ' done';
       if (bad && bad.substep === r.id) { c += ' ' + bad.kind; why = bad.kind === 'mistake' ? 'Mistake - fix and clear the view' : 'Needs review'; }
       const avg = d && d.substepAvg[r.id];
-      const tip = r.rule ? LE.ruleText(r.rule, cfg) : why;
-      return `<li class="${c}" title="${esc(tip)}"><span class="ic"></span><span class="nm">${esc(r.label)}${counts[r.id] > 1 ? ` <span class="rep">x${counts[r.id]}</span>` : ''}${r.kind === 'model' ? ' <span class="tag">model</span>' : ''}${r.closes ? ' <span class="muted" style="font-size:11px">(ends the cycle)</span>' : ''}${why ? `<small>${esc(why)}</small>` : ''}</span><span class="num mono">${nod[r.id] ? 'no data' : avg != null && !r.closes && d.cycles && (r.kind || avg > 0) ? fmtS(avg) : ''}</span></li>`;
+      const tip = r.rule ? LE.ruleText(r.rule, cfg) : why, how = (cfg.substeps.find(x => x.id === r.id) || {}).instruction;
+      return `<li class="${c}" title="${esc(tip)}"><span class="ic"></span><span class="nm">${esc(r.label)}${counts[r.id] > 1 ? ` <span class="rep">x${counts[r.id]}</span>` : ''}${r.kind === 'model' ? ' <span class="tag">model</span>' : ''}${r.closes ? ' <span class="muted" style="font-size:11px">(ends the cycle)</span>' : ''}${why ? `<small>${esc(why)}</small>` : ''}${how ? `<span class="how">${esc(how)}</span>` : ''}</span><span class="num mono">${nod[r.id] ? 'no data' : avg != null && !r.closes && d.cycles && (r.kind || avg > 0) ? fmtS(avg) : ''}</span></li>`;
     }).join('');
     if (html !== st.lastCheck) { st.elCheck.innerHTML = html; st.lastCheck = html; }
+    const prog = rules.map(r => `<i class="${s.current === r.id ? 'now' : counts[r.id] ? 'done' : ''}"></i>`).join('');
+    if (prog !== st.lastProg) { st.elProg.innerHTML = prog; st.lastProg = prog; }
     if (st.err !== st.lastErr) { st.elMsg.textContent = st.err; st.lastErr = st.err; }
     if (st.phone || !st.phoneEl.hidden || !st.pchip.hidden) renderPhone(st);
     if (G.setupMode) renderDiag(st, s);
@@ -2290,6 +2370,7 @@ button.chip:hover { border-color: var(--warn-ink); }
     $('board').hidden = !on;
     for (const id of ['sUnits', 'sWip', 'sUph']) $(id).closest('.sum-tile').hidden = on;   // the board's own tiles replace the older ones
     document.querySelector('.wrap').classList.toggle('hasboard', on);
+    $('svSide').classList.toggle('noboard', !on);
     if (!on) return;
     const rows = src.rows, stats = boardNow(t).stats;
     G.board = { rows, sid: src.sid };
@@ -2304,15 +2385,19 @@ button.chip:hover { border-color: var(--warn-ink); }
       tile('Units per hour', stats.unitsPerHour == null ? '--' : Math.round(stats.unitsPerHour), stats.unitsPerHour == null ? 'after the first minute' : 'since start') +
       tile('Done right first time', stats.rightFirstTime.pct == null ? '--' : stats.rightFirstTime.pct + '%', stats.rightFirstTime.pct == null ? 'no unit done yet' : stats.rightFirstTime.n + ' of ' + stats.rightFirstTime.of);
     $('bdAlerts').innerHTML = stats.alerts.map(a => `<div class="bd-alert ${a.kind === 'stuck' ? 'stuck' : ''}"><span>${esc(a.message)}</span><button class="btn sm" type="button" data-open="${rows.findIndex(r => a.unit != null ? r.unit === a.unit : r.no === a.no)}">Open ${esc(a.no)}</button></div>`).join('');
+    const na = stats.alerts.length;
+    $('bdMini').innerHTML = na ? `<b>${na} unit${na > 1 ? 's need' : ' needs'} attention</b><div class="bm-b">` + stats.alerts.map(a => `<button class="btn sm${a.kind === 'stuck' ? ' stuck' : ''}" type="button" title="${esc(a.message)}" data-open="${rows.findIndex(r => a.unit != null ? r.unit === a.unit : r.no === a.no)}">${esc(a.no)}${a.station ? ' &middot; ' + esc(String(a.station).toUpperCase()) : ''}</button>`).join('') + '</div>' : '';
     // station cards: the unit in front of each station now, and how many wait between them
     const queue = ip.waiting_s3, card = (k, stn) => boardCardHtml(k, stn, rows, { stopped: !!src.stopped, takt: G.config.taktSec });
+    document.querySelectorAll('#svRow .svq').forEach(e => { e.textContent = src.stopped ? 0 : queue; });
     $('bdCards').innerHTML = card('s2', sts.s2) + `<div class="bd-queue"><span>waiting for S3</span><b>${queue}</b></div>` + card('s3', sts.s3);
     // the table, problems first (the order lineUnits returns)
     const mk = r => ['s2', 's3'].flatMap(k => ((r.mistakes && r.mistakes[k]) || []).map(m => k.toUpperCase() + ': ' + (m.message || (m.code ? String(m.code).replace(/_/g, ' ') : 'mistake'))));
     const body = rows.map((r, i) => {
       const sg = BD_STAGE[r.stage] || [r.stage, ''], m = mk(r);
-      return `<tr class="${r.needsReview ? 'rv' : ''}"><td class="no">${esc(r.no)}</td><td class="t"><span class="chip ${esc(sg[1])}">${esc(sg[0])}</span></td><td>${r.stage === 'done' ? '--' : bdClock(r.stageSec)}</td><td>${bdClock(r.s2Sec)}</td><td>${bdClock(r.s3Sec)}</td>` +
-        `<td class="m ${m.length ? 'bad' : ''}">${m.length ? esc(m.join('; ')) : 'none'}</td><td><button class="btn sm" type="button" data-open="${i}" aria-label="Open unit ${esc(r.no)}">Open</button></td></tr>`;
+      return `<tr class="${r.needsReview ? 'rv' : ''}${m.length ? ' has' : ''}"><td class="no">${esc(r.no)}</td><td class="t"><span class="chip ${esc(sg[1])}">${esc(sg[0])}</span></td><td>${r.stage === 'done' ? '--' : bdClock(r.stageSec)}</td><td>${bdClock(r.s2Sec)}</td><td>${bdClock(r.s3Sec)}</td>` +
+        `<td class="m ${m.length ? 'bad' : ''}">${m.length ? esc(m.join('; ')) : 'none'}</td><td><button class="btn sm" type="button" data-open="${i}" aria-label="Open unit ${esc(r.no)}">Open</button></td></tr>` +
+        (m.length ? `<tr class="mx${r.needsReview ? ' rv' : ''}"><td></td><td colspan="6">${esc(m.join('; '))}</td></tr>` : '');
     }).join('');
     $('bdTbl').innerHTML = rows.length ? `<table><thead><tr><th>Unit</th><th>Stage</th><th>Time in stage</th><th>S2</th><th>S3</th><th>Mistakes</th><th></th></tr></thead><tbody>${body}</tbody></table>`
       : '<div class="bd-empty">No units yet. Each unit shows here once it is in front of a station camera.</div>';
@@ -2327,7 +2412,7 @@ button.chip:hover { border-color: var(--warn-ink); }
       UnitRecord.setPhotos(row, j.captures || [], b.sid);
     } catch (e) { /* the record stays without photos */ }
   }
-  document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-open]'); if (b && $('board').contains(b)) openUnit(b.dataset.open); });
+  document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-open]'); if (b && ($('board').contains(b) || $('svSide').contains(b))) openUnit(b.dataset.open); });
   function renderSession() {
     const on = !!G.session;
     $('sessLive').hidden = !on; $('btnStop').hidden = !on; $('btnStart').hidden = on;
@@ -2574,6 +2659,7 @@ button.chip:hover { border-color: var(--warn-ink); }
     for (const st of LIST) if (added.indexOf(st) < 0 && st.ut) st.ut = LE.createUnitTracker(st.cfg, { link: unitLink() });
     G.qaIds = LIST.filter(st => st.isQa).map(st => st.id);
     if (G.demo) buildDemo();
+    if (G.sview) buildSview();
     for (const st of added) { st.editPanel.hidden = !G.editMode; sizeCanvas(st); emit({ type: 'source_change', station: st.id, t, input: 'none', note: st.source.label }); }
     $('hdrNote').textContent = (G.config.name || 'Line') + ', ' + LIST.length + ' station' + (LIST.length === 1 ? '' : 's') + ', one overhead camera each';
     $('hdrNote').title = G.config.product || '';
@@ -2659,7 +2745,7 @@ button.chip:hover { border-color: var(--warn-ink); }
     $('btnEdit').classList.toggle('on', G.editMode);
     $('btnEdit').textContent = G.editMode ? 'Done editing' : 'Edit layout';
     for (const st of LIST) st.editPanel.hidden = !G.editMode;
-    renderLayoutUi(); scheduleArrows();
+    renderLayoutUi(); scheduleArrows(); applySview();
   }
   // Each card's strip in Edit layout: name, role, flow order, remove.
   function renderEdit(st) {
@@ -2793,6 +2879,7 @@ button.chip:hover { border-color: var(--warn-ink); }
       for (const st of LIST) { st.el.querySelector('.st-body').prepend(st.stage); st.demoStrip = null; sizeCanvas(st); drawOverlay(st); }
       $('demoGrid').textContent = ''; scheduleArrows();
     }
+    applySview();
   }
   $('btnDemo').onclick = () => setDemo(!G.demo);
   for (const ev of ['pointerdown', 'wheel', 'touchstart']) $('demo').addEventListener(ev, e => e.stopPropagation(), { passive: true });    // the floor must not pan under it
@@ -2811,6 +2898,54 @@ button.chip:hover { border-color: var(--warn-ink); }
     else if (a === 'qr') { (async () => { if (!st.phone) await setSource(st, 'phone'); if (st.phone) { st.phone.showQr = !st.phone.showQr; renderPhone(st, true); renderDemoStrips(); } })(); }
     else if (a === 'none') setSource(st, 'none');
   });
+
+  // ---------- Station view (the default): the stations with a unit tracker (S2 and S3) side by side on the left, each with its camera,
+  // its steps and what to do now; the line's numbers, alerts and units on the right. The station cards themselves move in (same
+  // elements, so cameras, pairing, the model overlay and the checker keep working) and go back to the floor when it is off.
+  // Setup, Edit layout and Demo view work on the floor: the station view steps aside while they are open and comes back after.
+  function svStations() { const tr = LIST.filter(st => LE.unitTrackerOn(st.cfg)); return tr.length ? tr : LIST.slice(0, 2); }
+  function svBack() {
+    for (const st of LIST) if (st.el.parentNode !== $('world')) { $('world').appendChild(st.el); placeStation(st); }
+  }
+  function svResize() { requestAnimationFrame(() => { for (const st of LIST) { sizeCanvas(st); drawOverlay(st); } }); }
+  function buildSview() {
+    svBack();
+    const row = $('svRow'), shown = svStations();
+    row.textContent = '';
+    shown.forEach((st, i) => {
+      if (i) { const a = document.createElement('div'); a.className = 'sv-arrow'; a.innerHTML = `<i aria-hidden="true">&rarr;</i><span>waiting for ${esc(st.id.toUpperCase())}</span><b class="svq">--</b>`; row.appendChild(a); }
+      row.appendChild(st.el);
+    });
+    const others = LIST.filter(st => shown.indexOf(st) < 0).map(st => st.id.toUpperCase());
+    $('svNote').textContent = others.length ? others.join(', ') + (others.length > 1 ? ' are' : ' is') + ' on the floor view.' : '';
+    $('svSide').append($('bdMini'), $('bdTiles'), $('summary'), $('bdTbl'));    // alerts, the line's numbers, the flow, every unit
+    G.evSeen = -1;    // the queue count fills in on the next render
+    svResize();
+  }
+  function applySview() {
+    const on = !!(G.svPref && !G.setupMode && !G.editMode && !G.demo && LIST.length);
+    const b = $('btnView');
+    b.textContent = G.svPref ? 'Floor view' : 'Station view';
+    if (on === G.sview) return;
+    G.sview = on;
+    $('sview').hidden = !on;
+    document.body.classList.toggle('sview-mode', on);
+    if (on) buildSview();
+    else { svBack(); $('svRow').textContent = ''; $('board').append($('bdTiles'), $('bdAlerts'), $('bdMini'), $('bdCards'), $('bdTbl')); document.querySelector('.wrap').append($('summary'), $('board')); scheduleArrows(); svResize(); }
+  }
+  function renderSvToggles() {
+    $('sview').classList.toggle('wide', G.svWide); $('svWide').textContent = G.svWide ? 'Shrink table' : 'Expand table';
+    $('sview').classList.toggle('allhow', G.svHow); $('svHow').textContent = G.svHow ? 'Current step only' : 'Show all instructions';
+  }
+  $('btnView').onclick = () => {
+    G.svPref = !G.svPref; store.set('wire-line:sview', G.svPref);
+    if (G.svPref) { if (G.setupMode) setSetupMode(false); if (G.editMode) setEditMode(false); if (G.demo) setDemo(false); }
+    applySview();
+  };
+  $('svWide').onclick = () => { G.svWide = !G.svWide; store.set('wire-line:svwide', G.svWide); renderSvToggles(); svResize(); };
+  $('svHow').onclick = () => { G.svHow = !G.svHow; renderSvToggles(); };
+  renderSvToggles();
+  for (const ev of ['pointerdown', 'wheel', 'touchstart']) $('sview').addEventListener(ev, e => e.stopPropagation(), { passive: true });    // the floor must not pan under it
 
   // ---------- operator at each station: an anonymous code and a training level (docs/dashboard-plan.md, decision 1) ----------
   const levelLabel = id => (LE.LEVELS.find(l => l.id === id) || {}).label || '';
@@ -2991,6 +3126,7 @@ button.chip:hover { border-color: var(--warn-ink); }
     setScore(G.score);
     await reconcile(lay);
     if (G.demo) setDemo(true);
+    applySview();
     renderSession();
     restoreView();
     await loadPhoneInfo();

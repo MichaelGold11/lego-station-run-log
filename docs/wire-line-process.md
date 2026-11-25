@@ -245,6 +245,9 @@ Rules (the thresholds are live_check.py's):
 
 Config (all optional):
 
+- `instruction` on a substep, default none: one plain sentence saying how to do the step. The
+  station view on `/line` shows it under the current step (or under every step with Show all
+  instructions). Text only: the engine never reads it.
 - `after` on a substep, default none: `"after": "s2_open"`. That substep cannot fire until the named
   earlier substep has happened in this cycle. `s2_close` uses it: the connector sits closed before
   work starts, so a closed connector only ends a cycle after it was seen open. If the earlier substep
