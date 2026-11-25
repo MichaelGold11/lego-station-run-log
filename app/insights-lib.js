@@ -32,6 +32,14 @@
   const median = a => { if (!a.length) return null; const s = a.slice().sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
   const r1 = v => (v == null ? null : Math.round(v * 10) / 10);
   const stationName = st => st.name || ((st.id || '').toUpperCase() + ' ' + (st.label || '')).trim();
+  // Display parts of a station: code is the leading S<n> of its floor name, else the id uppercased; desc is the rest of the name,
+  // or the role label when nothing is left (a floor name that is just "S2"). The id stays the key for links and routes.
+  function stationParts(id, name, roleLabel) {
+    const nm = String(name || '').trim(), m = /^(S\d+)(?![A-Za-z0-9])[\s:.,-]*(.*)$/i.exec(nm);
+    const code = m ? m[1].toUpperCase() : String(id || '').toUpperCase();
+    const desc = (m ? m[2] : nm).trim() || String(roleLabel || '').trim();
+    return { code, desc, full: desc ? code + ' \u00b7 ' + desc : code };
+  }
   const shortLabel = l => { let t = String(l || '').split(':')[0].replace(/^(the|a)\s+/i, ''); if (t.length > 34) t = t.slice(0, 34).replace(/\s+\S*$/, '') + '…'; return t; };
 
   // ---------- one session -> digest ----------
@@ -51,7 +59,7 @@
       const unobserved = [];
       for (const e of sorted) if (e.type === 'flag' && e.station === st.id && typeof e.note === 'string' && e.note.startsWith(NO_DATA) && e.substep && unobserved.indexOf(e.substep) < 0) unobserved.push(e.substep);
       stations[st.id] = {
-        name: stationName(st), role: st.role || st.id, qa: !!st.qa,
+        name: stationName(st), roleLabel: st.label || '', role: st.role || st.id, qa: !!st.qa,
         steps: (st.substeps || []).map(s => ({ id: s.id, label: s.label, short: shortLabel(s.label), standardSec: isNum(s.standardSec) ? s.standardSec : null })),
         cycles, unobserved, active: sorted.some(e => e.station === st.id && (e.type === 'substep' || e.type === 'verdict'))
       };
@@ -212,7 +220,7 @@
       const top = Object.values(byCp).sort((a, b) => b.n - a.n)[0] || null;
       const lastUnobserved = (newestFirst.find(d => d.stations[sid]) || { stations: {} }).stations[sid];
       return {
-        id: sid, name: m.name, role: m.role, qa: m.qa, cycles: per.length, avgSec, refSec, refSource, pacePct,
+        id: sid, name: m.name, role: m.role, code: stationParts(sid, m.name, m.roleLabel).code, desc: stationParts(sid, m.name, m.roleLabel).desc, full: stationParts(sid, m.name, m.roleLabel).full, qa: m.qa, cycles: per.length, avgSec, refSec, refSource, pacePct,
         slow: pacePct != null && pacePct > SLOW_PCT, timeLostSec: timeLostSec == null ? null : Math.round(timeLostSec),
         review, action, observations: mine.length, steps: stepRows,
         mainIssue: top ? (top.n > 1 ? 'Recurring ' + top.title.toLowerCase() : top.title) + (top.label && top.label !== top.title ? ' · ' + top.label : '') : null,
@@ -240,7 +248,7 @@
       pacePct: totalRef ? Math.round((totalAct / totalRef - 1) * 100) : null,
       timeLostMin: paced.length ? r1(stations.reduce((a, s) => a + (s.timeLostSec || 0), 0) / 60) : null,
       fpy: qa.passed + qa.defectFails > 0 ? Math.round(qa.passed / (qa.passed + qa.defectFails) * 100) : null, qa,
-      bottleneck: bottleneck ? { id: bottleneck.id, name: bottleneck.name, avgSec: bottleneck.avgSec } : null,
+      bottleneck: bottleneck ? { id: bottleneck.id, name: bottleneck.name, code: bottleneck.code, desc: bottleneck.desc, avgSec: bottleneck.avgSec } : null,
       open, oldestOpenMin: oldestOpen ? Math.round(((o.now || Date.now()) - oldestOpen.t) / 60000) : null, closedToday
     };
 
@@ -302,7 +310,7 @@
       const pa = a.map(d => d.pct[s.id]).filter(isNum), pb = b.map(d => d.pct[s.id]).filter(isNum);
       const fa = obs.filter(x => x.station === s.id && a.some(d => d.day === dayKeyOf(x.t))).length, fb = obs.filter(x => x.station === s.id && b.some(d => d.day === dayKeyOf(x.t))).length;
       const ca = a.reduce((x, d) => x + (d.cycles[s.id] || 0), 0), cb = b.reduce((x, d) => x + (d.cycles[s.id] || 0), 0);
-      return { id: s.id, name: s.name, paceFrom: pa.length ? Math.round(mean(pa)) : null, paceTo: pb.length ? Math.round(mean(pb)) : null, flagsFrom: ca ? r1(fa / ca * 100) : null, flagsTo: cb ? r1(fb / cb * 100) : null };
+      return { id: s.id, name: s.name, code: s.code, desc: s.desc, full: s.full, paceFrom: pa.length ? Math.round(mean(pa)) : null, paceTo: pb.length ? Math.round(mean(pb)) : null, flagsFrom: ca ? r1(fa / ca * 100) : null, flagsTo: cb ? r1(fb / cb * 100) : null };
     });
     const worst = st.filter(s => s.paceFrom != null && s.paceTo != null).sort((x, y) => (y.paceTo - y.paceFrom) - (x.paceTo - x.paceFrom))[0] || null;
     return { stations: st, flagsFrom: per100(a), flagsTo: per100(b), worst };
@@ -317,7 +325,7 @@
     const n = line.open.review + line.open.action;
     parts.push(n + (n === 1 ? ' flag open' : ' flags open'));
     let s = parts.join(', ') + '.';
-    if (focus && (focus.review || focus.action || focus.slow)) s += ' ' + focus.name + ' is the one to look at.';
+    if (focus && (focus.review || focus.action || focus.slow)) s += ' ' + focus.code + ' ' + focus.desc + ' is the one to look at.';
     else if (stations.length) s += ' Nothing needs you right now.';
     return s;
   }
@@ -371,5 +379,5 @@
     return { digests, reviews, refSec };
   }
 
-  return { KIND, STATES, STATE_LABEL, PLANS, SLOW_PCT, MIN_FA_REVIEWS, digestSession, decide, stateOf, rollup, runList, scopeRuns, makeDemo, median };
+  return { KIND, STATES, STATE_LABEL, PLANS, SLOW_PCT, MIN_FA_REVIEWS, digestSession, stationParts, decide, stateOf, rollup, runList, scopeRuns, makeDemo, median };
 });
