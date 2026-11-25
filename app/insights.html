@@ -43,7 +43,10 @@ main { padding: 26px 34px 60px; max-width: 1500px; width: 100%; }
 .top { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
 .top h1 { margin: 0; font-size: 30px; font-weight: 500; }
 .top .sub { color: var(--muted); font-size: 14px; margin-top: 2px; }
-.top .grow { flex: 1; }
+.top .grow { flex: 1; min-width: 0; }
+.runpick { max-width: 100%; min-width: 0; }
+.newrun { background: var(--panel); border: 1px solid var(--line2); border-radius: 8px; padding: 10px 14px; margin: -6px 0 16px; font-size: 14px; }
+.newrun a { font-weight: 600; }
 select { background: var(--panel); color: var(--text); border: 1px solid var(--line2); border-radius: 8px; padding: 10px 34px 10px 14px; font: 15px var(--sans); appearance: none;
   background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 18px) 52%, calc(100% - 13px) 52%; background-size: 5px 5px; background-repeat: no-repeat; }
 .live { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
@@ -209,9 +212,18 @@ td.n { font-family: var(--mono); font-size: 18px; text-align: right; } th.n { te
 const L = window.InsightsLib;
 const S = {
   src: lsGet('insights-src') || 'camera', period: null, view: 'overview', station: null, obsIdx: {}, sel: null, planPick: null, verifyAsk: null, flash: null,
-  real: null, demo: null, demoReviews: null, model: null, loading: false, err: null
+  run: runFromUrl(), real: null, demo: null, demoReviews: null, model: null, loading: false, err: null
 };
 function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+// The run being shown. null follows the newest run; an id or 'all' is a pick, kept in the address as ?run=.
+function runFromUrl() { try { return new URLSearchParams(location.search).get('run') || null; } catch (e) { return null; } }
+function setRunUrl() {
+  try { const u = new URL(location.href); if (S.run) u.searchParams.set('run', S.run); else u.searchParams.delete('run'); history.replaceState(null, '', u.pathname + u.search + u.hash); } catch (e) { /* no history */ }
+}
+function runs() { return S.real ? L.runList(S.real.digests) : []; }
+function shownRun() { const r = runs(); return S.run === 'all' ? 'all' : ((r.find(x => x.id === S.run) || r[0] || {}).id || null); }
+function newerRun() { const r = runs(); return S.run && S.run !== 'all' && r[0] && r[0].id !== shownRun() ? r[0] : null; }
+function runLabel(r) { const when = fmtD(r.startedAtMs) + ' ' + fmtT(r.startedAtMs); return (String(r.title).indexOf(fmtT(r.startedAtMs)) >= 0 ? r.title : when + ' · ' + r.title) + ' · ' + r.units + (r.units === 1 ? ' unit' : ' units') + (r.endedAtMs ? '' : ' (recording)'); }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage off */ } }
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtT = t => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -249,13 +261,11 @@ function periodRange() {
 function compute() {
   const r = periodRange();
   if (S.src === 'sim') { ensureDemo(); S.model = L.rollup(S.demo.digests, S.demoReviews, Object.assign(r, { refSec: S.demo.refSec })); }
-  else S.model = S.real ? L.rollup(S.real.digests, S.real.reviews, r) : null;
+  else S.model = S.real ? L.rollup(L.scopeRuns(S.real.digests, shownRun()), S.real.reviews, r) : null;
 }
 function defaultPeriod() {
   if (S.src === 'sim') return 'week';
-  if (!S.real) return 'all';
-  const d = new Date(); d.setHours(0, 0, 0, 0);
-  return S.real.digests.some(g => g.startedAtMs >= d.getTime()) ? 'today' : 'all';
+  return 'all'; // a run is one session: no date window on top of it
 }
 async function saveDecision(obs, action) {
   const reviews = S.src === 'sim' ? S.demoReviews : S.real.reviews;
@@ -289,21 +299,33 @@ function render() {
   bindTop(); bindView(); if (S.view === 'units') bindUnits();
 }
 function topBar(title, sub) {
-  const opts = [['today', 'Today'], ['week', 'Last 7 days'], ['all', 'All runs']].map(([k, l]) => '<option value="' + k + '"' + (S.period === k ? ' selected' : '') + '>' + l + '</option>').join('');
+  let opts = [['today', 'Today'], ['week', 'Last 7 days'], ['all', 'All runs']].map(([k, l]) => '<option value="' + k + '"' + (S.period === k ? ' selected' : '') + '>' + l + '</option>').join('');
+  let pick = '<select id="period" aria-label="Period">' + opts + '</select>', newer = '';
+  if (S.src === 'camera') {
+    const cur = shownRun();
+    opts = runs().map(r => '<option value="' + esc(r.id) + '"' + (r.id === cur ? ' selected' : '') + '>' + esc(runLabel(r)) + '</option>').join('') + '<option value="all"' + (cur === 'all' ? ' selected' : '') + '>All runs together</option>';
+    pick = '<select id="runPick" class="runpick" aria-label="Run">' + opts + '</select>';
+    const nr = newerRun();
+    if (nr) newer = '<div class="newrun">New run available: ' + esc(nr.title) + '. <a href="#" id="showNewest">Show it</a></div>';
+  }
   const live = S.src === 'camera' && S.real ? '<span class="live"><i></i>Updated ' + fmtT(S.real.generatedAt) + '</span>' : '';
-  return '<div class="top"><div class="grow"><h1>' + esc(title) + '</h1><div class="sub">' + sub + '</div></div>' + live + '<select id="period" aria-label="Period">' + opts + '</select></div>' +
+  return '<div class="top"><div class="grow"><h1>' + esc(title) + '</h1><div class="sub">' + sub + '</div></div>' + live + pick + '</div>' + newer +
     (S.flash ? '<div class="banner"><b>' + esc(S.flash) + '</b></div>' : '');
 }
 function subline() {
   const m = S.model;
-  const what = S.src === 'sim' ? 'Manual Assembly Cell A · Simulated data' : 'Wire line · ' + m.line.sessions + (m.line.sessions === 1 ? ' run' : ' runs') + ' recorded on this laptop';
-  return esc(what) + ' · ' + ({ today: 'Today', week: 'Last 7 days', all: 'All runs' }[S.period]);
+  if (S.src !== 'sim') {
+    const cur = shownRun(), r = runs().find(x => x.id === cur);
+    if (cur === 'all') return 'Wire line · All ' + m.line.sessions + (m.line.sessions === 1 ? ' run' : ' runs') + ' recorded on this laptop, together';
+    return r ? 'Wire line · Run ' + esc(r.title) + (r.endedAtMs ? '' : ' (still recording)') : 'Wire line · No run yet';
+  }
+  return esc('Manual Assembly Cell A · Simulated data') + ' · ' + ({ today: 'Today', week: 'Last 7 days', all: 'All runs' }[S.period]);
 }
 function noDataBanner() {
   const m = S.model;
   if (S.src !== 'camera') return '';
   if (!m.stations.length) return '<div class="banner"><b>No runs recorded yet.</b> Start a session on the Live line page, build a few units, then come back. Or switch the data source to Simulation to see the full picture.</div>';
-  if (!m.line.cycles && !m.observations.length) return '<div class="banner"><b>No finished units or flags in this period yet.</b> Pick "All runs", or build units until the station counts them (set each one down for 2 seconds).</div>';
+  if (!m.line.cycles && !m.observations.length) return '<div class="banner"><b>No finished units or flags in this run yet.</b> Build units until the station counts them (set each one down for 2 seconds).</div>';
   if (!m.line.cycles) return '<div class="banner"><b>Flags recorded, but no finished units yet.</b> Pace and time lost appear once the station counts units. Each station needs ' + 5 + ' finished units before its own median becomes its reference time.</div>';
   return '';
 }
@@ -561,8 +583,7 @@ const STAGE_LABEL = { s2: 'At S2', waiting_s3: 'Waiting for S3', s3: 'At S3', do
 const fmtS = v => (v == null ? '–' : v >= 60 ? Math.floor(v / 60) + 'm ' + String(Math.round(v % 60)).padStart(2, '0') + 's' : Math.round(v * 10) / 10 + ' s');
 function unitRuns() {
   if (S.src !== 'camera' || !S.real) return [];
-  const r = periodRange();
-  return S.real.digests.filter(d => d.units && d.units.length && ((d.startedAtMs >= r.from && d.startedAtMs <= r.to) || (d.endedAtMs && d.endedAtMs >= r.from && d.endedAtMs <= r.to)))
+  return L.scopeRuns(S.real.digests, shownRun()).filter(d => d.units && d.units.length)
     .sort((a, b) => b.startedAtMs - a.startedAtMs);
 }
 function unitName(r) { return r.no != null ? String(r.no) : r.unit != null ? '#' + String(r.unit).padStart(3, '0') : '?'; }
@@ -572,7 +593,7 @@ function viewUnits() {
   if (!runs.length) return h + '<div class="card"><p class="empty">No units tracked in this run' + (S.src === 'sim' ? ' (the simulated week has no unit data).' : ' or period. Try another period or a recorded run with units.') + '</p></div>' + foot();
   if (!S.unitRun || !runs.find(d => d.id === S.unitRun)) S.unitRun = runs[0].id;
   const run = runs.find(d => d.id === S.unitRun), rows = run.units;
-  h += '<select class="ub-sel" id="unitRun" aria-label="Run">' + runs.map(d => '<option value="' + esc(d.id) + '"' + (d.id === S.unitRun ? ' selected' : '') + '>' + esc(fmtD(d.startedAtMs) + ' ' + fmtT(d.startedAtMs) + ' · ' + d.units.length + (d.units.length === 1 ? ' unit' : ' units')) + '</option>').join('') + '</select>';
+  if (runs.length > 1) h += '<select class="ub-sel" id="unitRun" aria-label="Run">' + runs.map(d => '<option value="' + esc(d.id) + '"' + (d.id === S.unitRun ? ' selected' : '') + '>' + esc(fmtD(d.startedAtMs) + ' ' + fmtT(d.startedAtMs) + ' · ' + d.units.length + (d.units.length === 1 ? ' unit' : ' units')) + '</option>').join('') + '</select>';
   if (S.unitMsg) h += '<div class="banner"><b>' + esc(S.unitMsg) + '</b></div>';
   h += '<div class="card"><div class="cardhead"><h2>Units in this run</h2><span>Problems first. Select a unit to open its record.</span></div><div class="ub-scroll"><table><thead><tr><th>Unit</th><th>Stage</th><th class="n">S2 time</th><th class="n">Wait</th><th class="n">S3 time</th><th class="n">Total</th><th class="n">Mistakes</th><th>Needs review</th></tr></thead><tbody>';
   rows.forEach((r, i) => {
@@ -629,7 +650,12 @@ function bindUnits() {
 }
 
 // ---------- events ----------
+function setRun(id) { S.run = id; setRunUrl(); S.sel = null; S.station = null; S.unitRun = null; S.flash = null; compute(); render(); }
 function bindTop() {
+  const rp = document.getElementById('runPick');
+  if (rp) rp.onchange = () => { const r = runs(); setRun(r[0] && rp.value === r[0].id ? null : rp.value); };
+  const nw = document.getElementById('showNewest');
+  if (nw) nw.onclick = e => { e.preventDefault(); setRun(null); };
   const sel = document.getElementById('period');
   if (sel) sel.onchange = () => { S.period = sel.value; S.flash = null; compute(); render(); };
 }
@@ -658,7 +684,7 @@ function act(a) {
 }
 document.getElementById('srcSeg').onclick = e => {
   const b = e.target.closest('button'); if (!b || b.dataset.s === S.src) return;
-  S.src = b.dataset.s; lsSet('insights-src', S.src); S.period = defaultPeriod(); S.sel = null; S.station = null; S.flash = null; compute(); render();
+  S.src = b.dataset.s; lsSet('insights-src', S.src); S.period = defaultPeriod(); S.unitRun = null; S.sel = null; S.station = null; S.flash = null; compute(); render();
 };
 document.getElementById('resetDemo').onclick = () => { lsSet('insights-demo-reviews', '{}'); S.demo = null; S.sel = null; compute(); render(); };
 function route() {
@@ -683,7 +709,7 @@ window.addEventListener('hashchange', route);
     if (now === lastSig) { const u = document.querySelector('.live'); if (u && S.real) u.innerHTML = '<i></i>Updated ' + fmtT(S.real.generatedAt); return; }
     lastSig = now; compute(); render();
   }, 5000);
-  function sig() { return S.real ? JSON.stringify([S.real.digests.map(d => [d.id, d.observations.length, Object.values(d.stations).map(x => x.cycles.length)]), Object.keys(S.real.reviews).length, S.err]) : String(S.err); }
+  function sig() { return S.real ? JSON.stringify([shownRun(), runs()[0] && runs()[0].id, S.real.digests.map(d => [d.id, d.observations.length, Object.values(d.stations).map(x => x.cycles.length)]), Object.keys(S.real.reviews).length, S.err]) : String(S.err); }
 })();
 </script>
 </body>
