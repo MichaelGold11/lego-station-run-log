@@ -338,7 +338,7 @@
   const NO_DATA = 'no data: ';
   // The config the page, the summary and the exports run on: one station per layout entry, a copy of its role with the
   // layout's id, name, position and order. Models are keyed by station id (a station runs its role's model), and a fail
-  // reason's cause station is the first station in flow order that runs that role. Entries with an unknown role are left out.
+  // reason's cause station and a unit tracker's `from` are the first station in flow order that runs that role. Entries with an unknown role are left out.
   function applyLayout(cfg, layout) {
     if (!cfg || !layout || !Array.isArray(layout.stations)) return cfg;
     const roles = {};
@@ -346,6 +346,8 @@
     const stations = layout.stations.filter(ls => ls && roles[ls.role]).map((ls, i) => Object.assign(JSON.parse(JSON.stringify(roles[ls.role])),
       { id: ls.id, role: ls.role, name: ls.name || defaultName(ls.id, roles[ls.role].label), x: isNum(ls.x) ? ls.x : 0, y: isNum(ls.y) ? ls.y : 0, order: i + 1 }));
     const first = role => { const s = stations.find(x => x.role === role); return s ? s.id : null; };
+    // A unit tracker's `from` names the upstream station by role in the base config: point it at the station id running that role.
+    for (const st of stations) if (st.unitTracker && typeof st.unitTracker.from === 'string') st.unitTracker.from = first(st.unitTracker.from) || st.unitTracker.from;
     const byStation = obj => { const out = {}; if (obj && typeof obj === 'object' && !Array.isArray(obj)) for (const s of stations) if (obj[s.role]) out[s.id] = obj[s.role]; return out; };
     return Object.assign({}, cfg, {
       stations, models: byStation(cfg.models), suggestedClasses: byStation(cfg.suggestedClasses),

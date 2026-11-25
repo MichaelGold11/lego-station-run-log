@@ -1297,11 +1297,14 @@ button.chip:hover { border-color: var(--warn-ink); }
   // ---------- model and hands: one session per model file (stations may share one), one inference at a time, round-robin over stations ----------
   const baseName = f => String(f).split('/').pop();
   const modelOf = st => LE.modelFor(G.config, st.id);
+  // Loads every model file the current stations need and that is not ready yet (files already loaded keep their sessions). Safe to call
+  // again after a station is added: a load in flight is waited for first, then only the files still missing are fetched.
   async function loadModel() {
-    if (Y.loading) return Y.loading;
+    while (Y.loading) await Y.loading;
     const need = {};
     for (const st of LIST) { const m = modelOf(st); if (m) need[m.file] = m; }
     if (!Object.keys(need).length) return null;
+    if (Object.keys(need).every(k => Y.files[k] && Y.files[k].status === 'ready')) { Y.status = 'ready'; Y.error = ''; return null; }
     Y.status = 'loading'; Y.error = '';
     Y.loading = (async () => {
       try {
@@ -1347,13 +1350,15 @@ button.chip:hover { border-color: var(--warn-ink); }
         }
         const files = Object.keys(need).map(k => Y.files[k]);
         Y.status = files.some(f => f.status === 'ready') ? 'ready' : 'failed';
-        if (Y.status === 'failed') { Y.error = files.map(f => f.error).filter(Boolean).join('; '); Y.loading = null; }
+        if (Y.status === 'failed') Y.error = files.map(f => f.error).filter(Boolean).join('; ');
       } catch (e) {
         console.error('Model load failed', e);
-        Y.status = 'failed'; Y.error = String(e && e.message || e); Y.loading = null;
+        Y.status = 'failed'; Y.error = String(e && e.message || e);
       }
     })();
-    return Y.loading;
+    const p = Y.loading;
+    p.then(() => { if (Y.loading === p) Y.loading = null; });
+    return p;
   }
   // Point each station at its model, or leave it on zones. Returns the problems (load failures, class-count mismatches) as banner lines.
   function assignModels() {
@@ -1361,13 +1366,14 @@ button.chip:hover { border-color: var(--warn-ink); }
     for (const st of LIST) {
       st.mdl = null;
       const m = modelOf(st), f = m && Y.files[m.file];
-      if (!m || !f) continue;
+      if (!m) continue;
+      if (!f) { (bad[m.file + '|unloaded'] = bad[m.file + '|unloaded'] || { f: m.file, missing: true, ids: [] }).ids.push(st.id.toUpperCase()); continue; }
       if (f.status !== 'ready') { (bad[m.file + '|' + f.error] = bad[m.file + '|' + f.error] || { f: m.file, why: f.error, ids: [] }).ids.push(st.id.toUpperCase()); continue; }
       const chk = LE.checkModelOutput(f.dims, m.classes.length);
       if (!chk.ok) { const key = m.file + '|' + (chk.found != null ? chk.found + ' of ' + m.classes.length : 'unknown'); (bad[key] = bad[key] || { f: m.file, found: chk.found, k: m.classes.length, ids: [] }).ids.push(st.id.toUpperCase()); continue; }
       st.mdl = { file: m.file, classes: m.classes.slice(), track: LE.trackedClasses(st.cfg, m.classes.slice()), assembly: st.cfg.assembly || null, f, version: m.version };
     }
-    for (const b of Object.values(bad)) probs.push(b.why != null ? esc(baseName(b.f)) + ' could not load for ' + b.ids.join(', ') + ': ' + esc(b.why)
+    for (const b of Object.values(bad)) probs.push(b.missing ? esc(baseName(b.f)) + ' is not loaded for ' + b.ids.join(', ') + '. Those stations stay on zones rules; reload the page.' : b.why != null ? esc(baseName(b.f)) + ' could not load for ' + b.ids.join(', ') + ': ' + esc(b.why)
       : esc(baseName(b.f)) + (b.found != null ? ' outputs ' + b.found + ' classes but the config lists ' + b.k + ' for ' + b.ids.join(', ') : ' has an output shape this page cannot read (for ' + b.ids.join(', ') + ')') + '. Those stations stay on zones rules.');
     return probs;
   }
@@ -2555,6 +2561,7 @@ button.chip:hover { border-color: var(--warn-ink); }
   async function reconcile(layout) {
     G.layout = layout;
     G.config = LE.applyLayout(G.base, layout);
+    UNIT_LINK = null;    // the hand-off follows the stations on the floor: a new layout gets a new link
     const want = G.config.stations, t = now(), added = [];
     for (const st of LIST.slice()) { const w = want.find(x => x.id === st.id); if (!w || w.role !== st.cfg.role) await dropStation(st); }
     LIST = want.map((cfg, i) => {
@@ -2563,6 +2570,8 @@ button.chip:hover { border-color: var(--warn-ink); }
       placeStation(st); renderName(st); renderOp(st);
       return st;
     });
+    // Stations that stayed still hold the old link and tracker config: rebuild their trackers on the new link (editing is blocked during a session).
+    for (const st of LIST) if (added.indexOf(st) < 0 && st.ut) st.ut = LE.createUnitTracker(st.cfg, { link: unitLink() });
     G.qaIds = LIST.filter(st => st.isQa).map(st => st.id);
     if (G.demo) buildDemo();
     for (const st of added) { st.editPanel.hidden = !G.editMode; sizeCanvas(st); emit({ type: 'source_change', station: st.id, t, input: 'none', note: st.source.label }); }

@@ -18,13 +18,14 @@ const ZONES = {
 const px = (x, y) => (Math.round(x) + Math.round(y)) % 5 === 0 ? [10, 10, 10] : [200, 200, 200];
 const det = (cls, conf, cx, cy, w, h) => ({ cls, conf, nbox: [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2], box: [(cx - w / 2) * W, (cy - h / 2) * H, (cx + w / 2) * W, (cy + h / 2) * H] });
 
-function build(id, link) {
-  const stn = CFG.stations.find(s => s.id === id), mcfg = CFG.models[id];
+function build(id, link, cfg, role) {
+  cfg = cfg || CFG; role = role || id;
+  const stn = cfg.stations.find(s => s.id === id), mcfg = cfg.models[id];
   const track = LE.trackedClasses(stn, mcfg.classes.slice());
   const eng = LE.createStation(stn, { holdFrames: CFG.holdFrames, defaults: CFG.defaults, qaGraceSec: CFG.qaGraceSec, modelClasses: track });
   const chk = LE.createChecker(stn); chk.setRef(null);
   const ut = LE.createUnitTracker(stn, { link });
-  return { id, stn, track, eng, chk, ut, zones: ZONES[id], prevDets: null, events: [], seq: 0 };
+  return { id, stn, track, eng, chk, ut, zones: ZONES[role], prevDets: null, events: [], seq: 0 };
 }
 // One frame of one station, as the page's processStation and the replay do it.
 function frame(S, rawDets, t, act) {
@@ -149,6 +150,31 @@ w.run(3000);
   const st = units(w.s3, 'start').pop(), e = units(w.s3, 'end').pop();
   check('7. unit at S3 with nothing from S2 gets ?01 and is flagged for review', st && st.no === '?01' && st.unlinked === true && e && e.no === '?01' && e.needsReview === true && e.unlinked === true, JSON.stringify(e));
   check('7. S2 numbering untouched', units(w.s2, 'start').length === 3);
+}
+// 8. The S2-role station is not called s2 (Michael's layout: s4 runs role s2, s3 runs role s3). The hand-off must follow the station id.
+console.log('line flow: layout with the S2-role station named s4');
+{
+  const LAY = { id: 'l-s4', name: 'Renamed', stations: [{ id: 's4', role: 's2', x: 0, y: 0 }, { id: 's3', role: 's3', x: 760, y: 0 }] };
+  const cfg = LE.applyLayout(CFG, LAY);
+  check('8. applyLayout: s3 takes units from s4, not from the role id s2', cfg.stations.find(x => x.id === 's3').unitTracker.from === 's4' && cfg.stations.find(x => x.id === 's4').unitTracker.from == null);
+  check('8. applyLayout leaves the base config untouched', CFG.stations.find(x => x.id === 's3').unitTracker.from === 's2');
+  const lk = LE.createUnitLink(cfg);
+  check('8. the link marks s4 as upstream and s3 as fed by s4', lk.up.s4 === true && !lk.up.s2 && lk.from.s3 === 's4');
+  const a = build('s4', lk, cfg, 's2'), b = build('s3', lk, cfg, 's3');
+  let t = 0;
+  const run = (ms, d4, d3, a4, a3) => { for (let n = Math.round(ms / DT); n > 0; n--) { t += DT; frame(a, d4 || [], t, a4); frame(b, d3 || [], t, a3); } };
+  run(2000);
+  run(1600, S2.wires); run(1000, S2.open, null, { connectors: 0.6 }); run(1000, S2.open, null, { wires: 0.6 }); run(1500, S2.closed, null, { work: 0.6 }); run(1000, S2.closed);
+  run(3000);
+  run(1000, null, S3.arrive);
+  const st = units(b, 'start')[0];
+  check('8. a unit that departs s4 is #001 at s3, linked, not ?01', units(a, 'end')[0] && units(a, 'end')[0].no === '#001' && st && st.no === '#001' && st.from === 's4' && st.unlinked === false, JSON.stringify(st));
+  // The same layout with the default ids still works.
+  const cfg2 = LE.applyLayout(CFG, { id: 'l-d', name: 'Default ids', stations: [{ id: 's2', role: 's2' }, { id: 's3', role: 's3' }] });
+  check('8. default ids: s3 still takes units from s2', cfg2.stations.find(x => x.id === 's3').unitTracker.from === 's2');
+  // A layout with no station for the upstream role keeps the role id (nothing to point at).
+  const cfg3 = LE.applyLayout(CFG, { id: 'l-n', name: 'No S2', stations: [{ id: 's3', role: 's3' }] });
+  check('8. no station runs the upstream role: from is kept as written', cfg3.stations[0].unitTracker.from === 's2');
 }
 console.log(fails ? '\n' + fails + ' FAILED' : '\nall line flow checks passed');
 process.exit(fails ? 1 : 0);
