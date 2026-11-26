@@ -1078,6 +1078,13 @@ console.log('capture triggers: captureWanted');
   check('standardViews lists the main view first, filtered to the zone ids, and leaves out a view with no zone left', v.length === 2 && v[0].main && v[0].index === -1 && v[1].index === 0 && !v[1].main && Object.keys(v[0].zones).join() === 'a,b' && v[1].aspect === 0.75 && v[1].source === 'phone' && v[1].updatedAt === 'P', JSON.stringify(v));
   v[0].zones.a.x = 0.9;
   check('standardViews returns copies of the zones', role.zones.a.x === 0.1);
+  {
+    const STD = JSON.parse(fs.readFileSync(new URL('../data/meta/wire-line-standard.json', import.meta.url), 'utf8'));
+    const s3ids = SHIPPED.stations.find(x => x.id === 's3').zones.map(z => z.id);
+    const s3std = STD.roles.s3, withExtra = JSON.parse(JSON.stringify(s3std));
+    withExtra.zones.wires = { x: 0.1, y: 0.1, w: 0.2, h: 0.2 };
+    check('S3 standard setup has no box outside S3\'s zones, and a saved extra "wires" box is filtered out of the views', Object.keys(s3std.zones).sort().join() === s3ids.slice().sort().join() && (s3std.otherViews || []).every(x => Object.keys(x.zones).every(z => s3ids.includes(z))) && LE.standardViews(withExtra, s3ids).every(x => Object.keys(x.zones).sort().join() === 'connectors,work'), s3ids.join());
+  }
   check('standardViews on an undefined role is empty', LE.standardViews(undefined, ['a']).length === 0);
   const pk = a => LE.pickStandardView(role, ['a', 'b'], a);
   check('pickStandardView at 4:3 picks the landscape view and it fits', pk(4 / 3).view.main && pk(4 / 3).fits);
