@@ -252,7 +252,7 @@ function ensureDemo() {
 function demoConfig() {
   const mk = (id, label, subs) => ({ id, label, substeps: subs.map((l, i) => ({ id: id + '_' + i, label: l })) });
   return { stations: [mk('s1', 'Cut', ['Cut the wire', 'Check length']), mk('s2', 'Arrange and clamp', ['Wires arrive', 'Open the lever connector', 'Arrange the wires', 'Close the levers']),
-    mk('s3', 'Second connector', ['Unit arrives', 'Add a new lever connector', 'Get a black wire', 'Insert the black wire']), mk('s4', 'QA pull test', ['Unit arrives', 'Pull test'])] };
+    mk('s3', 'Second connector', ['Unit arrives', 'Add a new lever connector', 'Insert the black wire']), mk('s4', 'QA pull test', ['Unit arrives', 'Pull test'])] };
 }
 function periodRange() {
   const now = Date.now(), d = new Date(now); d.setHours(0, 0, 0, 0);

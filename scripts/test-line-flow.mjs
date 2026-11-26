@@ -110,7 +110,7 @@ w.run(1000, null, S3.two);
   const ce = w.s3.events.filter(e => e.type === 'cycle_end');
   const ins = w.s3.events.find(e => e.type === 'substep' && e.substep === 's3_insert');
   check('3. S3 complete once: s3_insert fired when the two connectors showed, the cycle ended only after the 3 s hold (checked at 1.5, 2.5, 3.5 s)', ce.length === 1 && w.s3.ut.state().phase === 'complete' && ins.t - tTwo < 500, JSON.stringify(ce));
-  check('3. S3 no mistake, no flag for the optional black wire', mistakes(w.s3).length === 0, JSON.stringify(mistakes(w.s3)));
+  check('3. S3 no mistake, no flag', mistakes(w.s3).length === 0, JSON.stringify(mistakes(w.s3)));
 }
 // 4. Finished unit stays; no second cycle, no new unit; then leaves.
 const nSub = subs(w.s3).length;

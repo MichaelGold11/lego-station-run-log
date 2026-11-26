@@ -70,7 +70,6 @@
       "output": "a second lever connector joining the other end of the red wire to a black wire",
       "zones": [
         { "id": "connectors", "label": "Lever connectors" },
-        { "id": "wires", "label": "Black wires" },
         { "id": "work", "label": "Work area" }
       ],
       "cycleEnds": "s3_insert",
@@ -79,7 +78,6 @@
       "substeps": [
         { "id": "s3_arrive", "label": "Unit arrives from S2", "instruction": "Take the finished unit from S2 and place it in the work area.", "zones": { "zone": "work", "signal": "activity" }, "model": { "zone": "frame", "class": "connector_closed" } },
         { "id": "s3_add_connector", "label": "Add a new lever connector to the other end of the red wire", "instruction": "Open a new connector and clamp it onto the free end of the red wire.", "zones": { "zone": "connectors", "signal": "activity" }, "model": { "zone": "frame", "class": "connector_open" } },
-        { "id": "s3_get_black", "label": "Get a black wire", "instruction": "Pick up a new black wire and hold it in view of the camera.", "after": "s3_add_connector", "optional": true, "zones": { "zone": "wires", "signal": "activity" }, "model": { "zone": "frame", "class": "black_wire", "count": 2, "min": 0.35, "holdSec": 1 }, "note": "Model: a second black wire in view (the unit already has one). Optional: a black wire on a dark table is easy to miss, so a miss is not a mistake." },
         { "id": "s3_insert", "label": "Insert the black wire into the new connector", "instruction": "Push the black wire into the new connector, close its lever, then set the unit down.", "after": "s3_add_connector", "zones": { "zone": "work", "signal": "activity" }, "model": { "zone": "frame", "class": "connector_closed", "count": 2, "min": 0.35, "holdSec": 3 }, "note": "Done = the model sees two closed connectors (the arrived one and the new one) for 3 s, only after the new connector was seen open. Zones only when the model is off." }
       ]
     },

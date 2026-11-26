@@ -104,7 +104,7 @@ is a pull test. The steps are in `data/meta/wire-line.json`; the table is in
 |---|---|---|
 | S1 Cut | 1. Cut the wire 2. Check for correct length against the ruler. One cycle is one wire, so a unit is three S1 cycles (red, white, black) | Cut area, Ruler |
 | S2 Arrange and clamp | 1. Wires arrive from S1 2. Open the lever connector 3. Arrange the wires: red top, white middle, black bottom 4. Close the levers on the wires | Lever connectors, Cut wires (where the wires from S1 land), Work area |
-| S3 Second connector | 1. Unit arrives from S2 2. Add a new lever connector to the other end of the red wire 3. Get a black wire 4. Insert the black wire into the new connector | Lever connectors, Black wires, Work area |
+| S3 Second connector | 1. Unit arrives from S2 2. Add a new lever connector to the other end of the red wire 3. Insert the black wire into the new connector | Lever connectors, Work area |
 | S4 QA pull test | 1. Unit arrives from S3 2. Pull test: no wire comes out of either connector, then P or F | Test area |
 
 There are no trays, bins or hand-off zones: the wires or the unit slide straight into the next

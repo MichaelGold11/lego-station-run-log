@@ -35,7 +35,6 @@ is the rule that takes over once that station's trained model is loaded.
 | | Close the levers on the wires (ends the cycle) | activity in Work area | `connector_closed` in Work area |
 | S3 Second connector | Unit arrives from S2 (`arrival`) | activity in Work area | `red_wire` in Work area |
 | | Add a new lever connector to the other end of the red wire | activity in Lever connectors | `connector_open` in Work area |
-| | Get a black wire | activity in Black wires | same |
 | | Insert the black wire into the new connector (ends the cycle) | activity in Work area | same (zones only: the unit arrives with connector 1 closed, so `connector_closed` cannot tell this step apart) |
 | S4 QA pull test | Unit arrives from S3 (`arrival`) | activity in Test area | `connector_closed` in Test area |
 | | Pull test, then Pass or Fail (ends the cycle) | the P or F key | same |

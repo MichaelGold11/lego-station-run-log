@@ -729,8 +729,8 @@ console.log('shipped process (v2, lever connectors, arrivals)');
   check('S2: wires sliding in from S1 start a cycle at "Wires arrive", not a skipped step', subsOf(s2slide) === 's2_arrive' && !flagsOf(s2slide), subsOf(s2slide) + ' / ' + flagsOf(s2slide));
   const s2skip = run('s2', ['wires', 'connectors', 'work']);
   check('S2: closing without arranging flags "skipped Arrange the wires..."', /skipped Arrange the wires/.test(flagsOf(s2skip)), flagsOf(s2skip));
-  const s3 = run('s3', ['work', 'connectors', 'wires', 'work']);
-  check('S3: unit arrives, connector, black wire, insert; the cycle ends at insert with no flag', subsOf(s3) === 's3_arrive,s3_add_connector,s3_get_black,s3_insert' && s3.some(e => e.type === 'cycle_end' && e.substep === 's3_insert') && !flagsOf(s3), subsOf(s3) + ' / ' + flagsOf(s3));
+  const s3 = run('s3', ['work', 'connectors', 'work']);
+  check('S3: unit arrives, connector, insert (3 steps); the cycle ends at insert with no flag', subsOf(s3) === 's3_arrive,s3_add_connector,s3_insert' && s3.some(e => e.type === 'cycle_end' && e.substep === 's3_insert') && !flagsOf(s3), subsOf(s3) + ' / ' + flagsOf(s3));
   const S3M = SHIPPED.suggestedClasses.s3;
   const s3m = run('s3', [
     { work: { activity: 0.5, 'class:red_wire': 0.9, 'class:connector_closed': 0.9 } },
@@ -745,10 +745,8 @@ console.log('shipped process (v2, lever connectors, arrivals)');
   check('S3 with its model: two closed connectors for only 1.5 s (closed on the red wire alone) is not done yet', !s3short.some(e => e.type === 'cycle_end'), subsOf(s3short));
   const s3done = run('s3', [{ frame: { 'class:connector_closed': 0.8 } }, { frame: { 'class:connector_open': 0.8, 'class:connector_closed': 0.8 } }, two, two, two, two, two, two, two, two], S3M);
   check('S3 with its model: open new connector, then two closed connectors for 3 s ends the cycle', s3done.filter(e => e.type === 'cycle_end').length === 1 && /s3_arrive,s3_add_connector.*s3_insert/.test(subsOf(s3done)), subsOf(s3done));
-  check('S3 with its model: a black wire the camera missed is not flagged as skipped (optional)', !flagsOf(s3done), flagsOf(s3done));
-  const twoBlack = { frame: { 'class:connector_closed': 0.8, 'class:black_wire': 0.7, 'class:black_wire#2': 0.6 } };
-  const s3black = run('s3', [{ frame: { 'class:connector_closed': 0.8 } }, { frame: { 'class:connector_open': 0.8, 'class:connector_closed': 0.8 } }, twoBlack, twoBlack, twoBlack, two, two, two, two, two, two, two, two], S3M);
-  check('S3 with its model: a second black wire in view after the new connector ticks "Get a black wire", then done', /s3_add_connector,s3_get_black,s3_insert/.test(subsOf(s3black)) && s3black.some(e => e.type === 'cycle_end'), subsOf(s3black));
+  check('S3 with its model: no black wire step, so the cycle ends with no flag', !flagsOf(s3done), flagsOf(s3done));
+  check('S3 with its model: no black wire step; two closed connectors held 3 s after the new connector was seen open still ends the cycle', subsOf(s3done) === 's3_arrive,s3_add_connector,s3_insert' && s3done.some(e => e.type === 'cycle_end' && e.substep === 's3_insert'), subsOf(s3done));
   const cs = LE.classSignals([{ cls: 'connector_closed', conf: 0.9, nbox: [0.1, 0.1, 0.2, 0.2] }, { cls: 'connector_closed', conf: 0.6, nbox: [0.8, 0.9, 0.9, 0.98] }], { work: { x: 0, y: 0, w: 0.5, h: 0.5 } }, ['connector_closed']);
   check('classSignals: the whole-view "frame" zone sees both connectors (#2 = 0.6), a drawn zone only its own', cs.frame['class:connector_closed#2'] === 0.6 && cs.work['class:connector_closed'] === 0.9 && cs.work['class:connector_closed#2'] === 0, JSON.stringify(cs));
   const s4 = run('s4', ['test']);
@@ -775,7 +773,7 @@ console.log('units linked by order (units.csv)');
   for (let w = 0; w < 3; w++) cycle('s1', ['s1_cut', 's1_check_length'], T0 + w * 10000, 10000);
   cycle('s2', ['s2_arrive', 's2_open', 's2_arrange', 's2_close'], T0 + 32000, 12000);
   ev.push({ type: 'verdict', station: 's2', kind: 'mistake', reason: 'wrong_position', message: 'Red wire is in the wrong position', t: T0 + 40000, cycle: 1 });
-  cycle('s3', ['s3_arrive', 's3_add_connector', 's3_get_black', 's3_insert'], T0 + 50000, 15000);
+  cycle('s3', ['s3_arrive', 's3_add_connector', 's3_insert'], T0 + 50000, 15000);
   ev.push({ type: 'substep', station: 's4', substep: 's4_arrive', move: 'start', source: 'zones', conf: 0.5, t: T0 + 70000, cycle: 1 });
   ev.push({ type: 'manual', station: 's4', action: 'fail', reason: 'pulled_c1', source: 'manual', t: T0 + 80000 });
   // Unit 2: S1 three wires 30-60 s, S2 arrives at 62 s and is still working.
